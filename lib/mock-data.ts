@@ -187,7 +187,7 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Výzva",
             title: "Slovní hra",
-            content: "Ze jména CASSEL slož aspoň 3 slova z jeho písmen."
+            content: "Pod hlavou koně je nápis. Z písmen z toho nápisu vymysli aspoň 3 další slova."
           }
         ],
         clue: [

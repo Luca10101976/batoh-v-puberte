@@ -151,6 +151,13 @@ export function HomeScreen() {
     isLocationUnlocked(location.id, location.unlocked)
   ).length;
   const score = unlockedCount * 120;
+  const localFriends = state.squadMembers.filter((member) => member.id !== "self");
+  const fallbackFeed: FriendActivityRow[] = localFriends.map((friend, index) => ({
+    friend_profile_code: friend.id,
+    friend_display_name: friend.name,
+    created_at: new Date(Date.now() - (index + 1) * 60000).toISOString()
+  }));
+  const visibleFeed = friendFeed.length > 0 ? friendFeed : fallbackFeed;
   const primaryLocation = locations[0];
   const primaryCoords = useMemo(
     () => (primaryLocation ? { lat: primaryLocation.lat, lng: primaryLocation.lng } : null),
@@ -337,12 +344,12 @@ export function HomeScreen() {
         <div className="mt-4 space-y-3">
           {!feedLoaded ? (
             <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">Načítám pohyb kamarádů…</div>
-          ) : friendFeed.length === 0 ? (
+          ) : visibleFeed.length === 0 ? (
             <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
               Zatím tu nic není. Jakmile si přidáš kamarády, uvidíš jejich aktuální pohyb.
             </div>
           ) : (
-            friendFeed.map((item) => (
+            visibleFeed.map((item) => (
               <div
                 key={`${item.friend_profile_code}-${item.created_at}`}
                 className="flex items-center gap-3 rounded-2xl bg-white/5 p-4"

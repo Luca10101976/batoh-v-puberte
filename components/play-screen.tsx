@@ -202,69 +202,56 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Aktivní mise</p>
             <h1 className="mt-2 text-2xl font-bold">{location.name}</h1>
-            <p className="mt-2 text-sm text-mist">{location.subtitle}</p>
+            <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
           </div>
           <div className="rounded-full bg-lime/15 px-3 py-2 text-xs font-semibold text-lime">
             {state.activeMode === "group" ? "Skupinový režim" : "Sólo režim"}
           </div>
         </div>
-        <p className="mt-3 text-sm leading-6 text-mist">{location.story}</p>
-      </section>
-
-      <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-coral">Výprava</p>
-            <h2 className="mt-2 text-xl font-semibold">{state.squadName}</h2>
-          </div>
-          <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{joinedCount} hráči</div>
-        </div>
-        <div className="mt-4 space-y-3">
-          {state.squadMembers.map((member) => (
-            <button
-              key={member.id}
-              onClick={() => toggleMember(member.id)}
-              disabled={member.id === "self"}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left disabled:cursor-not-allowed disabled:opacity-80"
-            >
-              <div className="font-medium">
-                {member.name}
-                {member.id === "self" ? " (ty)" : ""}
-              </div>
-              <div
-                className={`rounded-full px-3 py-2 text-xs ${
-                  member.joined ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
-                }`}
-              >
-                {member.joined ? "Potvrzeno" : "Mimo výpravu"}
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-sky">Bezpečnostní check-in</p>
-        <div className="mt-4 rounded-[24px] border border-coral/20 bg-coral/10 p-4">
-          <p className="text-sm font-medium text-white">{location.areaHint}</p>
-          <p className="mt-2 text-sm leading-6 text-mist">Při startu hry běží bezpečnostní check-in.</p>
-        </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Postup mise</p>
-            <h2 className="mt-2 text-xl font-semibold">
-              Zastavení {episodeIndex + 1} z {location.episodes.length}
-            </h2>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-sm text-mist">
+            Zastavení {episodeIndex + 1}/{location.episodes.length} • Úkol {taskIndex + 1}/{activeEpisode.tasks.length}
           </div>
           <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{progress}% hotovo</div>
         </div>
-        <div className="mt-4 h-2 rounded-full bg-white/10">
+        <div className="mt-3 h-2 rounded-full bg-white/10">
           <div className="h-2 rounded-full bg-lime" style={{ width: `${progress}%` }} />
         </div>
       </section>
+
+      {state.activeMode === "group" ? (
+        <section className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-coral">Výprava</p>
+              <h2 className="mt-2 text-xl font-semibold">{state.squadName}</h2>
+            </div>
+            <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{joinedCount} hráči</div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {state.squadMembers.map((member) => (
+              <button
+                key={member.id}
+                onClick={() => toggleMember(member.id)}
+                disabled={member.id === "self"}
+                className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left disabled:cursor-not-allowed disabled:opacity-80"
+              >
+                <div className="font-medium">
+                  {member.name}
+                  {member.id === "self" ? " (ty)" : ""}
+                </div>
+                <div
+                  className={`rounded-full px-3 py-2 text-xs ${
+                    member.joined ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
+                  }`}
+                >
+                  {member.joined ? "Potvrzeno" : "Mimo výpravu"}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="glass-card p-5">
         <span className="rounded-full bg-sky/12 px-3 py-1 text-xs uppercase tracking-[0.2em] text-sky">
@@ -357,6 +344,12 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             </button>
           </div>
         )}
+      </section>
+
+      <section className="glass-card p-5">
+        <p className="text-xs uppercase tracking-[0.24em] text-sky">Bezpečnostní check-in</p>
+        <p className="mt-3 text-sm text-white">{location.areaHint}</p>
+        <p className="mt-1 text-sm leading-6 text-mist">Při startu hry běží bezpečnostní check-in.</p>
       </section>
 
       <section className="glass-card p-5">

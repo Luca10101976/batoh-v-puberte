@@ -137,8 +137,8 @@ export const locations: MapLocation[] = [
             id: "klamovka-chramek-5",
             type: "photo",
             typeLabel: "Výzva na místě",
-            title: "Vchod do pekla",
-            content: "Najdi grotu zdola a potvrď, že působí jako vstup do podzemí."
+            title: "Spodní vstup chrámku",
+            content: "Najdi spodní vstup chrámku a potvrď, že jsi ho našel/našla."
           }
         ],
         clue: [

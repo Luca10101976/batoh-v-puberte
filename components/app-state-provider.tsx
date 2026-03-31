@@ -16,11 +16,19 @@ type SquadMember = {
   joined: boolean;
 };
 
+export type AvatarConfig = {
+  head: "round" | "oval" | "square";
+  eyes: "dot" | "smile" | "wide";
+  hair: "short" | "long" | "spiky";
+  color: string;
+};
+
 type PlayerProfile = {
   name: string;
   age: number;
   title: string;
   avatar: string;
+  avatarConfig: AvatarConfig;
 };
 
 type AppState = {
@@ -79,7 +87,13 @@ const initialState: AppState = {
     name: "Tyna",
     age: 12,
     title: "Lovec městských tajemství",
-    avatar: "PB"
+    avatar: "PB",
+    avatarConfig: {
+      head: "round",
+      eyes: "dot",
+      hair: "short",
+      color: "#7EC8FF"
+    }
   },
   completedLocationIds: [],
   lastCompletedAt: {},
@@ -113,6 +127,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setState({
           ...initialState,
           ...parsed,
+          profile: {
+            ...initialState.profile,
+            ...(parsed.profile ?? {})
+          },
           profileCode: parsed.profileCode || generateProfileCode(),
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           squadMembers: migratedMembers

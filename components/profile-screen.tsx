@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
+import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { locations } from "@/lib/mock-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -16,12 +16,112 @@ type ChildFriendshipRow = {
   friend_display_name: string;
 };
 
+const HEAD_OPTIONS: Array<{ value: AvatarConfig["head"]; label: string }> = [
+  { value: "round", label: "Kulatá" },
+  { value: "oval", label: "Oválná" },
+  { value: "square", label: "Hranatá" }
+];
+
+const EYE_OPTIONS: Array<{ value: AvatarConfig["eyes"]; label: string }> = [
+  { value: "dot", label: "Tečky" },
+  { value: "smile", label: "Úsměv" },
+  { value: "wide", label: "Velké" }
+];
+
+const HAIR_OPTIONS: Array<{ value: AvatarConfig["hair"]; label: string }> = [
+  { value: "short", label: "Krátké" },
+  { value: "long", label: "Dlouhé" },
+  { value: "spiky", label: "Rozcuch" }
+];
+
+const COLOR_OPTIONS = ["#7EC8FF", "#B6F07A", "#FFC27A", "#FF9FC3", "#D2B6FF", "#FFD95A"];
+
+function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: number }) {
+  const headShapeClass =
+    config.head === "round" ? "rounded-full" : config.head === "oval" ? "rounded-[40%]" : "rounded-[18px]";
+  const hairColor = "#2A3242";
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-[28px] bg-night/40"
+      style={{ width: size, height: size }}
+    >
+      <div
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[45%] ${headShapeClass}`}
+        style={{ width: size * 0.62, height: size * 0.62, backgroundColor: config.color }}
+      />
+
+      {config.hair === "short" ? (
+        <div
+          className={`absolute left-1/2 top-[14%] -translate-x-1/2 ${headShapeClass}`}
+          style={{ width: size * 0.66, height: size * 0.22, backgroundColor: hairColor }}
+        />
+      ) : null}
+
+      {config.hair === "long" ? (
+        <>
+          <div
+            className={`absolute left-1/2 top-[12%] -translate-x-1/2 ${headShapeClass}`}
+            style={{ width: size * 0.68, height: size * 0.24, backgroundColor: hairColor }}
+          />
+          <div
+            className="absolute left-[20%] top-[28%] rounded-b-full"
+            style={{ width: size * 0.13, height: size * 0.3, backgroundColor: hairColor }}
+          />
+          <div
+            className="absolute right-[20%] top-[28%] rounded-b-full"
+            style={{ width: size * 0.13, height: size * 0.3, backgroundColor: hairColor }}
+          />
+        </>
+      ) : null}
+
+      {config.hair === "spiky" ? (
+        <>
+          <div
+            className={`absolute left-1/2 top-[15%] -translate-x-1/2 ${headShapeClass}`}
+            style={{ width: size * 0.68, height: size * 0.2, backgroundColor: hairColor }}
+          />
+          <div className="absolute left-[30%] top-[6%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
+          <div className="absolute left-[47%] top-[2%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
+          <div className="absolute right-[30%] top-[6%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
+        </>
+      ) : null}
+
+      {config.eyes === "dot" ? (
+        <>
+          <div className="absolute left-[38%] top-[50%] h-1.5 w-1.5 rounded-full bg-night" />
+          <div className="absolute right-[38%] top-[50%] h-1.5 w-1.5 rounded-full bg-night" />
+        </>
+      ) : null}
+
+      {config.eyes === "smile" ? (
+        <>
+          <div className="absolute left-[34%] top-[47%] h-2 w-2 rounded-full border-b-2 border-night" />
+          <div className="absolute right-[34%] top-[47%] h-2 w-2 rounded-full border-b-2 border-night" />
+        </>
+      ) : null}
+
+      {config.eyes === "wide" ? (
+        <>
+          <div className="absolute left-[34%] top-[47%] flex h-3 w-3 items-center justify-center rounded-full bg-white">
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
+          </div>
+          <div className="absolute right-[34%] top-[47%] flex h-3 w-3 items-center justify-center rounded-full bg-white">
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProfileScreen() {
   const { state, updateProfile, resetProgress, isLocationUnlocked, addFriendByCode, setFriendsFromCloud } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendNickname, setFriendNickname] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
   const [savingFriend, setSavingFriend] = useState(false);
+  const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -35,6 +135,10 @@ export function ProfileScreen() {
   );
   const friends = state.squadMembers.filter((member) => member.id !== "self");
   const score = unlockedCount * 120;
+
+  useEffect(() => {
+    setAvatarDraft(state.profile.avatarConfig);
+  }, [state.profile.avatarConfig]);
 
   useEffect(() => {
     async function syncCloudFriends() {
@@ -188,9 +292,7 @@ export function ProfileScreen() {
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card overflow-hidden p-5">
         <div className="flex items-center gap-4">
-          <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-lime to-sky text-2xl font-bold text-night">
-            {state.profile.avatar}
-          </div>
+          <AvatarPreview config={state.profile.avatarConfig} size={80} />
           <div className="flex-1">
             <p className="text-xs uppercase tracking-[0.24em] text-mist">Profil hráče</p>
             <input
@@ -217,6 +319,92 @@ export function ProfileScreen() {
             <div className="text-xl font-semibold">{state.squadMembers.filter((m) => m.joined).length}</div>
             <div className="text-xs text-mist">Parta</div>
           </div>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Avatar studio</h2>
+        <p className="mt-2 text-sm text-mist">Vyber hlavu, oči, vlasy a barvu. Pak ulož.</p>
+
+        <div className="mt-4 flex justify-center">
+          <AvatarPreview config={avatarDraft} size={120} />
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Hlava</p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {HEAD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setAvatarDraft((current) => ({ ...current, head: option.value }))}
+                  className={`rounded-xl px-3 py-2 text-sm ${
+                    avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Oči</p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {EYE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setAvatarDraft((current) => ({ ...current, eyes: option.value }))}
+                  className={`rounded-xl px-3 py-2 text-sm ${
+                    avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Vlasy</p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {HAIR_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setAvatarDraft((current) => ({ ...current, hair: option.value }))}
+                  className={`rounded-xl px-3 py-2 text-sm ${
+                    avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Barva obličeje</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {COLOR_OPTIONS.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setAvatarDraft((current) => ({ ...current, color }))}
+                  className={`h-9 w-9 rounded-full border-2 ${
+                    avatarDraft.color === color ? "border-lime" : "border-white/20"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`Barva ${color}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => updateProfile({ avatarConfig: avatarDraft })}
+            className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+          >
+            Uložit avatar
+          </button>
         </div>
       </section>
 

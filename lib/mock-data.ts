@@ -69,40 +69,40 @@ export const locations: MapLocation[] = [
     subtitle: "Posbírej ztracený příběh",
     teaser: "Park, kde něco chybí, něco nesedí a minulost se rozsypala na kousky.",
     story:
-      "V Klamovce se ztratily kusy příběhu. Hodiny ukazují špatné časy, kůň Cassel má jen hlavu, na chrámku se jedna hlava usmívá a ostatní se mračí. Tvoje mise je posbírat stopy a vrátit tomu smysl.",
+      "V Klamovce se rozsypal příběh. Hodiny jdou špatně, Cassel má jen hlavu a na chrámku se jedna tvář usmívá, zatímco ostatní se mračí. Tvůj úkol je dát tyhle stopy zase dohromady.",
     image:
       "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
     unlocked: false,
     difficulty: "Střední",
     distance: "11 min od tebe",
     duration: "35-50 min",
-    areaHint: "Doporučená oblast je přímo v parku Klamovka; když budeš mimo, hra tě upozorní.",
+    areaHint: "Drž se v parku Klamovka. Když budeš moc daleko, hra tě upozorní.",
     vibe: ["Městská záhada", "Detaily, které unikají", "Ideální pro partu"],
     lat: 50.0669,
     lng: 14.3847,
     map: { x: 28, y: 58 },
     introLabel: "Úvodní mise",
     introStory:
-      "Klamovka má dlouhou a divokou historii. Byly tu vinice Karla IV., pak klášter, Clam-Gallasové, barokní zámeček, vlci i medvědi, souboje, tramvaj, Sokol i underground. Dnes je to park, galerie a místo pro děti. Příběh je ale rozházený.",
+      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. Jenže její příběh je rozházený po jednotlivých místech.",
     endingTitle: "Klamovka zase vypráví",
     endingStory:
-      "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu zůstaly rozházené po celém parku. Klamovka není rozbitá. Je složená z mnoha časů najednou.",
+      "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu byly rozházené po celém parku. Klamovka není rozbitá, jen je složená z víc časů najednou.",
     playerMessage:
-      "Skvělá práce. Teď už víš, že Klamovka není jen park. Je to místo, kde detaily mluví hlasitěji než cedule.",
+      "Skvělá práce. Klamovka není jen park. Je to místo, kde důležité věci často najdeš v malých detailech.",
     interludes: [
-      "Tohle nevypadá jako náhoda. Spíš jako park se zvláštní pamětí.",
+      "Tohle nevypadá jako náhoda. Spíš jako park, který si něco pamatuje.",
       "Když něco chybí, bývá to většinou důležité.",
-      "Jestli ti to připadá divné, jsi na správné stopě.",
-      "Klamovka se nevysvětluje. Klamovka naznačuje."
+      "Jestli ti to připadá divné, jsi správně.",
+      "Klamovka ti všechno neřekne. Musíš si toho všimnout."
     ],
     episodes: [
       {
         id: "chramek",
         name: "Chrámek noci a poznání",
         intro:
-          "Nahoře nebe, dole peklo. Kruh a obdélník. Hvězdy i hadí hlavy. Chrámek vypadá, jako by se sám nemohl rozhodnout, čím chce být.",
+          "Nahoře nebe, dole peklo. Kruh i obdélník. Hvězdy i hadí hlavy. Chrámek působí, jako by byl složený ze dvou různých světů.",
         background:
-          "Vznikl na konci 18. století za Clam-Gallasů. Horní část je nebe, dolní část je grota. Průzory v kopuli vytvářely iluzi hvězdné oblohy.",
+          "Vznikl na konci 18. století za Clam-Gallasů. Horní část představuje nebe, dolní část podzemí. Díry v kopuli měly zevnitř vytvořit iluzi hvězdné oblohy.",
         tasks: [
           {
             id: "klamovka-chramek-1",
@@ -142,7 +142,7 @@ export const locations: MapLocation[] = [
           }
         ],
         clue: [
-          "První kus příběhu je rozdělený na dvě poloviny: nebe a peklo.",
+          "První kus příběhu je rozdělený na dvě části: nebe a peklo.",
           "Něco tu očividně není v rovnováze.",
           "A přesto se uprostřed všeho jedna tvář usmívá."
         ]
@@ -151,9 +151,9 @@ export const locations: MapLocation[] = [
         id: "cassel",
         name: "Cassel",
         intro:
-          "Pomník má jen hlavu. Tělo chybí. A to je přesně ten typ podivnosti, který Klamovku dělá Klamovkou.",
+          "Pomník má jen hlavu. Tělo chybí. Přesně ten typ podivnosti, kvůli kterému je Klamovka tak zvláštní.",
         background:
-          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Pomník je datovaný rokem 1808 nebo 1838, historici se neshodnou.",
+          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Pomník se datuje rokem 1808 nebo 1838, historici se v tom neshodnou.",
         tasks: [
           {
             id: "klamovka-cassel-1",
@@ -167,7 +167,7 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Kdo to postavil",
-            content: "V roce 1808 měl Eduard 3 roky. Kdo pomník nejspíš nechal postavit?"
+            content: "V roce 1808 měl Eduard jen 3 roky. Kdo pomník nejspíš nechal postavit?"
           },
           {
             id: "klamovka-cassel-3",
@@ -181,7 +181,7 @@ export const locations: MapLocation[] = [
             type: "photo",
             typeLabel: "Výzva na místě",
             title: "Vědro zblízka",
-            content: "Najdi Casselovo vědro zblízka a potvrď, že připomíná stopu po zmizelém těle."
+            content: "Najdi u pomníku Casselovo vědro a potvrď, že jsi ho našel/našla."
           },
           {
             id: "klamovka-cassel-5",
@@ -192,7 +192,7 @@ export const locations: MapLocation[] = [
           }
         ],
         clue: [
-          "Druhý kus příběhu potvrzuje, že slavné věci někdy přežijí i napůl.",
+          "Druhý kus příběhu ukazuje, že i slavné věci někdy přežijí jen napůl.",
           "U Cassela chybí tělo, ale stopa zůstala.",
           "Minulost tu odpadává po kouscích."
         ]
@@ -201,9 +201,9 @@ export const locations: MapLocation[] = [
         id: "altan",
         name: "Novogotický altán",
         intro:
-          "Altán působí tajemně už na první pohled. A ještě víc, když zjistíš, že se ho někdo pokusil nechat úplně zmizet.",
+          "Altán vypadá tajemně už na první pohled. A ještě víc, když zjistíš, že ho někdo zkusil nechat úplně zmizet.",
         background:
-          "Altán byl postaven kolem roku 1820. Dnes je v něm malý výstavní prostor. V roce 2006 ho umělec Dominik Lang zakryl maskovací sítí.",
+          "Altán byl postaven kolem roku 1820. Dnes slouží jako malý výstavní prostor. V roce 2006 ho umělec Dominik Lang zakryl maskovací sítí.",
         tasks: [
           {
             id: "klamovka-altan-1",
@@ -235,18 +235,18 @@ export const locations: MapLocation[] = [
           }
         ],
         clue: [
-          "Třetí kus příběhu se nerozsypal. Schoval se.",
-          "Altán připomíná, že Klamovka umí mizet i bez kouzel.",
-          "Park býval víc než jen park."
+          "Třetí kus příběhu se nerozsypal. Spíš se schoval.",
+          "Altán připomíná, že v Klamovce umí věci mizet i bez kouzel.",
+          "Park kdysi býval mnohem víc než jen park."
         ]
       },
       {
         id: "hodiny",
         name: "Hodiny Přijdu včas",
         intro:
-          "Hodiny slibují, že přijdou včas. Jenže každá strana ukazuje jiný čas. A všechny špatně.",
+          "Hodiny slibují, že přijdou včas. Jenže každá strana ukazuje jiný čas a všechny špatně.",
         background:
-          "Na dětském hřišti stojí dřevěná věž s hodinami. Jeden ciferník má starý znak Košíř, druhý logo Praha 5.",
+          "Na dětském hřišti stojí dřevěná věž s hodinami. Na jednom ciferníku je starý znak Košíř, na jiném logo Praha 5.",
         tasks: [
           {
             id: "klamovka-hodiny-1",
@@ -288,16 +288,16 @@ export const locations: MapLocation[] = [
         clue: [
           "Čtvrtý kus příběhu je čas, který si dělá co chce.",
           "Minulost a současnost tu stojí vedle sebe.",
-          "Čas je tu rozhozený stejně jako zbytek parku."
+          "Čas je tu rozházený stejně jako zbytek parku."
         ]
       },
       {
         id: "rodina",
         name: "Socha Rodiny",
         intro:
-          "Na posledním místě čeká sousoší rodiny. A detail, který nejde přehlédnout, jakmile si ho všimneš.",
+          "Na posledním místě tě čeká sousoší rodiny a detail, který už pak nepřehlédneš.",
         background:
-          "Autorem sousoší je sochař Karel Velický. Je z pískovce a tvoří ji žena, muž a dítě.",
+          "Autorem sousoší je sochař Karel Velický. Je z pískovce a jsou na něm žena, muž a dítě.",
         tasks: [
           {
             id: "klamovka-rodina-1",

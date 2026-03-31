@@ -102,7 +102,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   function handleValidate() {
     if (isManualTask(activeTask)) {
       setStatus("manual");
-      setMessage("Potvrzeno. Tuhle stopu zapisujeme jako splněnou.");
+      setMessage("Hotovo, tenhle úkol máš splněný.");
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
       return;
     }
@@ -112,18 +112,18 @@ export function PlayScreen({ location }: { location: MapLocation }) {
 
     if (valid) {
       setStatus("correct");
-      setMessage("Správně. Tahle část příběhu sedí.");
+      setMessage("Správně.");
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
       return;
     }
 
     setStatus("idle");
-    setMessage("Tohle nesedí. Zkus se ještě jednou rozhlédnout kolem sebe.");
+    setMessage("Tohle nesedí. Zkus to ještě jednou.");
   }
 
   function handleUnknown() {
     setStatus("unknown");
-    setMessage("Nevadí. Úkol jsme označili jako 'nevím' a můžeš jít dál.");
+    setMessage("Nevadí, jdeme dál.");
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
   }
 
@@ -299,7 +299,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             </div>
           ) : activeTask.type === "photo" ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-mist">
-              Tohle je výzva na místě. Jakmile ji splníš, potvrď ji tlačítkem níže.
+              Tohle je úkol na místě. Splň ho a klikni na potvrzení.
             </div>
           ) : (
             <input

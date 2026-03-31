@@ -1,14 +1,83 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CitySelector } from "@/components/city-selector";
 import { HeroCard } from "@/components/hero-card";
 import { LocationPin } from "@/components/location-pin";
 import { useAppState } from "@/components/app-state-provider";
-import { activityFeed, locations, nearbyMissions } from "@/lib/mock-data";
+import { locations, nearbyMissions } from "@/lib/mock-data";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+type FriendActivityRow = {
+  friend_profile_code: string;
+  friend_display_name: string;
+  created_at: string;
+};
+
+function formatAgo(value: string) {
+  const diffMs = Date.now() - new Date(value).getTime();
+  const minutes = Math.max(1, Math.floor(diffMs / 60000));
+
+  if (minutes < 60) {
+    return `před ${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `před ${hours} h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `před ${days} d`;
+}
 
 export function HomeScreen() {
   const { state, isLocationUnlocked } = useAppState();
+  const [friendFeed, setFriendFeed] = useState<FriendActivityRow[]>([]);
+  const [feedLoaded, setFeedLoaded] = useState(false);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    async function loadFriendFeed() {
+      if (!supabase || !state.profileCode) {
+        setFeedLoaded(true);
+        return;
+      }
+
+      const { data: ownProfile } = await supabase
+        .from("child_profiles")
+        .select("id")
+        .eq("profile_code", state.profileCode)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (!ownProfile?.id) {
+        setFriendFeed([]);
+        setFeedLoaded(true);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("child_friendships")
+        .select("friend_profile_code, friend_display_name, created_at")
+        .eq("child_profile_id", ownProfile.id)
+        .order("created_at", { ascending: false })
+        .limit(8);
+
+      setFriendFeed((data as FriendActivityRow[]) ?? []);
+      setFeedLoaded(true);
+    }
+
+    loadFriendFeed();
+  }, [state.profileCode, supabase]);
+
   const unlockedCount = locations.filter((location) =>
     isLocationUnlocked(location.id, location.unlocked)
   ).length;
@@ -146,19 +215,30 @@ export function HomeScreen() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {activityFeed.map((item) => (
-            <div key={`${item.friend}-${item.action}`} className="flex items-center gap-3 rounded-2xl bg-white/5 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-xs font-semibold">
-                {item.friend.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm">
-                  <span className="font-semibold">{item.friend}</span> {item.action}
-                </p>
-                <p className="text-xs text-mist">{item.ago}</p>
-              </div>
+          {!feedLoaded ? (
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">Načítám pohyb kamarádů…</div>
+          ) : friendFeed.length === 0 ? (
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
+              Zatím tu nic není. Jakmile si přidáš kamarády, uvidíš jejich aktuální pohyb.
             </div>
-          ))}
+          ) : (
+            friendFeed.map((item) => (
+              <div
+                key={`${item.friend_profile_code}-${item.created_at}`}
+                className="flex items-center gap-3 rounded-2xl bg-white/5 p-4"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-xs font-semibold">
+                  {item.friend_display_name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm">
+                    <span className="font-semibold">{item.friend_display_name}</span> se přidal(a) do party
+                  </p>
+                  <p className="text-xs text-mist">{formatAgo(item.created_at)}</p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
     </main>

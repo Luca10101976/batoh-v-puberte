@@ -24,6 +24,7 @@ const taskAnswers: Record<string, string[]> = {
   "klamovka-cassel-1": ["telo"],
   "klamovka-cassel-2": ["otec kristian krystof", "kristian krystof", "otec"],
   "klamovka-cassel-3": ["15", "patnact"],
+  "klamovka-altan-1": ["4", "ctyri"],
   "klamovka-altan-2": ["galerie", "vystavni prostor", "galerie / vystavni prostor"],
   "klamovka-altan-3": ["vlci a medvedi", "vlci medvedi"],
   "klamovka-hodiny-3": ["kosire a praha 5", "kosire praha 5"],

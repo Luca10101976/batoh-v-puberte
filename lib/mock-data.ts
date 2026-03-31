@@ -70,8 +70,7 @@ export const locations: MapLocation[] = [
     teaser: "Park, kde něco chybí, něco nesedí a minulost se rozsypala na kousky.",
     story:
       "V Klamovce se rozsypal příběh. Hodiny jdou špatně, Cassel má jen hlavu a na chrámku se jedna tvář usmívá, zatímco ostatní se mračí. Tvůj úkol je dát tyhle stopy zase dohromady.",
-    image:
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+    image: "/images/klamovka-chramek.jpeg",
     unlocked: false,
     difficulty: "Střední",
     distance: "11 min od tebe",

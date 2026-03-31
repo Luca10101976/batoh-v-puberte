@@ -6,7 +6,11 @@ import { AppFrame } from "@/components/app-frame";
 export const metadata: Metadata = {
   title: "Batoh v pubertě",
   description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-  applicationName: "Batoh v pubertě"
+  applicationName: "Batoh v pubertě",
+  icons: {
+    icon: "/icons/icon.svg",
+    apple: "/icons/icon.svg"
+  }
 };
 
 export const viewport: Viewport = {

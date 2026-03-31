@@ -175,11 +175,22 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
 }
 
 export function ProfileScreen() {
-  const { state, updateProfile, resetProgress, isLocationUnlocked, addFriendByCode, setFriendsFromCloud } = useAppState();
+  const {
+    state,
+    updateProfile,
+    resetProgress,
+    isLocationUnlocked,
+    addFriendByCode,
+    setFriendsFromCloud,
+    setActiveMode,
+    setCurrentExpeditionId
+  } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendNickname, setFriendNickname] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
   const [savingFriend, setSavingFriend] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [openAvatarPanel, setOpenAvatarPanel] = useState<AvatarPanel | null>("head");
   const supabase = useMemo(() => {
@@ -350,6 +361,83 @@ export function ProfileScreen() {
     setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
     setFriendCode("");
     setFriendNickname("");
+  }
+
+  async function handleInviteFriend(friendCode: string, friendName: string) {
+    setInviteMessage("");
+
+    if (!supabase) {
+      setInviteMessage("Pozvánky fungují jen při připojení k cloudu.");
+      return;
+    }
+
+    setInvitingFriendCode(friendCode);
+
+    const { data: ownProfile } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    if (!ownProfile) {
+      setInvitingFriendCode(null);
+      setInviteMessage("Nejdřív je potřeba mít uložený profil dítěte v cloudu.");
+      return;
+    }
+
+    const { data: targetProfile } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", friendCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    if (!targetProfile) {
+      setInvitingFriendCode(null);
+      setInviteMessage("Kamarád s tímto kódem nebyl nalezen.");
+      return;
+    }
+
+    const { data: existingPending } = await supabase
+      .from("child_expedition_invites")
+      .select("id")
+      .eq("inviter_child_profile_id", ownProfile.id)
+      .eq("invitee_child_profile_id", targetProfile.id)
+      .eq("status", "pending")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (existingPending?.id) {
+      setInvitingFriendCode(null);
+      setInviteMessage(`Pozvánka pro ${friendName} už čeká na potvrzení.`);
+      return;
+    }
+
+    const { data: inviteRow, error: inviteError } = await supabase
+      .from("child_expedition_invites")
+      .insert({
+        inviter_child_profile_id: ownProfile.id,
+        inviter_profile_code: ownProfile.profile_code,
+        inviter_display_name: ownProfile.child_name,
+        invitee_child_profile_id: targetProfile.id,
+        invitee_profile_code: targetProfile.profile_code,
+        invitee_display_name: targetProfile.child_name,
+        status: "pending"
+      })
+      .select("expedition_id")
+      .single<{ expedition_id: string }>();
+
+    if (inviteError) {
+      setInvitingFriendCode(null);
+      setInviteMessage("Pozvánku se nepodařilo odeslat.");
+      return;
+    }
+
+    setActiveMode("group");
+    setCurrentExpeditionId(inviteRow?.expedition_id ?? null);
+    setInvitingFriendCode(null);
+    setInviteMessage(`Pozvánka pro ${friendName} byla odeslaná.`);
   }
 
   return (
@@ -582,18 +670,28 @@ export function ProfileScreen() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold">
                     {friend.name.slice(0, 2).toUpperCase()}
                   </div>
-                  <div>
-                    <div className="font-medium">{friend.name}</div>
-                    <div className="text-sm text-mist">Kód: {friend.id}</div>
+                    <div>
+                      <div className="font-medium">{friend.name}</div>
+                      <div className="text-sm text-mist">Kód: {friend.id}</div>
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-full bg-lime/12 px-3 py-2 text-xs font-medium text-lime">
-                  {friend.joined ? "Ve výpravě" : "Mimo výpravu"}
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-lime/12 px-3 py-2 text-xs font-medium text-lime">
+                    {friend.joined ? "Ve výpravě" : "Mimo výpravu"}
+                  </div>
+                  <button
+                    onClick={() => handleInviteFriend(friend.id, friend.name)}
+                    disabled={invitingFriendCode === friend.id}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold"
+                  >
+                    {invitingFriendCode === friend.id ? "Posílám…" : "Pozvat"}
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
+        {inviteMessage ? <p className="mt-3 text-sm text-mist">{inviteMessage}</p> : null}
       </section>
     </main>
   );

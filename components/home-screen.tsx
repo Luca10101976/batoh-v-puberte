@@ -14,6 +14,14 @@ type FriendActivityRow = {
   created_at: string;
 };
 
+type PendingInviteRow = {
+  id: string;
+  expedition_id: string;
+  inviter_profile_code: string;
+  inviter_display_name: string;
+  created_at: string;
+};
+
 type UserCoords = {
   lat: number;
   lng: number;
@@ -64,9 +72,13 @@ function formatAgo(value: string) {
 }
 
 export function HomeScreen() {
-  const { state, isLocationUnlocked } = useAppState();
+  const { state, isLocationUnlocked, setActiveMode, setCurrentExpeditionId, setFriendsFromCloud } = useAppState();
   const [friendFeed, setFriendFeed] = useState<FriendActivityRow[]>([]);
   const [feedLoaded, setFeedLoaded] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<PendingInviteRow[]>([]);
+  const [invitesLoaded, setInvitesLoaded] = useState(false);
+  const [ownChildProfileId, setOwnChildProfileId] = useState<string | null>(null);
+  const [respondingInviteId, setRespondingInviteId] = useState<string | null>(null);
   const [userCoords, setUserCoords] = useState<UserCoords | null>(null);
   const [geoState, setGeoState] = useState<"locating" | "ready" | "denied" | "error" | "unsupported">("locating");
   const supabase = useMemo(() => {
@@ -110,6 +122,82 @@ export function HomeScreen() {
 
     loadFriendFeed();
   }, [state.profileCode, supabase]);
+
+  useEffect(() => {
+    async function loadInvites() {
+      if (!supabase || !state.profileCode) {
+        setInvitesLoaded(true);
+        return;
+      }
+
+      const { data: ownProfile } = await supabase
+        .from("child_profiles")
+        .select("id")
+        .eq("profile_code", state.profileCode)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (!ownProfile?.id) {
+        setOwnChildProfileId(null);
+        setPendingInvites([]);
+        setInvitesLoaded(true);
+        return;
+      }
+
+      setOwnChildProfileId(ownProfile.id);
+
+      const { data } = await supabase
+        .from("child_expedition_invites")
+        .select("id, expedition_id, inviter_profile_code, inviter_display_name, created_at")
+        .eq("invitee_child_profile_id", ownProfile.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      setPendingInvites((data as PendingInviteRow[]) ?? []);
+      setInvitesLoaded(true);
+    }
+
+    loadInvites();
+  }, [state.profileCode, supabase]);
+
+  async function handleInviteResponse(invite: PendingInviteRow, decision: "accepted" | "rejected") {
+    if (!supabase || !ownChildProfileId) {
+      return;
+    }
+
+    setRespondingInviteId(invite.id);
+
+    const { error } = await supabase
+      .from("child_expedition_invites")
+      .update({
+        status: decision,
+        responded_at: new Date().toISOString()
+      })
+      .eq("id", invite.id)
+      .eq("invitee_child_profile_id", ownChildProfileId)
+      .eq("status", "pending");
+
+    if (error) {
+      setRespondingInviteId(null);
+      return;
+    }
+
+    setPendingInvites((current) => current.filter((row) => row.id !== invite.id));
+
+    if (decision === "accepted") {
+      setActiveMode("group");
+      setCurrentExpeditionId(invite.expedition_id);
+      setFriendsFromCloud([
+        {
+          code: invite.inviter_profile_code,
+          name: invite.inviter_display_name
+        }
+      ]);
+    }
+
+    setRespondingInviteId(null);
+  }
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -242,6 +330,48 @@ export function HomeScreen() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Pozvánky</p>
+            <h2 className="mt-2 text-xl font-semibold">Nová výprava</h2>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {!invitesLoaded ? (
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">Načítám pozvánky…</div>
+          ) : pendingInvites.length === 0 ? (
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">Zatím nemáš žádnou čekající pozvánku.</div>
+          ) : (
+            pendingInvites.map((invite) => (
+              <div key={invite.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm">
+                  <span className="font-semibold">{invite.inviter_display_name}</span> tě zve do výpravy.
+                </p>
+                <p className="mt-1 text-xs text-mist">{formatAgo(invite.created_at)}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleInviteResponse(invite, "accepted")}
+                    disabled={respondingInviteId === invite.id}
+                    className="rounded-xl bg-lime px-3 py-2 text-xs font-semibold text-night"
+                  >
+                    Přijmout
+                  </button>
+                  <button
+                    onClick={() => handleInviteResponse(invite, "rejected")}
+                    disabled={respondingInviteId === invite.id}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-mist"
+                  >
+                    Odmítnout
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

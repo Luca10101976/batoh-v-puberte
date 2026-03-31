@@ -73,12 +73,29 @@ create table public.child_friendships (
   constraint child_friendships_no_self check (child_profile_id <> friend_child_profile_id)
 );
 
+create table public.child_expedition_invites (
+  id uuid primary key default gen_random_uuid(),
+  expedition_id uuid not null default gen_random_uuid(),
+  inviter_child_profile_id uuid not null references public.child_profiles(id) on delete cascade,
+  inviter_profile_code text not null,
+  inviter_display_name text not null,
+  invitee_child_profile_id uuid not null references public.child_profiles(id) on delete cascade,
+  invitee_profile_code text not null,
+  invitee_display_name text not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  responded_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint child_expedition_invites_no_self check (inviter_child_profile_id <> invitee_child_profile_id)
+);
+
 create unique index locations_city_id_name_idx on public.locations (city_id, name);
 create index tasks_location_id_sort_order_idx on public.tasks (location_id, sort_order);
 create index user_progress_completed_at_idx on public.user_progress (completed_at desc);
 create index friendships_friend_id_idx on public.friendships (friend_id);
 create index child_profiles_parent_user_id_idx on public.child_profiles (parent_user_id);
 create index child_friendships_friend_child_profile_id_idx on public.child_friendships (friend_child_profile_id);
+create index child_expedition_invites_invitee_status_idx on public.child_expedition_invites (invitee_child_profile_id, status, created_at desc);
+create index child_expedition_invites_inviter_status_idx on public.child_expedition_invites (inviter_child_profile_id, status, created_at desc);
 
 alter table public.cities enable row level security;
 alter table public.locations enable row level security;
@@ -88,6 +105,7 @@ alter table public.user_progress enable row level security;
 alter table public.friendships enable row level security;
 alter table public.child_profiles enable row level security;
 alter table public.child_friendships enable row level security;
+alter table public.child_expedition_invites enable row level security;
 
 create policy "cities are readable by everyone"
 on public.cities for select
@@ -177,5 +195,48 @@ with check (
     select 1
     from public.child_profiles cp
     where cp.id = child_profile_id and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents read own expedition invites"
+on public.child_expedition_invites for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where (cp.id = inviter_child_profile_id or cp.id = invitee_child_profile_id)
+      and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents insert invites from own child profile"
+on public.child_expedition_invites for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.id = inviter_child_profile_id and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents update invites for own child profile"
+on public.child_expedition_invites for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where (cp.id = inviter_child_profile_id or cp.id = invitee_child_profile_id)
+      and cp.parent_user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where (cp.id = inviter_child_profile_id or cp.id = invitee_child_profile_id)
+      and cp.parent_user_id = auth.uid()
   )
 );

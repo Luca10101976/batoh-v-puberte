@@ -40,6 +40,7 @@ type AppState = {
   completedLocationIds: string[];
   lastCompletedAt: Record<string, string>;
   groupCompletionMembers: Record<string, string[]>;
+  currentExpeditionId: string | null;
   activeMode: "solo" | "group";
   squadName: string;
   squadMembers: SquadMember[];
@@ -59,6 +60,7 @@ type AppStateContextValue = {
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
+  setCurrentExpeditionId: (expeditionId: string | null) => void;
   toggleMember: (memberId: string) => void;
   updateProfile: (profile: Partial<PlayerProfile>) => void;
   completeLocation: (locationId: string, participantIds?: string[]) => void;
@@ -98,6 +100,7 @@ const initialState: AppState = {
   completedLocationIds: [],
   lastCompletedAt: {},
   groupCompletionMembers: {},
+  currentExpeditionId: null,
   activeMode: "group",
   squadName: "Lovci stop",
   squadMembers: [
@@ -133,6 +136,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           },
           profileCode: parsed.profileCode || generateProfileCode(),
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
+          currentExpeditionId: parsed.currentExpeditionId ?? null,
           squadMembers: migratedMembers
         });
       } catch {
@@ -281,6 +285,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setState((current) => (current.activeMode === mode ? current : { ...current, activeMode: mode }));
   }, []);
 
+  const setCurrentExpeditionId = useCallback((expeditionId: string | null) => {
+    setState((current) =>
+      current.currentExpeditionId === expeditionId ? current : { ...current, currentExpeditionId: expeditionId }
+    );
+  }, []);
+
   const toggleMember = useCallback((memberId: string) => {
     setState((current) => ({
       ...current,
@@ -344,6 +354,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setFriendsFromCloud,
       setCity,
       setActiveMode,
+      setCurrentExpeditionId,
       toggleMember,
       updateProfile,
       completeLocation,
@@ -359,6 +370,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       isLocationUnlocked,
       resetProgress,
       setActiveMode,
+      setCurrentExpeditionId,
       setCity,
       state,
       toggleMember,

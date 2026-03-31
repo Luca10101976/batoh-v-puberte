@@ -1,16 +1,32 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { friends, locations } from "@/lib/mock-data";
+import { locations } from "@/lib/mock-data";
 
 export function ProfileScreen() {
-  const { state, updateProfile, resetProgress, isLocationUnlocked } = useAppState();
+  const { state, updateProfile, resetProgress, isLocationUnlocked, addFriendByCode } = useAppState();
+  const [friendCode, setFriendCode] = useState("");
+  const [friendNickname, setFriendNickname] = useState("");
+  const [friendMessage, setFriendMessage] = useState("");
   const unlockedCount = useMemo(
     () => locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length,
     [isLocationUnlocked]
   );
+  const friends = state.squadMembers.filter((member) => member.id !== "self");
   const score = unlockedCount * 120;
+  const profileShareValue = `batoh-v-puberte://friend/${state.profileCode}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(profileShareValue)}`;
+
+  function handleAddFriend() {
+    const result = addFriendByCode({ friendCode, nickname: friendNickname });
+    setFriendMessage(result.message);
+
+    if (result.ok) {
+      setFriendCode("");
+      setFriendNickname("");
+    }
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -52,17 +68,45 @@ export function ProfileScreen() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
-            <h2 className="mt-2 text-xl font-semibold">Tvoje karta hráče</h2>
+            <h2 className="mt-2 text-xl font-semibold">Tvůj profilový QR kód</h2>
           </div>
           <div className="rounded-full bg-lime/12 px-3 py-2 text-xs text-lime">
             {state.activeMode === "group" ? "Skupinový tah" : "Solo tah"}
           </div>
         </div>
-        <div className="mt-4 rounded-[24px] bg-white/5 p-4">
-          <p className="text-sm leading-6 text-mist">
-            Nejvíc ti sedí městské záhady a lokace, kde je potřeba koukat kolem sebe. Profil se ukládá přímo v
-            appce, takže si můžeš zkoušet mise opakovaně.
+        <div className="mt-4 flex flex-col items-center gap-4 rounded-[24px] bg-white/5 p-4">
+          <img src={qrUrl} alt="Profilový QR kód" className="h-44 w-44 rounded-2xl border border-white/10 bg-white p-2" />
+          <div className="rounded-xl border border-white/10 bg-night/70 px-3 py-2 text-sm font-semibold tracking-wide text-lime">
+            {state.profileCode}
+          </div>
+          <p className="text-center text-sm leading-6 text-mist">
+            Kamarád si tě přidá naskenováním QR nebo opsáním kódu.
           </p>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Přidat kamaráda</h2>
+        <div className="mt-4 space-y-3">
+          <input
+            value={friendCode}
+            onChange={(event) => setFriendCode(event.target.value.toUpperCase())}
+            placeholder="Kód kamaráda (např. BAT-AB12CD)"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
+          />
+          <input
+            value={friendNickname}
+            onChange={(event) => setFriendNickname(event.target.value)}
+            placeholder="Jak se ti bude v appce zobrazovat"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
+          />
+          <button
+            onClick={handleAddFriend}
+            className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
+          >
+            Přidat do party
+          </button>
+          {friendMessage ? <p className="text-sm text-mist">{friendMessage}</p> : null}
         </div>
         <button
           onClick={resetProgress}
@@ -74,25 +118,30 @@ export function ProfileScreen() {
 
       <section className="glass-card p-5">
         <h2 className="section-title">Kamarádi</h2>
-        <div className="mt-4 space-y-3">
-          {friends.map((friend) => (
-            <div key={friend.name} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold">
-                  {friend.initials}
+        {friends.length === 0 ? (
+          <p className="mt-4 text-sm text-mist">
+            Zatím tu nikoho nemáš. Přidej prvního kamaráda přes QR nebo kód.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {friends.map((friend) => (
+              <div key={friend.id} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold">
+                    {friend.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="font-medium">{friend.name}</div>
+                    <div className="text-sm text-mist">Kód: {friend.id}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-medium">{friend.name}</div>
-                  <div className="text-sm text-mist">{friend.unlocked} odemčených lokací</div>
+                <div className="rounded-full bg-lime/12 px-3 py-2 text-xs font-medium text-lime">
+                  {friend.joined ? "Ve výpravě" : "Mimo výpravu"}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="rounded-full bg-lime/12 px-3 py-2 text-xs font-medium text-lime">{friend.streak}</div>
-                <div className="mt-2 text-[11px] text-mist">{friend.status}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

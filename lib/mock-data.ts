@@ -45,8 +45,13 @@ export type MapLocation = {
 };
 
 export const nearbyMissions = [
-  { name: "Ztracený příběh Klamovky", distance: "11 min", boost: "+120 bodů", status: "Blízko tebe" },
-  { name: "Orlojová stopa", distance: "14 min", boost: "+Rychlá mise", status: "Na krátkou výpravu" }
+  {
+    name: "Ztracený příběh Klamovky",
+    locationId: "klamovka",
+    distance: "11 min",
+    boost: "+120 bodů",
+    status: "Blízko tebe"
+  }
 ];
 
 export const activityFeed = [
@@ -317,87 +322,6 @@ export const locations: MapLocation[] = [
           "Po všem rozpadlém je tu scéna, která drží pohromadě.",
           "Proto dává smysl, že hra končí právě tady."
         ]
-      }
-    ]
-  },
-  {
-    id: "orloj",
-    name: "Staroměstský orloj",
-    subtitle: "Krátká městská mise",
-    teaser: "Na náměstí čekají ztracené znaky, skryté hodiny a první stopa do sbírky.",
-    story: "Krátká mise na rozkoukání. Všímej si detailů a potvrď první stopu.",
-    image:
-      "https://images.unsplash.com/photo-1541844053589-346841d0b34c?auto=format&fit=crop&w=1200&q=80",
-    unlocked: true,
-    difficulty: "Lehká",
-    distance: "4 min od tebe",
-    duration: "12-18 min",
-    areaHint: "Doporučená oblast do 120 m od orloje.",
-    vibe: ["Historie", "Tajná zpráva", "Rychlá mise"],
-    map: { x: 42, y: 36 },
-    introLabel: "Úvodní mise",
-    introStory: "Krátká městská mise pro rychlé odemčení lokace.",
-    endingTitle: "Stopa potvrzena",
-    endingStory: "Mise u orloje je splněna.",
-    playerMessage: "Skvělý postřeh. Tohle byla rychlá lokace na rozehrání.",
-    interludes: [],
-    episodes: [
-      {
-        id: "orloj-ep",
-        name: "První stopa",
-        intro: "Rychlá mise na rozkoukání.",
-        background: "Historická dominanta, kde se vyplatí dívat na detaily.",
-        tasks: [
-          {
-            id: "orloj-q1",
-            type: "question",
-            typeLabel: "Otázka",
-            title: "Najdi detail",
-            content: "Kolik malých oken vidíš nad ciferníkem orloje?"
-          }
-        ],
-        clue: ["Začátek sbírky je doma."]
-      }
-    ]
-  },
-  {
-    id: "narodni",
-    name: "Národní divadlo",
-    subtitle: "Pozorovací mise",
-    teaser: "Zlatá koruna, sochy a odpovědi ukryté vysoko nad tebou.",
-    story: "Vydejte se za zlatou korunou divadla a ověřte další stopu.",
-    image:
-      "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1200&q=80",
-    unlocked: false,
-    difficulty: "Vyšší",
-    distance: "15 min od tebe",
-    duration: "20-30 min",
-    areaHint: "Doporučená oblast do 150 m od hlavního vstupu.",
-    vibe: ["Architektura", "Pozorování", "Soutěžní mise"],
-    map: { x: 55, y: 70 },
-    introLabel: "Úvodní mise",
-    introStory: "Vydejte se za zlatou korunou divadla.",
-    endingTitle: "Mise uzavřena",
-    endingStory: "Divadelní stopa je potvrzena.",
-    playerMessage: "Dobrý výkon. Tohle byla těžší pozorovací trasa.",
-    interludes: [],
-    episodes: [
-      {
-        id: "narodni-ep",
-        name: "Vyber směr",
-        intro: "Začni tím, co je vidět z dálky.",
-        background: "Budova plná symbolů a detailů.",
-        tasks: [
-          {
-            id: "narodni-choice",
-            type: "choice",
-            typeLabel: "Výběr",
-            title: "Vyber směr",
-            content: "Která část budovy je nejsnazší poznat z dálky?",
-            options: ["Střecha", "Schody", "Vchod"]
-          }
-        ],
-        clue: ["Některé budovy mluví hlavně shora."]
       }
     ]
   }

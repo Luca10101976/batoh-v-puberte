@@ -70,7 +70,11 @@ export function HomeScreen() {
 
         <div className="mt-4 space-y-3">
           {nearbyMissions.map((mission) => (
-            <div key={mission.name} className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+            <Link
+              key={mission.name}
+              href={`/locations/${mission.locationId}`}
+              className="block rounded-[24px] border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
+            >
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="font-semibold">{mission.name}</h3>
@@ -81,7 +85,7 @@ export function HomeScreen() {
                   <div className="text-xs text-mist">{mission.boost}</div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

@@ -197,17 +197,21 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         <div className="mt-4 space-y-3">
           {state.squadMembers.map((member) => (
             <button
-              key={member.name}
-              onClick={() => toggleMember(member.name)}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left"
+              key={member.id}
+              onClick={() => toggleMember(member.id)}
+              disabled={member.id === "self"}
+              className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left disabled:cursor-not-allowed disabled:opacity-80"
             >
-              <div className="font-medium">{member.name}</div>
+              <div className="font-medium">
+                {member.name}
+                {member.id === "self" ? " (ty)" : ""}
+              </div>
               <div
                 className={`rounded-full px-3 py-2 text-xs ${
                   member.joined ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
                 }`}
               >
-                {member.joined ? "Potvrzeno" : "Mimo vypravu"}
+                {member.joined ? "Potvrzeno" : "Mimo výpravu"}
               </div>
             </button>
           ))}
@@ -286,13 +290,13 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               }}
               className="w-full rounded-2xl bg-coral px-4 py-4 text-sm font-semibold text-white"
             >
-              Potvrdit vyzvu na místě
+              Potvrdit výzvu na místě
             </button>
           ) : (
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Sem napis odpoved"
+              placeholder="Sem napiš odpověď"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white outline-none placeholder:text-mist"
             />
           )}

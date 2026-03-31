@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppStateProvider } from "@/components/app-state-provider";
-import { BottomNav } from "@/components/bottom-nav";
+import { AppFrame } from "@/components/app-frame";
 
 export const metadata: Metadata = {
-  title: "Pan Batoh",
+  title: "Batoh v pubertě",
   description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-  applicationName: "Pan Batoh"
+  applicationName: "Batoh v pubertě"
 };
 
 export const viewport: Viewport = {
@@ -25,10 +25,7 @@ export default function RootLayout({
     <html lang="cs">
       <body>
         <AppStateProvider>
-          <div className="app-shell">
-            {children}
-            <BottomNav />
-          </div>
+          <AppFrame>{children}</AppFrame>
         </AppStateProvider>
       </body>
     </html>

@@ -281,8 +281,8 @@ export const locations: MapLocation[] = [
             id: "klamovka-hodiny-5",
             type: "photo",
             typeLabel: "Výzva na místě",
-            title: "Nejmatoucí ciferník",
-            content: "Najdi nápis „Přijdu včas“ a vyber ciferník, který tě mate nejvíc."
+            title: "Nápis a ciferník",
+            content: "Najdi nápis „Přijdu včas“ a vedle něj potvrď, že vidíš ciferník hodin."
           }
         ],
         clue: [

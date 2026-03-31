@@ -249,8 +249,8 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
             {state.safetyEmailsEnabled
-              ? "Rodičovský dohled je aktivní. Start a konec mise pošle e-mail rodiči."
-              : "Rodičovský dohled je vypnutý. Misi můžeš odehrát normálně."}
+              ? "Rodičovský dohled je aktivní. Při startu a konci mise přijde rodiči e-mail."
+              : "Rodičovský dohled je vypnutý. Misi můžeš hrát normálně."}
           </p>
         </div>
       </section>

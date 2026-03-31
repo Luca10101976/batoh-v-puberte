@@ -95,7 +95,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Při startu hry běží bezpečnostní check-in. Pokud je aktivní rodičovský dohled, rodiči přijde e-mail.
+            Když spustíš misi a je aktivní rodičovský dohled, rodiči přijde e-mail.
           </p>
         </div>
       </section>

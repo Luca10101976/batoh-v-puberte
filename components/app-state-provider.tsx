@@ -224,15 +224,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         joined: true
       };
 
+      const mergedFriends = new Map<string, SquadMember>();
+
+      current.squadMembers
+        .filter((member) => member.id !== SELF_MEMBER_ID)
+        .forEach((member) => {
+          mergedFriends.set(normalizeCode(member.id), {
+            ...member,
+            id: normalizeCode(member.id)
+          });
+        });
+
+      friends.forEach((friend) => {
+        const normalizedId = normalizeCode(friend.code);
+        const existing = mergedFriends.get(normalizedId);
+
+        mergedFriends.set(normalizedId, {
+          id: normalizedId,
+          name: friend.name || existing?.name || "Kamarád",
+          joined: existing?.joined ?? true
+        });
+      });
+
       return {
         ...current,
         squadMembers: [
           { ...selfMember, name: current.profile.name, joined: true },
-          ...friends.map((friend) => ({
-            id: normalizeCode(friend.code),
-            name: friend.name,
-            joined: true
-          }))
+          ...Array.from(mergedFriends.values())
         ]
       };
     });

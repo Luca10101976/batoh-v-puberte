@@ -8,6 +8,11 @@ export function LeaderboardScreen() {
   const [tab, setTab] = useState<"players" | "groups">("players");
   const { state, isLocationUnlocked } = useAppState();
   const unlockedCount = locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length;
+  const groupScore = useMemo(
+    () =>
+      Object.values(state.groupCompletionMembers).reduce((sum, members) => sum + members.length * 120, 0),
+    [state.groupCompletionMembers]
+  );
 
   const playerBoard = useMemo(
     () =>
@@ -30,12 +35,12 @@ export function LeaderboardScreen() {
         ...squads,
         {
           name: state.squadName,
-          members: state.squadMembers.filter((member) => member.joined).length,
-          score: unlockedCount * Math.max(1, state.squadMembers.filter((member) => member.joined).length),
+          members: state.squadMembers.length,
+          score: groupScore,
           city: state.city
         }
       ].sort((a, b) => b.score - a.score),
-    [state.city, state.squadMembers, state.squadName, unlockedCount]
+    [groupScore, state.city, state.squadMembers.length, state.squadName]
   );
 
   return (

@@ -75,15 +75,18 @@ export function ProfileScreen() {
 
   async function handleAddFriend() {
     setSavingFriend(true);
-    const result = addFriendByCode({ friendCode, nickname: friendNickname });
-
-    if (!result.ok) {
-      setSavingFriend(false);
-      setFriendMessage(result.message);
-      return;
-    }
+    const normalizedCode = friendCode.trim().toUpperCase();
+    const nickname = friendNickname.trim();
 
     if (!supabase) {
+      const result = addFriendByCode({ friendCode, nickname: friendNickname });
+
+      if (!result.ok) {
+        setSavingFriend(false);
+        setFriendMessage(result.message);
+        return;
+      }
+
       setSavingFriend(false);
       setFriendMessage("Kamarád přidán lokálně.");
       setFriendCode("");
@@ -91,8 +94,31 @@ export function ProfileScreen() {
       return;
     }
 
-    const normalizedCode = friendCode.trim().toUpperCase();
-    const nickname = friendNickname.trim();
+    if (!normalizedCode || normalizedCode.length < 4) {
+      setSavingFriend(false);
+      setFriendMessage("Zadej platný kód kamaráda.");
+      return;
+    }
+
+    if (!nickname) {
+      setSavingFriend(false);
+      setFriendMessage("Doplň přezdívku kamaráda.");
+      return;
+    }
+
+    if (normalizedCode === state.profileCode.trim().toUpperCase()) {
+      setSavingFriend(false);
+      setFriendMessage("Tohle je tvůj vlastní kód.");
+      return;
+    }
+
+    const alreadyAdded = state.squadMembers.some((member) => member.id === normalizedCode);
+
+    if (alreadyAdded) {
+      setSavingFriend(false);
+      setFriendMessage("Tohohle kamaráda už máš přidaného.");
+      return;
+    }
 
     const { data: ownProfile } = await supabase
       .from("child_profiles")
@@ -141,6 +167,14 @@ export function ProfileScreen() {
     if (insertError) {
       setSavingFriend(false);
       setFriendMessage("Přidání kamaráda do cloudu se nepodařilo.");
+      return;
+    }
+
+    const localAddResult = addFriendByCode({ friendCode: normalizedCode, nickname });
+
+    if (!localAddResult.ok) {
+      setSavingFriend(false);
+      setFriendMessage(localAddResult.message);
       return;
     }
 

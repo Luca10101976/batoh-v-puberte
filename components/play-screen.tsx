@@ -7,6 +7,7 @@ import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation, type Task } from "@/lib/mock-data";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown";
+const SELF_MEMBER_ID = "self";
 
 function normalize(value: string) {
   return value
@@ -38,7 +39,7 @@ function isManualTask(task: Task) {
 }
 
 export function PlayScreen({ location }: { location: MapLocation }) {
-  const { state, setActiveMode, toggleMember, completeLocation, isLocationUnlocked } = useAppState();
+  const { state, setActiveMode, completeLocation, isLocationUnlocked } = useAppState();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [episodeIndex, setEpisodeIndex] = useState(0);
@@ -48,6 +49,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   const [message, setMessage] = useState("");
   const [finished, setFinished] = useState(false);
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
+  const [partySnapshotIds, setPartySnapshotIds] = useState<string[]>([]);
 
   useEffect(() => {
     const mode = searchParams.get("mode");
@@ -67,11 +69,37 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     }
   }, [location.episodes.length, searchParams, setActiveMode]);
 
+  useEffect(() => {
+    setPartySnapshotIds([]);
+  }, [location.id, state.activeMode]);
+
+  useEffect(() => {
+    if (state.activeMode !== "group") {
+      setPartySnapshotIds([]);
+      return;
+    }
+
+    setPartySnapshotIds((current) => {
+      if (current.length > 0) {
+        return current;
+      }
+
+      const joinedIds = state.squadMembers
+        .filter((member) => member.joined || member.id === SELF_MEMBER_ID)
+        .map((member) => member.id);
+
+      return joinedIds.length > 0 ? joinedIds : [SELF_MEMBER_ID];
+    });
+  }, [state.activeMode, state.squadMembers]);
+
   const activeEpisode = location.episodes[episodeIndex];
   const activeTask = activeEpisode.tasks[taskIndex];
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
-  const joinedCount = state.squadMembers.filter((member) => member.joined).length;
+  const joinedCount =
+    state.activeMode === "group"
+      ? Math.max(1, partySnapshotIds.length)
+      : 1;
   const totalTasks = location.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
   const completedTasksBeforeCurrent = location.episodes
     .slice(0, episodeIndex)
@@ -105,7 +133,9 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       return;
     }
 
-    completeLocation(location.id);
+    const participants =
+      state.activeMode === "group" ? (partySnapshotIds.length > 0 ? partySnapshotIds : [SELF_MEMBER_ID]) : [SELF_MEMBER_ID];
+    completeLocation(location.id, participants);
     setFinished(true);
   }
 
@@ -230,11 +260,9 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           </div>
           <div className="mt-4 space-y-3">
             {state.squadMembers.map((member) => (
-              <button
+              <div
                 key={member.id}
-                onClick={() => toggleMember(member.id)}
-                disabled={member.id === "self"}
-                className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left disabled:cursor-not-allowed disabled:opacity-80"
+                className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left"
               >
                 <div className="font-medium">
                   {member.name}
@@ -242,14 +270,15 @@ export function PlayScreen({ location }: { location: MapLocation }) {
                 </div>
                 <div
                   className={`rounded-full px-3 py-2 text-xs ${
-                    member.joined ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
+                    partySnapshotIds.includes(member.id) ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
                   }`}
                 >
-                  {member.joined ? "Potvrzeno" : "Mimo výpravu"}
+                  {partySnapshotIds.includes(member.id) ? "Ve výpravě" : "Mimo výpravu"}
                 </div>
-              </button>
+              </div>
             ))}
           </div>
+          <p className="mt-3 text-xs text-mist">Sestava je uzamčená od startu mise.</p>
         </section>
       ) : null}
 

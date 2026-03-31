@@ -31,6 +31,7 @@ type AppState = {
   profile: PlayerProfile;
   completedLocationIds: string[];
   lastCompletedAt: Record<string, string>;
+  groupCompletionMembers: Record<string, string[]>;
   activeMode: "solo" | "group";
   squadName: string;
   squadMembers: SquadMember[];
@@ -52,7 +53,7 @@ type AppStateContextValue = {
   setActiveMode: (mode: "solo" | "group") => void;
   toggleMember: (memberId: string) => void;
   updateProfile: (profile: Partial<PlayerProfile>) => void;
-  completeLocation: (locationId: string) => void;
+  completeLocation: (locationId: string, participantIds?: string[]) => void;
   resetProgress: () => void;
   isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean) => boolean;
 };
@@ -82,6 +83,7 @@ const initialState: AppState = {
   },
   completedLocationIds: [],
   lastCompletedAt: {},
+  groupCompletionMembers: {},
   activeMode: "group",
   squadName: "Lovci stop",
   squadMembers: [
@@ -112,6 +114,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...initialState,
           ...parsed,
           profileCode: parsed.profileCode || generateProfileCode(),
+          groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           squadMembers: migratedMembers
         });
       } catch {
@@ -276,12 +279,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const completeLocation = useCallback((locationId: string) => {
+  const completeLocation = useCallback((locationId: string, participantIds?: string[]) => {
     setState((current) => ({
       ...current,
       completedLocationIds: current.completedLocationIds.includes(locationId)
         ? current.completedLocationIds
         : [...current.completedLocationIds, locationId],
+      groupCompletionMembers: participantIds?.length
+        ? {
+            ...current.groupCompletionMembers,
+            [locationId]: participantIds
+          }
+        : current.groupCompletionMembers,
       lastCompletedAt: {
         ...current.lastCompletedAt,
         [locationId]: new Date().toISOString()

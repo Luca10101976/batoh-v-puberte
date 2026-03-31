@@ -230,8 +230,8 @@ export const locations: MapLocation[] = [
             id: "klamovka-altan-4",
             type: "photo",
             typeLabel: "Výzva na místě",
-            title: "Gotické okno",
-            content: "Najdi gotické okno altánu a podívej se skrz něj na park."
+            title: "Okna altánu",
+            content: "Najdi na altánu vysoká špičatá okna a potvrď, že jsi na správném místě."
           }
         ],
         clue: [

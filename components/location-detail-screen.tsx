@@ -65,7 +65,6 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="section-title">Epizody výpravy</h2>
-            <p className="section-copy mt-1">Každé zastavení vrátí jeden kus ztraceného příběhu.</p>
           </div>
           <div className="rounded-2xl bg-white/5 px-4 py-3 text-right">
             <div className="text-xl font-semibold">{location.episodes.length}</div>

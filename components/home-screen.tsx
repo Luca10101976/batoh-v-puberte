@@ -1,0 +1,162 @@
+"use client";
+
+import Link from "next/link";
+import { CitySelector } from "@/components/city-selector";
+import { HeroCard } from "@/components/hero-card";
+import { LocationPin } from "@/components/location-pin";
+import { useAppState } from "@/components/app-state-provider";
+import { activityFeed, locations, nearbyMissions } from "@/lib/mock-data";
+
+export function HomeScreen() {
+  const { state, isLocationUnlocked } = useAppState();
+  const unlockedCount = locations.filter((location) =>
+    isLocationUnlocked(location.id, location.unlocked)
+  ).length;
+  const score = unlockedCount * 120;
+
+  return (
+    <main className="flex flex-1 flex-col gap-6 pb-24">
+      <HeroCard />
+
+      <section className="glass-card overflow-hidden p-5">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-sky">Město</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">{state.city}</h1>
+          </div>
+          <CitySelector />
+        </div>
+
+        <div className="relative h-[360px] rounded-[24px] border border-white/10 bg-city-grid bg-[size:24px_24px] bg-ink p-4">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(180,255,98,0.12),transparent_48%)]" />
+          {locations.map((location) => (
+            <LocationPin
+              key={location.id}
+              location={{ ...location, unlocked: isLocationUnlocked(location.id, location.unlocked) }}
+            />
+          ))}
+          <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-2xl border border-white/10 bg-night/90 p-4 backdrop-blur">
+            <p className="text-xs uppercase tracking-[0.22em] text-mist">Tvoje skóre</p>
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-lg font-semibold text-white">{unlockedCount}</div>
+                <div className="text-xs text-mist">Odemčeno</div>
+              </div>
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-lg font-semibold text-white">{score}</div>
+                <div className="text-xs text-mist">Body</div>
+              </div>
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-lg font-semibold text-white">
+                  {state.activeMode === "group" ? "Parta" : "Solo"}
+                </div>
+                <div className="text-xs text-mist">Režim</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Blízko tebe</p>
+            <h2 className="mt-2 text-xl font-semibold">Vyrazte ven ještě dnes</h2>
+          </div>
+          <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">
+            Poloha zapnutá
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {nearbyMissions.map((mission) => (
+            <div key={mission.name} className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">{mission.name}</h3>
+                  <p className="mt-1 text-sm text-mist">{mission.status}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-lime">{mission.distance}</div>
+                  <div className="text-xs text-mist">{mission.boost}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Dnes doporučené lokace</h2>
+          <Link href="/leaderboard" className="text-sm text-lime">
+            Žebříček
+          </Link>
+        </div>
+
+        {locations.map((location) => {
+          const unlocked = isLocationUnlocked(location.id, location.unlocked);
+
+          return (
+            <Link
+              key={location.id}
+              href={`/locations/${location.id}`}
+              className="glass-card flex items-center gap-4 p-3"
+            >
+              <div
+                className="h-20 w-20 rounded-[20px] bg-cover bg-center"
+                style={{ backgroundImage: `url(${location.image})` }}
+              />
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-semibold">{location.name}</h3>
+                  <span
+                    className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.2em] ${
+                      unlocked ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
+                    }`}
+                  >
+                    {unlocked ? "Odemčeno" : "Připraveno"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-mist">{location.teaser}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-mist">
+                  <span className="rounded-full bg-white/5 px-2 py-1">{location.distance}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{location.duration}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{location.difficulty}</span>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-sky">Pohyb kamarádů</p>
+            <h2 className="mt-2 text-xl font-semibold">Co se děje kolem tebe</h2>
+          </div>
+          <Link href="/profile" className="text-sm text-lime">
+            Můj profil
+          </Link>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {activityFeed.map((item) => (
+            <div key={`${item.friend}-${item.action}`} className="flex items-center gap-3 rounded-2xl bg-white/5 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-xs font-semibold">
+                {item.friend.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm">
+                  <span className="font-semibold">{item.friend}</span> {item.action}
+                </p>
+                <p className="text-xs text-mist">{item.ago}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}

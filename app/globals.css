@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply min-h-screen bg-night text-white antialiased;
+  background-image:
+    radial-gradient(circle at top, rgba(82, 200, 255, 0.14), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(180, 255, 98, 0.16), transparent 26%),
+    linear-gradient(180deg, #07111f 0%, #091526 48%, #050b14 100%);
+}
+
+a {
+  @apply text-inherit no-underline;
+}
+
+* {
+  @apply border-white/10;
+}
+
+.app-shell {
+  @apply mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-10 pt-6;
+}
+
+.glass-card {
+  @apply rounded-[28px] border border-white/10 bg-white/5 shadow-card backdrop-blur-xl;
+}
+
+.section-title {
+  @apply text-lg font-semibold tracking-tight text-white;
+}
+
+.section-copy {
+  @apply text-sm leading-6 text-mist;
+}

@@ -126,6 +126,20 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
   }
 
+  function handlePhotoConfirmAndAdvance() {
+    setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
+    setStatus("manual");
+    setMessage("");
+    advance();
+  }
+
+  function handlePhotoUnknownAndAdvance() {
+    setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
+    setStatus("unknown");
+    setMessage("");
+    advance();
+  }
+
   if (finished) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -283,15 +297,9 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               ))}
             </div>
           ) : activeTask.type === "photo" ? (
-            <button
-              onClick={() => {
-                setStatus("manual");
-                setMessage("Výzva na místě je potvrzena. Tahle část je splněna.");
-              }}
-              className="w-full rounded-2xl bg-coral px-4 py-4 text-sm font-semibold text-white"
-            >
-              Potvrdit výzvu na místě
-            </button>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-mist">
+              Tohle je výzva na místě. Jakmile ji splníš, potvrď ji tlačítkem níže.
+            </div>
           ) : (
             <input
               value={input}
@@ -304,27 +312,44 @@ export function PlayScreen({ location }: { location: MapLocation }) {
 
         {message ? <p className="mt-4 text-sm text-mist">{message}</p> : null}
 
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          <button
-            onClick={handleValidate}
-            className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold"
-          >
-            Ověřit úkol
-          </button>
-          <button
-            onClick={handleUnknown}
-            className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
-          >
-            Nevím
-          </button>
-          <button
-            onClick={advance}
-            disabled={status === "idle"}
-            className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-mist"
-          >
-            {isLastTask && isLastEpisode ? "Dokončit misi" : "Další stopa"}
-          </button>
-        </div>
+        {activeTask.type === "photo" ? (
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button
+              onClick={handlePhotoUnknownAndAdvance}
+              className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
+            >
+              Nevím
+            </button>
+            <button
+              onClick={handlePhotoConfirmAndAdvance}
+              className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night"
+            >
+              {isLastTask && isLastEpisode ? "Potvrdit a dokončit misi" : "Potvrdit a pokračovat"}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <button
+              onClick={handleValidate}
+              className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold"
+            >
+              Ověřit úkol
+            </button>
+            <button
+              onClick={handleUnknown}
+              className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
+            >
+              Nevím
+            </button>
+            <button
+              onClick={advance}
+              disabled={status === "idle"}
+              className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-mist"
+            >
+              {isLastTask && isLastEpisode ? "Dokončit misi" : "Další stopa"}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="glass-card p-5">

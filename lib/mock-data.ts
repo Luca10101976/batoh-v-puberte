@@ -317,8 +317,8 @@ export const locations: MapLocation[] = [
             id: "klamovka-rodina-3",
             type: "photo",
             typeLabel: "Výzva na místě",
-            title: "Nenápadný detail",
-            content: "Najdi detail, kterého si většina lidí nevšimne, a potvrď ho."
+            title: "Detail na soše",
+            content: "Najdi na sousoší Rodiny zadek dítěte a potvrď, že ho vidíš."
           }
         ],
         clue: [

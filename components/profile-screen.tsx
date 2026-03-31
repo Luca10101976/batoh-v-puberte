@@ -41,6 +41,10 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
   const headShapeClass =
     config.head === "round" ? "rounded-[44%]" : config.head === "oval" ? "rounded-[40%]" : "rounded-[18px]";
   const hairColor = "#243249";
+  const eyeSize = size * 0.22;
+  const eyeTop = size * 0.45;
+  const eyeInset = size * 0.27;
+  const pupilSize = eyeSize * 0.38;
   return (
     <div
       className="relative overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
@@ -101,18 +105,30 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
         </>
       ) : null}
 
-      <div className="absolute left-[29%] top-[45%] h-7 w-7 rounded-full border-[3px] border-night bg-white">
+      <div
+        className="absolute rounded-full border-[3px] border-night bg-white"
+        style={{ left: eyeInset, top: eyeTop, width: eyeSize, height: eyeSize }}
+      >
         <div
-          className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-night ${
-            config.eyes === "dot" ? "left-[36%]" : config.eyes === "smile" ? "left-[44%]" : "left-[30%]"
-          }`}
+          className="absolute top-1/2 -translate-y-1/2 rounded-full bg-night"
+          style={{
+            width: pupilSize,
+            height: pupilSize,
+            left: config.eyes === "dot" ? "34%" : config.eyes === "smile" ? "42%" : "28%"
+          }}
         />
       </div>
-      <div className="absolute right-[29%] top-[45%] h-7 w-7 rounded-full border-[3px] border-night bg-white">
+      <div
+        className="absolute rounded-full border-[3px] border-night bg-white"
+        style={{ right: eyeInset, top: eyeTop, width: eyeSize, height: eyeSize }}
+      >
         <div
-          className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-night ${
-            config.eyes === "dot" ? "right-[36%]" : config.eyes === "smile" ? "right-[44%]" : "right-[30%]"
-          }`}
+          className="absolute top-1/2 -translate-y-1/2 rounded-full bg-night"
+          style={{
+            width: pupilSize,
+            height: pupilSize,
+            right: config.eyes === "dot" ? "34%" : config.eyes === "smile" ? "42%" : "28%"
+          }}
         />
       </div>
 

@@ -67,7 +67,7 @@ export const locations: MapLocation[] = [
     id: "klamovka",
     name: "Park Klamovka",
     subtitle: "Posbírej ztracený příběh",
-    teaser: "Park, kde něco chybí, něco nesedí a minulost se rozsypala na kousky.",
+    teaser: "Park, kde najdeš hlavu koně i peklo :)",
     story:
       "V Klamovce se rozsypal příběh. Hodiny jdou špatně, Cassel má jen hlavu a na chrámku se jedna tvář usmívá, zatímco ostatní se mračí. Tvůj úkol je dát tyhle stopy zase dohromady.",
     image: "/images/klamovka-chramek.jpeg",

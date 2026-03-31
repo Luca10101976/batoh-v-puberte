@@ -37,33 +37,17 @@ export function RegistrationGate() {
 
     setError("");
     setSubmitting(true);
-
-    let response: Response;
-    try {
-      response = await fetch("/api/parent-alert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event: "registration",
-          parentEmail: trimmedEmail,
-          childName: trimmedName,
-          childAge: numericAge
-        })
-      });
-    } catch {
-      setSubmitting(false);
-      setError("Nepodařilo se spojit se serverem. Zkus to prosím znovu.");
-      return;
-    }
-
-    if (!response.ok) {
-      const errorPayload = (await response.json().catch(() => null)) as { message?: string } | null;
-      setSubmitting(false);
-      setError(errorPayload?.message || "E-mail rodiči se nepodařilo odeslat. Zkontroluj nastavení.");
-      return;
-    }
-
     completeRegistration({ name: trimmedName, age: numericAge, parentEmail: trimmedEmail });
+    void fetch("/api/parent-alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: "registration",
+        parentEmail: trimmedEmail,
+        childName: trimmedName,
+        childAge: numericAge
+      })
+    }).catch(() => undefined);
     router.replace("/profile");
   }
 
@@ -118,7 +102,7 @@ export function RegistrationGate() {
             disabled={submitting}
             className="w-full rounded-2xl bg-coral px-4 py-3 text-base font-semibold text-white transition hover:brightness-105"
           >
-            {submitting ? "Odesílám potvrzení rodiči..." : "Dokončit registraci"}
+            {submitting ? "Dokončuji registraci..." : "Dokončit registraci"}
           </button>
         </form>
       </section>

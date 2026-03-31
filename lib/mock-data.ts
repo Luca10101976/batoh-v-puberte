@@ -76,7 +76,7 @@ export const locations: MapLocation[] = [
     difficulty: "Střední",
     distance: "11 min od tebe",
     duration: "35-50 min",
-    areaHint: "Drž se v parku Klamovka. Když budeš moc daleko, hra tě upozorní.",
+    areaHint: "Drž se v místě hry.",
     vibe: ["Městská záhada", "Detaily, které unikají", "Ideální pro partu"],
     lat: 50.0717634,
     lng: 14.3762351,

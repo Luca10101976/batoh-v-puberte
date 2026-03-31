@@ -247,11 +247,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         <p className="text-xs uppercase tracking-[0.24em] text-sky">Bezpečnostní check-in</p>
         <div className="mt-4 rounded-[24px] border border-coral/20 bg-coral/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
-          <p className="mt-2 text-sm leading-6 text-mist">
-            {state.safetyEmailsEnabled
-              ? "Rodičovský dohled je aktivní. Při startu a konci mise přijde rodiči e-mail."
-              : "Rodičovský dohled je vypnutý. Misi můžeš hrát normálně."}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-mist">Při startu hry běží bezpečnostní check-in.</p>
         </div>
       </section>
 

@@ -52,13 +52,6 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {location.vibe.map((item) => (
-            <span key={item} className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">
-              {item}
-            </span>
-          ))}
-        </div>
       </section>
 
       <section className="glass-card p-5">

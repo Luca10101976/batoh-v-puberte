@@ -157,7 +157,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="rounded-2xl bg-white/5 p-3">
               <div className="text-xl font-semibold text-lime">{knownCount}</div>
-              <div className="text-xs text-mist">Věděl jsem</div>
+              <div className="text-xs text-mist">Vím</div>
             </div>
             <div className="rounded-2xl bg-white/5 p-3">
               <div className="text-xl font-semibold">{unknownCount}</div>
@@ -239,8 +239,8 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
             {state.safetyEmailsEnabled
-              ? "Rodičovský dohled je aktivní. Start a konec mise by odeslal e-mail rodiči."
-              : "Rodičovský dohled je vypnutý. Misi ale můžeš odehrát normálně."}
+              ? "Rodičovský dohled je aktivní. Start a konec mise pošle e-mail rodiči."
+              : "Rodičovský dohled je vypnutý. Misi můžeš odehrát normálně."}
           </p>
         </div>
       </section>

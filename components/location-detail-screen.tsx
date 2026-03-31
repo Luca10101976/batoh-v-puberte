@@ -82,7 +82,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
             <div key={episode.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="text-xs uppercase tracking-[0.18em] text-mist">Zastavení {index + 1}</div>
               <div className="mt-2 font-medium">{episode.name}</div>
-              <div className="mt-1 text-sm text-mist">{episode.tasks.length} úkolů a 1 stopa do tajemství</div>
+              <div className="mt-1 text-sm text-mist">{episode.tasks.length} úkolů a jedna stopa</div>
             </div>
           ))}
         </div>
@@ -93,7 +93,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Při startu hry se zapne check-in. Pokud je aktivní rodičovský dohled, přijde e-mail o startu mise.
+            Při startu hry běží bezpečnostní check-in. Pokud je aktivní rodičovský dohled, rodiči přijde e-mail.
           </p>
         </div>
       </section>
@@ -107,7 +107,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
           <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{joinedCount} potvrzení</div>
         </div>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Body z dokončené mise se připíšou všem potvrzeným členům skupiny, kteří byli ve výpravě před startem.
+          Body se připíšou všem potvrzeným členům skupiny, kteří byli ve výpravě před startem.
         </p>
       </section>
 

@@ -51,11 +51,21 @@ export function PlayScreen({ location }: { location: MapLocation }) {
 
   useEffect(() => {
     const mode = searchParams.get("mode");
+    const episodeParam = searchParams.get("episode");
 
     if (mode === "solo" || mode === "group") {
       setActiveMode(mode);
     }
-  }, [searchParams, setActiveMode]);
+
+    if (episodeParam) {
+      const episodeNumber = Number(episodeParam);
+
+      if (Number.isInteger(episodeNumber) && episodeNumber >= 1 && episodeNumber <= location.episodes.length) {
+        setEpisodeIndex(episodeNumber - 1);
+        setTaskIndex(0);
+      }
+    }
+  }, [location.episodes.length, searchParams, setActiveMode]);
 
   const activeEpisode = location.episodes[episodeIndex];
   const activeTask = activeEpisode.tasks[taskIndex];

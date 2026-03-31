@@ -74,11 +74,18 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
 
         <div className="mt-4 space-y-3">
           {location.episodes.map((episode, index) => (
-            <div key={episode.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <Link
+              key={episode.id}
+              href={`/play/${location.id}?episode=${index + 1}`}
+              className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
+            >
               <div className="text-xs uppercase tracking-[0.18em] text-mist">Zastavení {index + 1}</div>
-              <div className="mt-2 font-medium">{episode.name}</div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="font-medium">{episode.name}</div>
+                <span className="text-xs text-lime">Otevřít</span>
+              </div>
               <div className="mt-1 text-sm text-mist">{episode.tasks.length} úkolů a jedna stopa</div>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

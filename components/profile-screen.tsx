@@ -39,9 +39,9 @@ type AvatarPanel = "head" | "eyes" | "hair" | "color";
 
 function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: number }) {
   const headShapeClass =
-    config.head === "round" ? "rounded-full" : config.head === "oval" ? "rounded-[42%]" : "rounded-[18px]";
+    config.head === "round" ? "rounded-[38%]" : config.head === "oval" ? "rounded-[34%]" : "rounded-[14px]";
   const hairColor = "#2A3242";
-  const eyeY = `${size * 0.48}px`;
+  const eyeY = `${size * 0.5}px`;
 
   return (
     <div
@@ -53,8 +53,8 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
         style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
       />
       <div
-        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] border-[3px] border-night ${headShapeClass}`}
-        style={{ width: size * 0.64, height: size * 0.64, backgroundColor: config.color }}
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[35%] border-[3px] border-night ${headShapeClass}`}
+        style={{ width: size * 0.62, height: size * 0.6, backgroundColor: config.color }}
       />
       <div
         className={`absolute left-1/2 top-1/2 -translate-x-[42%] -translate-y-[45%] rounded-full bg-white/35`}
@@ -106,22 +106,19 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
         </>
       ) : null}
 
-      <div className="absolute left-[31%] top-[58%] h-2.5 w-2.5 rounded-full bg-coral/40" />
-      <div className="absolute right-[31%] top-[58%] h-2.5 w-2.5 rounded-full bg-coral/40" />
-
       {config.eyes === "dot" ? (
         <>
           <div
-            className="absolute left-[33%] flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            className="absolute left-[34%] flex h-3.5 w-3.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
             style={{ top: eyeY }}
           >
-            <div className="h-2 w-2 rounded-full bg-night" />
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
           </div>
           <div
-            className="absolute right-[33%] flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            className="absolute right-[34%] flex h-3.5 w-3.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
             style={{ top: eyeY }}
           >
-            <div className="h-2 w-2 rounded-full bg-night" />
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
           </div>
         </>
       ) : null}
@@ -129,16 +126,16 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
       {config.eyes === "smile" ? (
         <>
           <div
-            className="absolute left-[33%] flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            className="absolute left-[34%] flex h-3.5 w-3.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
             style={{ top: eyeY }}
           >
-            <div className="h-2 w-2 rounded-full border-b-2 border-night" />
+            <div className="h-1.5 w-1.5 rounded-full border-b-2 border-night" />
           </div>
           <div
-            className="absolute right-[33%] flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            className="absolute right-[34%] flex h-3.5 w-3.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
             style={{ top: eyeY }}
           >
-            <div className="h-2 w-2 rounded-full border-b-2 border-night" />
+            <div className="h-1.5 w-1.5 rounded-full border-b-2 border-night" />
           </div>
         </>
       ) : null}
@@ -146,32 +143,32 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
       {config.eyes === "wide" ? (
         <>
           <div
-            className="absolute left-[30%] flex h-5 w-5 items-center justify-center rounded-full border-[2px] border-night bg-white"
-            style={{ top: `${size * 0.45}px` }}
+            className="absolute left-[31%] flex h-4.5 w-4.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            style={{ top: `${size * 0.48}px` }}
           >
-            <div className="h-2 w-2 rounded-full bg-night" />
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
           </div>
           <div
-            className="absolute right-[30%] flex h-5 w-5 items-center justify-center rounded-full border-[2px] border-night bg-white"
-            style={{ top: `${size * 0.45}px` }}
+            className="absolute right-[31%] flex h-4.5 w-4.5 items-center justify-center rounded-full border-[2px] border-night bg-white"
+            style={{ top: `${size * 0.48}px` }}
           >
-            <div className="h-2 w-2 rounded-full bg-night" />
+            <div className="h-1.5 w-1.5 rounded-full bg-night" />
           </div>
         </>
       ) : null}
 
       <div
         className="absolute left-[29%] border-t-[2px] border-night"
-        style={{ top: `${size * 0.39}px`, width: size * 0.14, transform: "rotate(-8deg)" }}
+        style={{ top: `${size * 0.44}px`, width: size * 0.13, transform: "rotate(-14deg)" }}
       />
       <div
         className="absolute right-[29%] border-t-[2px] border-night"
-        style={{ top: `${size * 0.39}px`, width: size * 0.14, transform: "rotate(8deg)" }}
+        style={{ top: `${size * 0.44}px`, width: size * 0.13, transform: "rotate(14deg)" }}
       />
 
       <div
-        className="absolute left-1/2 top-[69%] -translate-x-1/2 rounded-b-full border-b-[3px] border-night"
-        style={{ width: size * 0.22, height: size * 0.1 }}
+        className="absolute left-1/2 top-[72%] -translate-x-1/2 border-b-[3px] border-night"
+        style={{ width: size * 0.2, height: size * 0.04 }}
       />
     </div>
   );

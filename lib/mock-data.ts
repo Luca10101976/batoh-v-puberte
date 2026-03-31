@@ -83,7 +83,7 @@ export const locations: MapLocation[] = [
     map: { x: 28, y: 58 },
     introLabel: "Úvodní mise",
     introStory:
-      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. A když budeš koukat pozorně, narazíš tu i na koňskou hlavu a nebo...zadek.",
+      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. A když budeš koukat pozorně, narazíš tu i na koňskou hlavu nebo... zadek.",
     endingTitle: "Klamovka zase vypráví",
     endingStory:
       "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu byly rozházené po celém parku. Klamovka není rozbitá, jen je složená z víc časů najednou.",

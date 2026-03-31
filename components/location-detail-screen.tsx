@@ -25,7 +25,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
 
       <section className="glass-card p-5">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">{location.introLabel}</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Příběh mise</p>
           {unlocked ? (
             <span className="rounded-full bg-lime/12 px-3 py-2 text-xs font-semibold text-lime">
               Dokončeno
@@ -33,10 +33,6 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
           ) : null}
         </div>
         <p className="mt-3 text-base leading-7 text-white/88">{location.introStory}</p>
-      </section>
-
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-coral">Hlavní příběh</p>
         <p className="mt-3 text-base leading-7 text-white/88">{location.story}</p>
       </section>
 

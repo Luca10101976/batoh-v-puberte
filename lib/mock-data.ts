@@ -31,6 +31,8 @@ export type MapLocation = {
   duration: string;
   areaHint: string;
   vibe: string[];
+  lat: number;
+  lng: number;
   map: {
     x: number;
     y: number;
@@ -76,6 +78,8 @@ export const locations: MapLocation[] = [
     duration: "35-50 min",
     areaHint: "Doporučená oblast je přímo v parku Klamovka; když budeš mimo, hra tě upozorní.",
     vibe: ["Městská záhada", "Detaily, které unikají", "Ideální pro partu"],
+    lat: 50.0669,
+    lng: 14.3847,
     map: { x: 28, y: 58 },
     introLabel: "Úvodní mise",
     introStory:

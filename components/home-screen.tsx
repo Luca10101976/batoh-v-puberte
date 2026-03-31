@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CitySelector } from "@/components/city-selector";
 import { HeroCard } from "@/components/hero-card";
-import { LocationPin } from "@/components/location-pin";
 import { useAppState } from "@/components/app-state-provider";
 import { locations, nearbyMissions } from "@/lib/mock-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -82,6 +81,15 @@ export function HomeScreen() {
     isLocationUnlocked(location.id, location.unlocked)
   ).length;
   const score = unlockedCount * 120;
+  const primaryLocation = locations[0];
+  const mapDelta = 0.0075;
+  const mapUrl = primaryLocation
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${primaryLocation.lng - mapDelta}%2C${
+        primaryLocation.lat - mapDelta
+      }%2C${primaryLocation.lng + mapDelta}%2C${primaryLocation.lat + mapDelta}&layer=mapnik&marker=${
+        primaryLocation.lat
+      }%2C${primaryLocation.lng}`
+    : "";
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
@@ -96,15 +104,26 @@ export function HomeScreen() {
           <CitySelector />
         </div>
 
-        <div className="relative h-[360px] rounded-[24px] border border-white/10 bg-city-grid bg-[size:24px_24px] bg-ink p-4">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(180,255,98,0.12),transparent_48%)]" />
-          {locations.map((location) => (
-            <LocationPin
-              key={location.id}
-              location={{ ...location, unlocked: isLocationUnlocked(location.id, location.unlocked) }}
+        <div className="relative h-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-ink">
+          {primaryLocation ? (
+            <iframe
+              title="Mapa lokace"
+              src={mapUrl}
+              className="h-full w-full"
+              loading="lazy"
             />
-          ))}
-          <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-2xl border border-white/10 bg-night/90 p-4 backdrop-blur">
+          ) : null}
+
+          {primaryLocation ? (
+            <Link
+              href={`/locations/${primaryLocation.id}`}
+              className="absolute left-4 top-4 z-10 rounded-full border border-white/10 bg-night/90 px-4 py-2 text-sm font-semibold text-white backdrop-blur"
+            >
+              {primaryLocation.name}
+            </Link>
+          ) : null}
+
+          <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 rounded-2xl border border-white/10 bg-night/90 p-4 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.22em] text-mist">Tvoje skóre</p>
             <div className="mt-3 grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white/5 p-3">

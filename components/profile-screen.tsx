@@ -39,9 +39,9 @@ type AvatarPanel = "head" | "eyes" | "hair" | "color";
 
 function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: number }) {
   const headShapeClass =
-    config.head === "round" ? "rounded-full" : config.head === "oval" ? "rounded-[40%]" : "rounded-[18px]";
+    config.head === "round" ? "rounded-full" : config.head === "oval" ? "rounded-[42%]" : "rounded-[18px]";
   const hairColor = "#2A3242";
-  const eyeY = `${size * 0.5}px`;
+  const eyeY = `${size * 0.43}px`;
 
   return (
     <div
@@ -53,29 +53,33 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
         style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
       />
       <div
-        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[45%] ${headShapeClass}`}
-        style={{ width: size * 0.62, height: size * 0.62, backgroundColor: config.color }}
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[38%] border-[3px] border-night ${headShapeClass}`}
+        style={{ width: size * 0.64, height: size * 0.64, backgroundColor: config.color }}
+      />
+      <div
+        className={`absolute left-1/2 top-1/2 -translate-x-[42%] -translate-y-[45%] rounded-full bg-white/35`}
+        style={{ width: size * 0.16, height: size * 0.1 }}
       />
 
       {config.hair === "short" ? (
         <div
-          className={`absolute left-1/2 top-[14%] -translate-x-1/2 ${headShapeClass}`}
-          style={{ width: size * 0.66, height: size * 0.22, backgroundColor: hairColor }}
+          className={`absolute left-1/2 top-[13%] -translate-x-1/2 border-[3px] border-night ${headShapeClass}`}
+          style={{ width: size * 0.68, height: size * 0.22, backgroundColor: hairColor }}
         />
       ) : null}
 
       {config.hair === "long" ? (
         <>
           <div
-            className={`absolute left-1/2 top-[12%] -translate-x-1/2 ${headShapeClass}`}
+            className={`absolute left-1/2 top-[12%] -translate-x-1/2 border-[3px] border-night ${headShapeClass}`}
             style={{ width: size * 0.68, height: size * 0.24, backgroundColor: hairColor }}
           />
           <div
-            className="absolute left-[20%] top-[28%] rounded-b-full"
+            className="absolute left-[20%] top-[28%] rounded-b-full border-x-[3px] border-b-[3px] border-night"
             style={{ width: size * 0.13, height: size * 0.3, backgroundColor: hairColor }}
           />
           <div
-            className="absolute right-[20%] top-[28%] rounded-b-full"
+            className="absolute right-[20%] top-[28%] rounded-b-full border-x-[3px] border-b-[3px] border-night"
             style={{ width: size * 0.13, height: size * 0.3, backgroundColor: hairColor }}
           />
         </>
@@ -84,46 +88,81 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
       {config.hair === "spiky" ? (
         <>
           <div
-            className={`absolute left-1/2 top-[15%] -translate-x-1/2 ${headShapeClass}`}
+            className={`absolute left-1/2 top-[15%] -translate-x-1/2 border-[3px] border-night ${headShapeClass}`}
             style={{ width: size * 0.68, height: size * 0.2, backgroundColor: hairColor }}
           />
-          <div className="absolute left-[30%] top-[6%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
-          <div className="absolute left-[47%] top-[2%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
-          <div className="absolute right-[30%] top-[6%] h-3 w-3 rounded-full" style={{ backgroundColor: hairColor }} />
+          <div className="absolute left-[30%] top-[6%] h-3 w-3 rounded-full border-2 border-night" style={{ backgroundColor: hairColor }} />
+          <div className="absolute left-[47%] top-[2%] h-3 w-3 rounded-full border-2 border-night" style={{ backgroundColor: hairColor }} />
+          <div className="absolute right-[30%] top-[6%] h-3 w-3 rounded-full border-2 border-night" style={{ backgroundColor: hairColor }} />
         </>
       ) : null}
 
-      <div className="absolute left-[31%] top-[58%] h-2 w-2 rounded-full bg-coral/40" />
-      <div className="absolute right-[31%] top-[58%] h-2 w-2 rounded-full bg-coral/40" />
+      <div className="absolute left-[31%] top-[58%] h-2.5 w-2.5 rounded-full bg-coral/40" />
+      <div className="absolute right-[31%] top-[58%] h-2.5 w-2.5 rounded-full bg-coral/40" />
 
       {config.eyes === "dot" ? (
         <>
-          <div className="absolute left-[38%] h-1.5 w-1.5 rounded-full bg-night" style={{ top: eyeY }} />
-          <div className="absolute right-[38%] h-1.5 w-1.5 rounded-full bg-night" style={{ top: eyeY }} />
+          <div
+            className="absolute left-[31%] flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: eyeY }}
+          >
+            <div className="h-2.5 w-2.5 rounded-full bg-night" />
+          </div>
+          <div
+            className="absolute right-[31%] flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: eyeY }}
+          >
+            <div className="h-2.5 w-2.5 rounded-full bg-night" />
+          </div>
         </>
       ) : null}
 
       {config.eyes === "smile" ? (
         <>
-          <div className="absolute left-[34%] h-2 w-2 rounded-full border-b-2 border-night" style={{ top: `${size * 0.47}px` }} />
-          <div className="absolute right-[34%] h-2 w-2 rounded-full border-b-2 border-night" style={{ top: `${size * 0.47}px` }} />
+          <div
+            className="absolute left-[31%] flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: eyeY }}
+          >
+            <div className="h-2 w-2 rounded-full border-b-2 border-night" />
+          </div>
+          <div
+            className="absolute right-[31%] flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: eyeY }}
+          >
+            <div className="h-2 w-2 rounded-full border-b-2 border-night" />
+          </div>
         </>
       ) : null}
 
       {config.eyes === "wide" ? (
         <>
-          <div className="absolute left-[34%] flex h-3 w-3 items-center justify-center rounded-full bg-white" style={{ top: `${size * 0.47}px` }}>
-            <div className="h-1.5 w-1.5 rounded-full bg-night" />
+          <div
+            className="absolute left-[30%] flex h-6 w-6 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: `${size * 0.4}px` }}
+          >
+            <div className="h-2.5 w-2.5 rounded-full bg-night" />
           </div>
-          <div className="absolute right-[34%] flex h-3 w-3 items-center justify-center rounded-full bg-white" style={{ top: `${size * 0.47}px` }}>
-            <div className="h-1.5 w-1.5 rounded-full bg-night" />
+          <div
+            className="absolute right-[30%] flex h-6 w-6 items-center justify-center rounded-full border-[3px] border-night bg-white"
+            style={{ top: `${size * 0.4}px` }}
+          >
+            <div className="h-2.5 w-2.5 rounded-full bg-night" />
           </div>
         </>
       ) : null}
 
       <div
-        className="absolute left-1/2 top-[66%] -translate-x-1/2 rounded-b-full border-b-2 border-night"
-        style={{ width: size * 0.16, height: size * 0.08 }}
+        className="absolute left-[26%] border-t-[3px] border-night"
+        style={{ top: `${size * 0.36}px`, width: size * 0.16, transform: "rotate(-10deg)" }}
+      />
+      <div
+        className="absolute right-[26%] border-t-[3px] border-night"
+        style={{ top: `${size * 0.36}px`, width: size * 0.16, transform: "rotate(10deg)" }}
+      />
+
+      <div
+        className="absolute left-1/2 top-[67%] -translate-x-1/2 rounded-b-full border-b-[3px] border-night"
+        style={{ width: size * 0.2, height: size * 0.09 }}
       />
     </div>
   );

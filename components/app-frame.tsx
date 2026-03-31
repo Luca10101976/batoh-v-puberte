@@ -7,7 +7,7 @@ import { useAppState } from "@/components/app-state-provider";
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const { hydrated, state } = useAppState();
-  const hasRegistration = state.registrationCompleted && state.parentEmail.trim().length > 3;
+  const hasRegistration = state.registrationCompleted;
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) {

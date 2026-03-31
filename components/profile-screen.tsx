@@ -227,6 +227,57 @@ export function ProfileScreen() {
     syncCloudFriends();
   }, [setFriendsFromCloud, state.profileCode, supabase]);
 
+  async function ensureOwnCloudProfile() {
+    if (!supabase) {
+      return null;
+    }
+
+    const { data: existing } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    if (existing) {
+      return existing;
+    }
+
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      return null;
+    }
+
+    const safeAge = Math.min(16, Math.max(8, Number(state.profile.age) || 11));
+    const safeName = state.profile.name.trim() || "Hráč";
+
+    const { error } = await supabase.from("child_profiles").upsert(
+      {
+        parent_user_id: session.user.id,
+        child_name: safeName,
+        child_age: safeAge,
+        profile_code: state.profileCode
+      },
+      { onConflict: "profile_code" }
+    );
+
+    if (error) {
+      return null;
+    }
+
+    const { data: created } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    return created ?? null;
+  }
+
   async function handleAddFriend() {
     setSavingFriend(true);
     const normalizedCode = friendCode.trim().toUpperCase();
@@ -274,16 +325,11 @@ export function ProfileScreen() {
       return;
     }
 
-    const { data: ownProfile } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", state.profileCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
+    const ownProfile = await ensureOwnCloudProfile();
 
     if (!ownProfile) {
       setSavingFriend(false);
-      setFriendMessage("Nejdřív je potřeba uložit profil dítěte v cloudu.");
+      setFriendMessage("Nejdřív dokonči přihlášení rodiče. Pak půjde přidávání i pozvánky.");
       return;
     }
 
@@ -348,16 +394,11 @@ export function ProfileScreen() {
 
     setInvitingFriendCode(friendCode);
 
-    const { data: ownProfile } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", state.profileCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
+    const ownProfile = await ensureOwnCloudProfile();
 
     if (!ownProfile) {
       setInvitingFriendCode(null);
-      setInviteMessage("Nejdřív je potřeba mít uložený profil dítěte v cloudu.");
+      setInviteMessage("Nejdřív dokonči přihlášení rodiče. Pak půjde posílat pozvánky.");
       return;
     }
 

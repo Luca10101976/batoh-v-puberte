@@ -15,8 +15,6 @@ export function ProfileScreen() {
   );
   const friends = state.squadMembers.filter((member) => member.id !== "self");
   const score = unlockedCount * 120;
-  const profileShareValue = `batoh-v-puberte://friend/${state.profileCode}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(profileShareValue)}`;
 
   function handleAddFriend() {
     const result = addFriendByCode({ friendCode, nickname: friendNickname });
@@ -68,19 +66,18 @@ export function ProfileScreen() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
-            <h2 className="mt-2 text-xl font-semibold">Tvůj profilový QR kód</h2>
+            <h2 className="mt-2 text-xl font-semibold">Tvůj profilový kód</h2>
           </div>
           <div className="rounded-full bg-lime/12 px-3 py-2 text-xs text-lime">
             {state.activeMode === "group" ? "Skupinový tah" : "Solo tah"}
           </div>
         </div>
         <div className="mt-4 flex flex-col items-center gap-4 rounded-[24px] bg-white/5 p-4">
-          <img src={qrUrl} alt="Profilový QR kód" className="h-44 w-44 rounded-2xl border border-white/10 bg-white p-2" />
           <div className="rounded-xl border border-white/10 bg-night/70 px-3 py-2 text-sm font-semibold tracking-wide text-lime">
             {state.profileCode}
           </div>
           <p className="text-center text-sm leading-6 text-mist">
-            Kamarád si tě přidá naskenováním QR nebo opsáním kódu.
+            Kamarád si tě přidá opsáním tohoto kódu.
           </p>
         </div>
       </section>

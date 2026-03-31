@@ -1,14 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import { locations } from "@/lib/mock-data";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+type ChildProfileRow = {
+  id: string;
+  child_name: string;
+  profile_code: string;
+};
+
+type ChildFriendshipRow = {
+  friend_profile_code: string;
+  friend_display_name: string;
+};
 
 export function ProfileScreen() {
-  const { state, updateProfile, resetProgress, isLocationUnlocked, addFriendByCode } = useAppState();
+  const { state, updateProfile, resetProgress, isLocationUnlocked, addFriendByCode, setFriendsFromCloud } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendNickname, setFriendNickname] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
+  const [savingFriend, setSavingFriend] = useState(false);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
   const unlockedCount = useMemo(
     () => locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length,
     [isLocationUnlocked]
@@ -16,14 +36,118 @@ export function ProfileScreen() {
   const friends = state.squadMembers.filter((member) => member.id !== "self");
   const score = unlockedCount * 120;
 
-  function handleAddFriend() {
-    const result = addFriendByCode({ friendCode, nickname: friendNickname });
-    setFriendMessage(result.message);
+  useEffect(() => {
+    async function syncCloudFriends() {
+      if (!supabase || !state.profileCode) {
+        return;
+      }
 
-    if (result.ok) {
+      const { data: ownProfile } = await supabase
+        .from("child_profiles")
+        .select("id")
+        .eq("profile_code", state.profileCode)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (!ownProfile?.id) {
+        return;
+      }
+
+      const { data: friendships } = await supabase
+        .from("child_friendships")
+        .select("friend_profile_code, friend_display_name")
+        .eq("child_profile_id", ownProfile.id);
+
+      if (!friendships) {
+        return;
+      }
+
+      setFriendsFromCloud(
+        (friendships as ChildFriendshipRow[]).map((row) => ({
+          code: row.friend_profile_code,
+          name: row.friend_display_name
+        }))
+      );
+    }
+
+    syncCloudFriends();
+  }, [setFriendsFromCloud, state.profileCode, supabase]);
+
+  async function handleAddFriend() {
+    setSavingFriend(true);
+    const result = addFriendByCode({ friendCode, nickname: friendNickname });
+
+    if (!result.ok) {
+      setSavingFriend(false);
+      setFriendMessage(result.message);
+      return;
+    }
+
+    if (!supabase) {
+      setSavingFriend(false);
+      setFriendMessage("Kamarád přidán lokálně.");
       setFriendCode("");
       setFriendNickname("");
+      return;
     }
+
+    const normalizedCode = friendCode.trim().toUpperCase();
+    const nickname = friendNickname.trim();
+
+    const { data: ownProfile } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    if (!ownProfile) {
+      setSavingFriend(false);
+      setFriendMessage("Nejdřív je potřeba uložit profil dítěte v cloudu.");
+      return;
+    }
+
+    const { data: targetProfile } = await supabase
+      .from("child_profiles")
+      .select("id, child_name, profile_code")
+      .eq("profile_code", normalizedCode)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    if (!targetProfile) {
+      setSavingFriend(false);
+      setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("child_friendships").upsert(
+      [
+        {
+          child_profile_id: ownProfile.id,
+          friend_child_profile_id: targetProfile.id,
+          friend_profile_code: targetProfile.profile_code,
+          friend_display_name: nickname
+        },
+        {
+          child_profile_id: targetProfile.id,
+          friend_child_profile_id: ownProfile.id,
+          friend_profile_code: ownProfile.profile_code,
+          friend_display_name: ownProfile.child_name
+        }
+      ],
+      { onConflict: "child_profile_id,friend_child_profile_id" }
+    );
+
+    if (insertError) {
+      setSavingFriend(false);
+      setFriendMessage("Přidání kamaráda do cloudu se nepodařilo.");
+      return;
+    }
+
+    setSavingFriend(false);
+    setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
+    setFriendCode("");
+    setFriendNickname("");
   }
 
   return (
@@ -99,9 +223,10 @@ export function ProfileScreen() {
           />
           <button
             onClick={handleAddFriend}
+            disabled={savingFriend}
             className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
           >
-            Přidat do party
+            {savingFriend ? "Přidávám..." : "Přidat do party"}
           </button>
           {friendMessage ? <p className="text-sm text-mist">{friendMessage}</p> : null}
         </div>
@@ -117,7 +242,7 @@ export function ProfileScreen() {
         <h2 className="section-title">Kamarádi</h2>
         {friends.length === 0 ? (
           <p className="mt-4 text-sm text-mist">
-            Zatím tu nikoho nemáš. Přidej prvního kamaráda přes QR nebo kód.
+            Zatím tu nikoho nemáš. Přidej prvního kamaráda přes kód.
           </p>
         ) : (
           <div className="mt-4 space-y-3">

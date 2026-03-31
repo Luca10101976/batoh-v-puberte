@@ -63,11 +63,22 @@ create table public.child_profiles (
   updated_at timestamptz not null default now()
 );
 
+create table public.child_friendships (
+  child_profile_id uuid not null references public.child_profiles(id) on delete cascade,
+  friend_child_profile_id uuid not null references public.child_profiles(id) on delete cascade,
+  friend_profile_code text not null,
+  friend_display_name text not null,
+  created_at timestamptz not null default now(),
+  primary key (child_profile_id, friend_child_profile_id),
+  constraint child_friendships_no_self check (child_profile_id <> friend_child_profile_id)
+);
+
 create unique index locations_city_id_name_idx on public.locations (city_id, name);
 create index tasks_location_id_sort_order_idx on public.tasks (location_id, sort_order);
 create index user_progress_completed_at_idx on public.user_progress (completed_at desc);
 create index friendships_friend_id_idx on public.friendships (friend_id);
 create index child_profiles_parent_user_id_idx on public.child_profiles (parent_user_id);
+create index child_friendships_friend_child_profile_id_idx on public.child_friendships (friend_child_profile_id);
 
 alter table public.cities enable row level security;
 alter table public.locations enable row level security;
@@ -76,6 +87,7 @@ alter table public.profiles enable row level security;
 alter table public.user_progress enable row level security;
 alter table public.friendships enable row level security;
 alter table public.child_profiles enable row level security;
+alter table public.child_friendships enable row level security;
 
 create policy "cities are readable by everyone"
 on public.cities for select
@@ -130,6 +142,11 @@ on public.child_profiles for select
 to authenticated
 using (auth.uid() = parent_user_id);
 
+create policy "authenticated can read child profiles for code matching"
+on public.child_profiles for select
+to authenticated
+using (true);
+
 create policy "parents insert own child profiles"
 on public.child_profiles for insert
 to authenticated
@@ -140,3 +157,25 @@ on public.child_profiles for update
 to authenticated
 using (auth.uid() = parent_user_id)
 with check (auth.uid() = parent_user_id);
+
+create policy "parents read own child friendships"
+on public.child_friendships for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.id = child_profile_id and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents insert own child friendships"
+on public.child_friendships for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.id = child_profile_id and cp.parent_user_id = auth.uid()
+  )
+);

@@ -47,6 +47,7 @@ type AppStateContextValue = {
     profileCode?: string;
   }) => void;
   addFriendByCode: (payload: { friendCode: string; nickname: string }) => { ok: boolean; message: string };
+  setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
   toggleMember: (memberId: string) => void;
@@ -215,6 +216,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [state.profileCode, state.squadMembers]
   );
 
+  const setFriendsFromCloud = useCallback((friends: Array<{ code: string; name: string }>) => {
+    setState((current) => {
+      const selfMember = current.squadMembers.find((member) => member.id === SELF_MEMBER_ID) ?? {
+        id: SELF_MEMBER_ID,
+        name: current.profile.name,
+        joined: true
+      };
+
+      return {
+        ...current,
+        squadMembers: [
+          { ...selfMember, name: current.profile.name, joined: true },
+          ...friends.map((friend) => ({
+            id: normalizeCode(friend.code),
+            name: friend.name,
+            joined: true
+          }))
+        ]
+      };
+    });
+  }, []);
+
   const setActiveMode = useCallback((mode: "solo" | "group") => {
     setState((current) => (current.activeMode === mode ? current : { ...current, activeMode: mode }));
   }, []);
@@ -273,6 +296,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       hydrated,
       completeRegistration,
       addFriendByCode,
+      setFriendsFromCloud,
       setCity,
       setActiveMode,
       toggleMember,
@@ -285,6 +309,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       completeLocation,
       addFriendByCode,
       completeRegistration,
+      setFriendsFromCloud,
       hydrated,
       isLocationUnlocked,
       resetProgress,

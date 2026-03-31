@@ -353,7 +353,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       </section>
 
       <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.18em] text-lime">Co se tu ztratilo z příběhu</p>
+        <p className="text-xs uppercase tracking-[0.18em] text-lime">Stopa z tohoto místa</p>
         <div className="mt-3 space-y-2">
           {activeEpisode.clue.map((line) => (
             <p key={line} className="text-sm leading-6 text-white/90">
@@ -362,9 +362,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           ))}
         </div>
         {location.interludes[episodeIndex] ? (
-          <div className="mt-4 rounded-2xl bg-white/5 px-4 py-3 text-sm text-mist">
-            {location.interludes[episodeIndex]}
-          </div>
+          <p className="mt-4 text-sm text-mist">Poznámka: {location.interludes[episodeIndex]}</p>
         ) : null}
       </section>
 

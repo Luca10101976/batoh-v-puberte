@@ -409,6 +409,17 @@ export function ProfileScreen() {
       return;
     }
 
+    await fetch("/api/push/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetProfileCode: targetProfile.profile_code,
+        title: "Nová pozvánka do výpravy",
+        message: `${ownProfile.child_name} tě zve do výpravy.`,
+        url: "/"
+      })
+    }).catch(() => undefined);
+
     setActiveMode("group");
     setCurrentExpeditionId(inviteRow?.expedition_id ?? null);
     setInvitingFriendCode(null);

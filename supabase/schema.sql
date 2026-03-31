@@ -88,6 +88,17 @@ create table public.child_expedition_invites (
   constraint child_expedition_invites_no_self check (inviter_child_profile_id <> invitee_child_profile_id)
 );
 
+create table public.child_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  profile_code text not null,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create unique index locations_city_id_name_idx on public.locations (city_id, name);
 create index tasks_location_id_sort_order_idx on public.tasks (location_id, sort_order);
 create index user_progress_completed_at_idx on public.user_progress (completed_at desc);
@@ -96,6 +107,7 @@ create index child_profiles_parent_user_id_idx on public.child_profiles (parent_
 create index child_friendships_friend_child_profile_id_idx on public.child_friendships (friend_child_profile_id);
 create index child_expedition_invites_invitee_status_idx on public.child_expedition_invites (invitee_child_profile_id, status, created_at desc);
 create index child_expedition_invites_inviter_status_idx on public.child_expedition_invites (inviter_child_profile_id, status, created_at desc);
+create index child_push_subscriptions_profile_code_idx on public.child_push_subscriptions (profile_code);
 
 alter table public.cities enable row level security;
 alter table public.locations enable row level security;
@@ -106,6 +118,7 @@ alter table public.friendships enable row level security;
 alter table public.child_profiles enable row level security;
 alter table public.child_friendships enable row level security;
 alter table public.child_expedition_invites enable row level security;
+alter table public.child_push_subscriptions enable row level security;
 
 create policy "cities are readable by everyone"
 on public.cities for select

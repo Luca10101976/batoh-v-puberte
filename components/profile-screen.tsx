@@ -677,7 +677,7 @@ export function ProfileScreen() {
             placeholder="Kód kamaráda (např. BAT-AB12CD)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
-          <p className="text-sm text-mist">Zadej jen kód. Jméno si appka vezme automaticky.</p>
+          <p className="text-sm text-mist">Zadej kód kamaráda.</p>
           <button
             onClick={handleAddFriend}
             disabled={savingFriend}

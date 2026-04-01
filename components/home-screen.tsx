@@ -14,6 +14,11 @@ type FriendActivityRow = {
   created_at: string;
 };
 
+type IncomingFriendshipRow = {
+  child_profile_id: string;
+  created_at: string;
+};
+
 type PendingInviteRow = {
   id: string;
   expedition_id: string;
@@ -118,14 +123,58 @@ export function HomeScreen() {
         return;
       }
 
-      const { data } = await supabase
-        .from("child_friendships")
-        .select("friend_profile_code, friend_display_name, created_at")
-        .eq("child_profile_id", ownProfile.id)
-        .order("created_at", { ascending: false })
-        .limit(8);
+      const [{ data: outgoing }, { data: incoming }] = await Promise.all([
+        supabase
+          .from("child_friendships")
+          .select("friend_profile_code, friend_display_name, created_at")
+          .eq("child_profile_id", ownProfile.id)
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("child_friendships")
+          .select("child_profile_id, created_at")
+          .eq("friend_child_profile_id", ownProfile.id)
+          .order("created_at", { ascending: false })
+          .limit(8)
+      ]);
 
-      setFriendFeed((data as FriendActivityRow[]) ?? []);
+      const incomingRows = (incoming as IncomingFriendshipRow[] | null) ?? [];
+      const incomingIds = incomingRows.map((row) => row.child_profile_id);
+      let incomingProfilesById = new Map<string, { profile_code: string; child_name: string }>();
+
+      if (incomingIds.length > 0) {
+        const { data: incomingProfiles } = await supabase
+          .from("child_profiles")
+          .select("id, profile_code, child_name")
+          .in("id", incomingIds);
+
+        incomingProfilesById = new Map(
+          (((incomingProfiles as Array<{ id: string; profile_code: string; child_name: string }> | null) ?? []).map(
+            (row) => [row.id, { profile_code: row.profile_code, child_name: row.child_name }]
+          ))
+        );
+      }
+
+      const incomingFeed: FriendActivityRow[] = incomingRows
+        .map((row) => {
+          const profile = incomingProfilesById.get(row.child_profile_id);
+          if (!profile) {
+            return null;
+          }
+
+          return {
+            friend_profile_code: profile.profile_code,
+            friend_display_name: profile.child_name,
+            created_at: row.created_at
+          };
+        })
+        .filter((row): row is FriendActivityRow => Boolean(row));
+
+      const mergedFeed = [...((outgoing as FriendActivityRow[] | null) ?? []), ...incomingFeed]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 8);
+
+      setFriendFeed(mergedFeed);
       setFeedLoaded(true);
     }
 
@@ -311,10 +360,12 @@ export function HomeScreen() {
 
     const { error } = await supabase
       .from("child_expedition_invites")
-      .update({
-        status: decision,
-        responded_at: new Date().toISOString()
-      })
+      .update(
+        {
+          status: decision,
+          responded_at: new Date().toISOString()
+        } as never
+      )
       .eq("id", invite.id)
       .eq("invitee_child_profile_id", ownChildProfileId)
       .eq("status", "pending");

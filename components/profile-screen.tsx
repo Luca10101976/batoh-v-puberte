@@ -16,6 +16,10 @@ type ChildFriendshipRow = {
   friend_display_name: string;
 };
 
+type IncomingFriendshipRow = {
+  child_profile_id: string;
+};
+
 const HEAD_OPTIONS: Array<{ value: AvatarConfig["head"]; label: string }> = [
   { value: "round", label: "Kulatá" },
   { value: "oval", label: "Oválná" },
@@ -207,21 +211,45 @@ export function ProfileScreen() {
         return;
       }
 
-      const { data: friendships } = await supabase
-        .from("child_friendships")
-        .select("friend_profile_code, friend_display_name")
-        .eq("child_profile_id", ownProfile.id);
+      const [{ data: outgoingFriendships }, { data: incomingFriendships }] = await Promise.all([
+        supabase
+          .from("child_friendships")
+          .select("friend_profile_code, friend_display_name")
+          .eq("child_profile_id", ownProfile.id),
+        supabase.from("child_friendships").select("child_profile_id").eq("friend_child_profile_id", ownProfile.id)
+      ]);
 
-      if (!friendships) {
+      const incomingIds = ((incomingFriendships as IncomingFriendshipRow[] | null) ?? []).map(
+        (row) => row.child_profile_id
+      );
+
+      let incomingProfiles: Array<{ profile_code: string; child_name: string }> = [];
+
+      if (incomingIds.length > 0) {
+        const { data } = await supabase
+          .from("child_profiles")
+          .select("profile_code, child_name")
+          .in("id", incomingIds);
+
+        incomingProfiles = (data as Array<{ profile_code: string; child_name: string }> | null) ?? [];
+      }
+
+      const merged = [
+        ...(((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
+          code: row.friend_profile_code,
+          name: row.friend_display_name
+        })) as Array<{ code: string; name: string }>),
+        ...incomingProfiles.map((profile) => ({
+          code: profile.profile_code,
+          name: profile.child_name
+        }))
+      ];
+
+      if (merged.length === 0) {
         return;
       }
 
-      setFriendsFromCloud(
-        (friendships as ChildFriendshipRow[]).map((row) => ({
-          code: row.friend_profile_code,
-          name: row.friend_display_name
-        }))
-      );
+      setFriendsFromCloud(merged);
     }
 
     syncCloudFriends();
@@ -305,12 +333,6 @@ export function ProfileScreen() {
       return;
     }
 
-    if (!nickname) {
-      setSavingFriend(false);
-      setFriendMessage("Doplň přezdívku kamaráda.");
-      return;
-    }
-
     if (normalizedCode === state.profileCode.trim().toUpperCase()) {
       setSavingFriend(false);
       setFriendMessage("Tohle je tvůj vlastní kód.");
@@ -347,20 +369,12 @@ export function ProfileScreen() {
     }
 
     const { error: insertError } = await supabase.from("child_friendships").upsert(
-      [
-        {
-          child_profile_id: ownProfile.id,
-          friend_child_profile_id: targetProfile.id,
-          friend_profile_code: targetProfile.profile_code,
-          friend_display_name: nickname
-        },
-        {
-          child_profile_id: targetProfile.id,
-          friend_child_profile_id: ownProfile.id,
-          friend_profile_code: ownProfile.profile_code,
-          friend_display_name: ownProfile.child_name
-        }
-      ],
+      {
+        child_profile_id: ownProfile.id,
+        friend_child_profile_id: targetProfile.id,
+        friend_profile_code: targetProfile.profile_code,
+        friend_display_name: nickname || targetProfile.child_name
+      },
       { onConflict: "child_profile_id,friend_child_profile_id" }
     );
 
@@ -370,7 +384,10 @@ export function ProfileScreen() {
       return;
     }
 
-    const localAddResult = addFriendByCode({ friendCode: normalizedCode, nickname });
+    const localAddResult = addFriendByCode({
+      friendCode: normalizedCode,
+      nickname: nickname || targetProfile.child_name
+    });
 
     if (!localAddResult.ok) {
       setSavingFriend(false);

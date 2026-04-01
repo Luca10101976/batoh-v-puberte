@@ -56,7 +56,7 @@ type AppStateContextValue = {
     parentEmail: string;
     profileCode?: string;
   }) => void;
-  addFriendByCode: (payload: { friendCode: string; nickname: string }) => { ok: boolean; message: string };
+  addFriendByCode: (payload: { friendCode: string; nickname?: string }) => { ok: boolean; message: string };
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
@@ -202,16 +202,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const addFriendByCode = useCallback(
-    ({ friendCode, nickname }: { friendCode: string; nickname: string }) => {
+    ({ friendCode, nickname }: { friendCode: string; nickname?: string }) => {
       const normalizedFriendCode = normalizeCode(friendCode);
-      const trimmedName = nickname.trim();
+      const trimmedName = nickname?.trim() || "Kamarád";
 
       if (!normalizedFriendCode || normalizedFriendCode.length < 4) {
         return { ok: false, message: "Zadej platný kód kamaráda." };
-      }
-
-      if (!trimmedName) {
-        return { ok: false, message: "Doplň přezdívku kamaráda." };
       }
 
       if (normalizedFriendCode === normalizeCode(state.profileCode)) {

@@ -28,6 +28,7 @@ export function ParentAuthGate() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [needsChildProfile, setNeedsChildProfile] = useState(false);
 
   const supabase = useMemo(() => {
@@ -101,6 +102,7 @@ export function ParentAuthGate() {
   async function handleParentAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setInfo("");
 
     if (!supabase) {
       setError("Supabase není nastavené. Dočasně použij lokální registraci.");
@@ -122,7 +124,11 @@ export function ParentAuthGate() {
 
       if (loginError || !data.user) {
         setSaving(false);
-        setError(loginError?.message || "Přihlášení se nepodařilo.");
+        if (loginError?.message?.toLowerCase().includes("email not confirmed")) {
+          setError("Nejdřív potvrď e-mail rodiče v doručené poště a pak se přihlas.");
+        } else {
+          setError(loginError?.message || "Přihlášení se nepodařilo.");
+        }
         return;
       }
 
@@ -133,12 +139,24 @@ export function ParentAuthGate() {
 
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: parentEmail.trim(),
-      password
+      password,
+      options: {
+        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/profile` : undefined
+      }
     });
 
     if (signUpError || !data.user) {
       setSaving(false);
       setError(signUpError?.message || "Registrace rodiče se nepodařila.");
+      return;
+    }
+
+    if (!data.session) {
+      setParentEmail(parentEmail.trim());
+      setMode("login");
+      setLoading(false);
+      setInfo("Na e-mail rodiče jsme poslali potvrzovací odkaz. Po potvrzení se přihlas stejným e-mailem a heslem.");
+      setSaving(false);
       return;
     }
 
@@ -331,6 +349,7 @@ export function ParentAuthGate() {
           </label>
 
           {error ? <p className="text-sm text-coral">{error}</p> : null}
+          {info ? <p className="text-sm text-lime">{info}</p> : null}
 
           <button
             type="submit"

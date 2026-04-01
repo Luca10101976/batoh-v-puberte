@@ -4,7 +4,7 @@ type ParentAlertPayload = {
   parentEmail?: string;
   childName?: string;
   childAge?: number;
-  event?: "registration";
+  event?: "registration" | "checkin";
 };
 
 const RESEND_API_URL = "https://api.resend.com/emails";
@@ -14,10 +14,14 @@ export async function POST(request: Request) {
   const parentEmail = body.parentEmail?.trim();
   const childName = body.childName?.trim();
   const childAge = body.childAge;
-  const event = body.event;
+  const event = body.event ?? "registration";
 
-  if (!parentEmail || !childName || !event) {
+  if (!parentEmail || !childName) {
     return NextResponse.json({ ok: false, message: "Chybí povinná data." }, { status: 400 });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
+    return NextResponse.json({ ok: false, message: "Neplatný e-mail rodiče." }, { status: 400 });
   }
 
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -30,16 +34,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const subject =
-    event === "registration"
-      ? `Batoh v pubertě: registrace hráče ${childName}`
-      : "Batoh v pubertě: bezpečnostní upozornění";
+  const isRegistration = event === "registration";
+  const subject = isRegistration
+    ? `Batoh v pubertě: registrace hráče ${childName}`
+    : `Batoh v pubertě: bezpečnostní check-in (${childName})`;
+  const now = new Date().toLocaleString("cs-CZ", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
 
   const text = [
     "Dobrý den,",
     "",
-    `${childName} (${childAge ?? "?"} let) se právě zaregistroval/a do aplikace Batoh v pubertě.`,
-    "Tohle je bezpečnostní informační e-mail pro rodiče.",
+    isRegistration
+      ? `${childName} (${childAge ?? "?"} let) se právě zaregistroval/a do aplikace Batoh v pubertě.`
+      : `${childName} (${childAge ?? "?"} let) právě spustil/a hru v aplikaci Batoh v pubertě.`,
+    `Čas události: ${now}`,
+    "Tohle je informační e-mail pro rodiče.",
     "",
     "Tým Batoh v pubertě"
   ].join("\n");
@@ -47,8 +58,11 @@ export async function POST(request: Request) {
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
       <p>Dobrý den,</p>
-      <p><strong>${childName}</strong> (${childAge ?? "?"} let) se právě zaregistroval/a do aplikace <strong>Batoh v pubertě</strong>.</p>
-      <p>Tohle je bezpečnostní informační e-mail pro rodiče.</p>
+	      <p><strong>${childName}</strong> (${childAge ?? "?"} let) ${
+          isRegistration ? "se právě zaregistroval/a" : "právě spustil/a hru"
+        } do aplikace <strong>Batoh v pubertě</strong>.</p>
+	      <p><strong>Čas události:</strong> ${now}</p>
+	      <p>Tohle je informační e-mail pro rodiče.</p>
       <p style="margin-top: 18px;">Tým Batoh v pubertě</p>
     </div>
   `;

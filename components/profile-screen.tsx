@@ -683,7 +683,7 @@ export function ProfileScreen() {
             disabled={savingFriend}
             className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
           >
-            {savingFriend ? "Přidávám..." : "Přidat do party"}
+            {savingFriend ? "Přidávám..." : "Přidat kamaráda"}
           </button>
           {friendMessage ? <p className="text-sm text-mist">{friendMessage}</p> : null}
         </div>

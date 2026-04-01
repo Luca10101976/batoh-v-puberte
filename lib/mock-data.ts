@@ -93,7 +93,7 @@ export const locations: MapLocation[] = [
     map: { x: 28, y: 58 },
     introLabel: "Úvodní mise",
     introStory:
-      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. Když budeš koukat pozorně, narazíš tu na koňskou hlavu i na jeden nečekaný detail na soše.",
+      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. Když budeš koukat pozorně, narazíš tu na koňskou hlavu i zadek.",
     endingTitle: "Klamovka zase vypráví",
     endingStory:
       "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu byly rozházené po celém parku. Klamovka není rozbitá, jen je složená z víc časů najednou.",
@@ -109,8 +109,7 @@ export const locations: MapLocation[] = [
       {
         id: "chramek",
         name: "Chrámek noci a poznání",
-        intro:
-          "Nahoře nebe, dole peklo. Kruh i obdélník. Hvězdy i hadí hlavy. Chrámek působí, jako by byl složený ze dvou různých světů. Nebe i peklo.",
+        intro: "Hvězdy i hadí hlavy. Nebe i peklo.",
         background:
           "Vznikl na konci 18. století za Clam-Gallasů. Horní část představuje nebe, dolní část podzemí. Díry v kopuli měly zevnitř vytvořit iluzi hvězdné oblohy.",
         tasks: [
@@ -140,7 +139,7 @@ export const locations: MapLocation[] = [
             type: "choice",
             typeLabel: "Výběr",
             title: "Dvě poloviny",
-            content: "Jak se jmenují dvě části chrámku nahoře a dole?",
+            content: "Jak se jmenují dvě části chrámku?",
             options: ["Nebe a peklo", "Den a noc", "Sláva a pád"]
           },
           {
@@ -169,7 +168,7 @@ export const locations: MapLocation[] = [
             id: "klamovka-cassel-1",
             type: "question",
             typeLabel: "Otázka",
-            title: "Co chybí",
+            title: "Splašily se a utekly",
             content: "Pomník má jen hlavu. Co chybí?"
           },
           {
@@ -181,10 +180,11 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-cassel-4",
-            type: "photo",
-            typeLabel: "Výzva na místě",
-            title: "Vědro zblízka",
-            content: "Najdi u pomníku Casselovo vědro a potvrď, že jsi ho našel/našla."
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Vědro",
+            content: "Snad v tom vědru nemá žádlo, to by se moc nenajedl. Kde má vědro?",
+            options: ["Na hlavě", "Za zadkem co mu utekl"]
           },
           {
             id: "klamovka-cassel-5",
@@ -199,7 +199,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Otázka",
             title: "Hlídka sokolů",
             content:
-              "Možná Casselovi tělo ukradli sokolové. Vydej se doprava, najdi, kde hlídkují dva kamenní orli, a spočítej schody."
+              "Možná Casselovi tělo ukradli sokolové. Vydej se doprava, najdi, kde hlídkují dva kamenní sokolové, a spočítej schody které k nim vedou."
           }
         ],
         clue: [
@@ -214,15 +214,8 @@ export const locations: MapLocation[] = [
         intro:
           "Altán vypadá tajemně už na první pohled. A ještě víc, když zjistíš, že ho někdo zkusil nechat úplně zmizet.",
         background:
-          "Altán byl postaven kolem roku 1820. Dnes slouží jako malý výstavní prostor. V roce 2006 ho umělec Dominik Lang zakryl maskovací sítí.",
+          "Altán byl postaven kolem roku 1820 a sloužil jako zahradní, provozní budova. Třeba jako sklad",
         tasks: [
-          {
-            id: "klamovka-altan-1",
-            type: "question",
-            typeLabel: "Otázka",
-            title: "Hroty na střeše",
-            content: "Kolik hrotů má střecha altánu?"
-          },
           {
             id: "klamovka-altan-2",
             type: "question",
@@ -232,17 +225,11 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-altan-3",
-            type: "question",
-            typeLabel: "Otázka",
+            type: "choice",
+            typeLabel: "Výběr",
             title: "Která zvířata byla v parku",
-            content: "Jaká zvířata se podle dobových záznamů chovala v parku Klamovka?"
-          },
-          {
-            id: "klamovka-altan-4",
-            type: "photo",
-            typeLabel: "Výzva na místě",
-            title: "Okna altánu",
-            content: "Najdi na altánu vysoká špičatá okna a potvrď, že jsi na správném místě."
+            content: "Jaká zvířata se podle dobových záznamů chovala v parku Klamovka?",
+            options: ["vlci a medvedi", "kolibříci", "rýžový špaček jménem Atbaliba"]
           }
         ],
         clue: [
@@ -253,47 +240,33 @@ export const locations: MapLocation[] = [
       },
       {
         id: "hodiny",
-        name: "Hodiny Přijdu včas",
+        name: "Přijdu včas",
         intro:
-          "Hodiny slibují, že přijdou včas. Jenže každá strana ukazuje jiný čas a všechny špatně.",
-        background:
-          "Na dětském hřišti stojí dřevěná věž s hodinami. Na jednom ciferníku je starý znak Košíř, na jiném logo Praha 5.",
+          "Přijít domů v 5? To může být náročný úkol. Najdi věž na které jsou hodiny",
+        background: "",
         tasks: [
           {
             id: "klamovka-hodiny-1",
             type: "question",
             typeLabel: "Otázka",
-            title: "Stejný čas",
-            content: "Ukazují některé dvoje hodiny stejný čas?"
+            title: "Papeži papeži, kolik je hodin na věži?",
+            content: "Kolik ciferníků má věž"
           },
           {
             id: "klamovka-hodiny-2",
             type: "question",
             typeLabel: "Otázka",
-            title: "Sečti hodiny",
-            content: "Sečti hodiny ze všech čtyř ciferníků. Minuty nepočítej."
+            title: "Znak",
+            content: "Jaký znak je na hodinách?",
+            options: ["Praha", "Praha 5"]
           },
           {
             id: "klamovka-hodiny-3",
-            type: "question",
-            typeLabel: "Otázka",
-            title: "Dvě identity místa",
-            content: "Jak se jmenují dvě identity místa na cifernících?"
-          },
-          {
-            id: "klamovka-hodiny-4",
             type: "choice",
             typeLabel: "Výběr",
             title: "Přijdu včas?",
             content: "Ukazují hodiny správný čas?",
             options: ["Ano", "Ne", "Možná v jiném vesmíru"]
-          },
-          {
-            id: "klamovka-hodiny-5",
-            type: "photo",
-            typeLabel: "Výzva na místě",
-            title: "Nápis a ciferník",
-            content: "Najdi nápis „Přijdu včas“ a vedle něj potvrď, že vidíš ciferník hodin."
           }
         ],
         clue: [
@@ -308,7 +281,7 @@ export const locations: MapLocation[] = [
         intro:
           "Na posledním místě tě čeká sousoší rodiny a detail, který už pak nepřehlédneš.",
         background:
-          "Autorem sousoší je sochař Karel Velický. Je z pískovce a jsou na něm žena, muž a dítě.",
+          "Autorem sousoší je sochař Karel Velický. Je z pískovce a jsou na něm žena, muž a děti.",
         tasks: [
           {
             id: "klamovka-rodina-1",
@@ -326,17 +299,13 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-rodina-3",
-            type: "photo",
-            typeLabel: "Výzva na místě",
-            title: "Detail na soše",
-            content: "Najdi na sousoší Rodiny zadek dítěte a potvrď, že ho vidíš."
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Zadek",
+            content: "A je to tu, vidíš zadek? Kdo ho má na rameni?"
           }
         ],
-        clue: [
-          "Pátý kus příběhu je konečně celý.",
-          "Po všem rozpadlém je tu scéna, která drží pohromadě.",
-          "Proto dává smysl, že hra končí právě tady."
-        ]
+        clue: ["Pátý kus příběhu je konečně celý."]
       }
     ]
   },

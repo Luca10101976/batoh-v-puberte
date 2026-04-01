@@ -5,9 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation, type Task } from "@/lib/mock-data";
+import { taskAnswers } from "@/lib/task-answers";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown";
 const SELF_MEMBER_ID = "self";
+const UNKNOWN_PENALTY_POINTS = 15;
+const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
 function normalize(value: string) {
   return value
@@ -16,24 +19,6 @@ function normalize(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
 }
-
-const taskAnswers: Record<string, string[]> = {
-  "klamovka-chramek-1": ["16", "sestnact"],
-  "klamovka-chramek-2": ["12", "dvanact"],
-  "klamovka-chramek-3": ["1", "jedna", "ano"],
-  "klamovka-chramek-4": ["nebe a peklo", "peklo a nebe"],
-  "klamovka-chramek-5": ["ze schodu", "ze schodů"],
-  "klamovka-cassel-1": ["telo"],
-  "klamovka-cassel-2": ["36", "tricet sest", "třicet šest"],
-  "klamovka-cassel-3": ["15", "patnact"],
-  "klamovka-altan-1": ["4", "ctyri"],
-  "klamovka-altan-2": ["galerie", "vystavni prostor", "galerie / vystavni prostor"],
-  "klamovka-altan-3": ["vlci a medvedi", "vlci medvedi"],
-  "klamovka-hodiny-3": ["kosire a praha 5", "kosire praha 5"],
-  "klamovka-hodiny-4": ["ne"],
-  "klamovka-rodina-1": ["3", "tri"],
-  "klamovka-rodina-2": ["piskovec"]
-};
 
 function isManualTask(task: Task) {
   return task.type === "photo" || !taskAnswers[task.id];
@@ -50,6 +35,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   const [message, setMessage] = useState("");
   const [finished, setFinished] = useState(false);
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
+  const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
   const [partySnapshotIds, setPartySnapshotIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -136,11 +122,18 @@ export function PlayScreen({ location }: { location: MapLocation }) {
 
     const participants =
       state.activeMode === "group" ? (partySnapshotIds.length > 0 ? partySnapshotIds : [SELF_MEMBER_ID]) : [SELF_MEMBER_ID];
-    completeLocation(location.id, participants);
+    const penaltyPoints = unknownCount * UNKNOWN_PENALTY_POINTS;
+    completeLocation(location.id, { participantIds: participants, penaltyPoints });
     setFinished(true);
   }
 
   function handleValidate() {
+    if (taskOutcomes[activeTask.id] === "unknown") {
+      setStatus("unknown");
+      setMessage("Tento úkol už je označený jako Nevím. Pokračuj na další stopu.");
+      return;
+    }
+
     if (isManualTask(activeTask)) {
       setStatus("manual");
       setMessage("Hotovo, tenhle úkol máš splněný.");
@@ -158,13 +151,24 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       return;
     }
 
+    const nextWrongAttempts = (wrongAttemptsByTask[activeTask.id] ?? 0) + 1;
+    setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: nextWrongAttempts }));
+
+    if (nextWrongAttempts > MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN) {
+      setStatus("unknown");
+      setMessage(`Třetí pokus nevyšel, bereme to jako Nevím (-${UNKNOWN_PENALTY_POINTS} bodů).`);
+      setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
+      return;
+    }
+
+    const attemptsLeft = MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN + 1 - nextWrongAttempts;
     setStatus("idle");
-    setMessage("Tohle nesedí. Zkus to ještě jednou.");
+    setMessage(`Tohle nesedí. Zkus to znovu. Zbývá ${attemptsLeft} pokus.`);
   }
 
   function handleUnknown() {
     setStatus("unknown");
-    setMessage("Nevadí, jdeme dál.");
+    setMessage(`Nevadí, jdeme dál. Odečítáme ${UNKNOWN_PENALTY_POINTS} bodů.`);
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
   }
 
@@ -290,7 +294,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         <p className="mt-4 text-base leading-7 text-white/90">{activeEpisode.intro}</p>
 
         <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-coral">Co je na tom místě skutečné</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
           <p className="mt-3 text-sm leading-6 text-mist">{activeEpisode.background}</p>
         </div>
       </section>
@@ -350,6 +354,10 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           </p>
         ) : null}
 
+        <p className="mt-3 text-xs text-mist/80">
+          Pravidlo: Na odpověď máš 2 pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím (−{UNKNOWN_PENALTY_POINTS} bodů).
+        </p>
+
         {activeTask.type === "photo" ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button
@@ -369,6 +377,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           <div className="mt-5 grid grid-cols-3 gap-3">
             <button
               onClick={handleValidate}
+              disabled={taskOutcomes[activeTask.id] === "unknown"}
               className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold"
             >
               Ověřit úkol

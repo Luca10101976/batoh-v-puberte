@@ -162,7 +162,8 @@ export function ProfileScreen() {
     addFriendByCode,
     setFriendsFromCloud,
     setActiveMode,
-    setCurrentExpeditionId
+    setCurrentExpeditionId,
+    getPlayerScore
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
@@ -183,7 +184,7 @@ export function ProfileScreen() {
     [isLocationUnlocked]
   );
   const friends = state.squadMembers.filter((member) => member.id !== "self");
-  const score = unlockedCount * 120;
+  const score = getPlayerScore();
 
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);

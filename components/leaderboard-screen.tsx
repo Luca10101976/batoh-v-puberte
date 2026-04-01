@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { leaderboard, squads, locations } from "@/lib/mock-data";
+import { leaderboard, squads } from "@/lib/mock-data";
 
 export function LeaderboardScreen() {
   const [tab, setTab] = useState<"players" | "groups">("players");
-  const { state, isLocationUnlocked } = useAppState();
-  const unlockedCount = locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length;
+  const { state, getPlayerScore } = useAppState();
+  const playerScore = getPlayerScore();
   const groupScore = useMemo(
     () =>
       Object.values(state.groupCompletionMembers).reduce((sum, members) => sum + members.length * 120, 0),
@@ -21,12 +21,12 @@ export function LeaderboardScreen() {
         {
           name: state.profile.name,
           city: state.city,
-          score: unlockedCount,
+          score: playerScore,
           squad: state.squadName,
           delta: "Právě teď"
         }
       ].sort((a, b) => b.score - a.score),
-    [state.city, state.profile.name, state.squadName, unlockedCount]
+    [state.city, state.profile.name, state.squadName, playerScore]
   );
 
   const groupBoard = useMemo(
@@ -49,7 +49,7 @@ export function LeaderboardScreen() {
         <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
         <p className="mt-2 text-sm leading-6 text-mist">
-          Tady už se body počítají doopravdy podle toho, co sis v aplikaci odemkla.
+          Tady už se body počítají podle splněných misí, včetně odečtů za odpovědi Nevím.
         </p>
       </section>
 
@@ -96,7 +96,7 @@ export function LeaderboardScreen() {
               </div>
               <div className="text-right">
                 <div className="text-xl font-semibold text-lime">{entry.score}</div>
-                <div className="text-xs uppercase tracking-[0.18em] text-mist">lokací</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
                 <div className="mt-1 text-[11px] text-mist">{entry.delta}</div>
               </div>
             </section>

@@ -43,6 +43,7 @@ type AppState = {
   profile: PlayerProfile;
   completedLocationIds: string[];
   lastCompletedAt: Record<string, string>;
+  locationPenaltyPoints: Record<string, number>;
   groupCompletionMembers: Record<string, string[]>;
   currentExpeditionId: string | null;
   activeMode: "solo" | "group";
@@ -71,9 +72,10 @@ type AppStateContextValue = {
   unlockWithPin: (pin: string) => boolean;
   toggleMember: (memberId: string) => void;
   updateProfile: (profile: Partial<PlayerProfile>) => void;
-  completeLocation: (locationId: string, participantIds?: string[]) => void;
+  completeLocation: (locationId: string, options?: { participantIds?: string[]; penaltyPoints?: number }) => void;
   resetProgress: () => void;
   isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean) => boolean;
+  getPlayerScore: () => number;
 };
 
 const STORAGE_KEY = "pan-batoh-state";
@@ -108,6 +110,7 @@ const initialState: AppState = {
   },
   completedLocationIds: [],
   lastCompletedAt: {},
+  locationPenaltyPoints: {},
   groupCompletionMembers: {},
   currentExpeditionId: null,
   activeMode: "group",
@@ -154,6 +157,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             ...(parsed.profile ?? {})
           },
           profileCode: parsed.profileCode || generateProfileCode(),
+          locationPenaltyPoints: parsed.locationPenaltyPoints ?? {},
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           currentExpeditionId: parsed.currentExpeditionId ?? null,
           squadMembers: migratedMembers
@@ -479,16 +483,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const completeLocation = useCallback((locationId: string, participantIds?: string[]) => {
+  const getPlayerScore = useCallback(() => {
+    const basePoints = state.completedLocationIds.length * 120;
+    const penaltyPoints = Object.values(state.locationPenaltyPoints).reduce((sum, value) => sum + value, 0);
+    return Math.max(0, basePoints - penaltyPoints);
+  }, [state.completedLocationIds.length, state.locationPenaltyPoints]);
+
+  const completeLocation = useCallback((locationId: string, options?: { participantIds?: string[]; penaltyPoints?: number }) => {
     setState((current) => ({
       ...current,
+      locationPenaltyPoints: {
+        ...current.locationPenaltyPoints,
+        [locationId]: (() => {
+          const incomingPenalty = Math.max(0, options?.penaltyPoints ?? 0);
+          const existingPenalty = current.locationPenaltyPoints[locationId];
+          return typeof existingPenalty === "number" ? Math.min(existingPenalty, incomingPenalty) : incomingPenalty;
+        })()
+      },
       completedLocationIds: current.completedLocationIds.includes(locationId)
         ? current.completedLocationIds
         : [...current.completedLocationIds, locationId],
-      groupCompletionMembers: participantIds?.length
+      groupCompletionMembers: options?.participantIds?.length
         ? {
             ...current.groupCompletionMembers,
-            [locationId]: participantIds
+            [locationId]: options.participantIds
           }
         : current.groupCompletionMembers,
       lastCompletedAt: {
@@ -540,7 +558,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateProfile,
       completeLocation,
       resetProgress,
-      isLocationUnlocked
+      isLocationUnlocked,
+      getPlayerScore
     }),
     [
       completeLocation,
@@ -550,6 +569,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       hydrated,
       pinUnlocked,
       isLocationUnlocked,
+      getPlayerScore,
       resetProgress,
       setActiveMode,
       setCurrentExpeditionId,

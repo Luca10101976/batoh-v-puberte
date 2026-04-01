@@ -1,0 +1,18 @@
+export const taskAnswers: Record<string, string[]> = {
+  "klamovka-chramek-1": ["16", "sestnact"],
+  "klamovka-chramek-2": ["12", "dvanact"],
+  "klamovka-chramek-3": ["1", "jedna", "ano"],
+  "klamovka-chramek-4": ["nebe a peklo", "peklo a nebe"],
+  "klamovka-chramek-5": ["ze schodu", "ze schodů"],
+  "klamovka-cassel-1": ["telo"],
+  "klamovka-cassel-2": ["36", "tricet sest", "třicet šest"],
+  "klamovka-cassel-3": ["15", "patnact"],
+  "klamovka-cassel-4": ["na hlave", "na hlavě"],
+  "klamovka-altan-2": ["galerie", "vystavni prostor", "galerie / vystavni prostor"],
+  "klamovka-altan-3": ["ryzovy spacek jmenem atbaliba", "rýžový špaček jménem atbaliba"],
+  "klamovka-hodiny-1": ["4", "ctyri", "čtyři"],
+  "klamovka-hodiny-3": ["ne"],
+  "klamovka-rodina-1": ["4", "ctyri", "čtyři"],
+  "klamovka-rodina-2": ["piskovec"],
+  "klamovka-rodina-3": ["muz", "muž", "pan", "otec", "tata", "táta", "chlap"]
+};

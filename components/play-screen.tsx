@@ -20,8 +20,9 @@ function normalize(value: string) {
 const taskAnswers: Record<string, string[]> = {
   "klamovka-chramek-1": ["16", "sestnact"],
   "klamovka-chramek-2": ["12", "dvanact"],
-  "klamovka-chramek-3": ["11", "jedenact"],
+  "klamovka-chramek-3": ["1", "jedna", "ano"],
   "klamovka-chramek-4": ["nebe a peklo", "peklo a nebe"],
+  "klamovka-chramek-5": ["ze schodu", "ze schodů"],
   "klamovka-cassel-1": ["telo"],
   "klamovka-cassel-2": ["otec kristian krystof", "kristian krystof", "otec"],
   "klamovka-cassel-3": ["15", "patnact"],
@@ -333,7 +334,21 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           )}
         </div>
 
-        {message ? <p className="mt-4 text-sm text-mist">{message}</p> : null}
+        {message ? (
+          <p
+            className={`mt-4 text-sm ${
+              status === "correct"
+                ? "text-lime"
+                : status === "unknown"
+                  ? "text-mist"
+                  : status === "manual"
+                    ? "text-sky"
+                    : "text-mist"
+            }`}
+          >
+            {message}
+          </p>
+        ) : null}
 
         {activeTask.type === "photo" ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
@@ -375,31 +390,15 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         )}
       </section>
 
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-sky">Bezpečnostní check-in</p>
-        <p className="mt-3 text-sm text-white">{location.areaHint}</p>
-        <p className="mt-1 text-sm leading-6 text-mist">Při startu hry běží bezpečnostní check-in.</p>
-      </section>
-
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.18em] text-lime">Stopa z tohoto místa</p>
-        <div className="mt-3 space-y-2">
-          {activeEpisode.clue.map((line) => (
-            <p key={line} className="text-sm leading-6 text-white/90">
-              {line}
-            </p>
-          ))}
-        </div>
-        {location.interludes[episodeIndex] ? (
-          <p className="mt-4 text-sm text-mist">Poznámka: {location.interludes[episodeIndex]}</p>
-        ) : null}
-      </section>
-
       {alreadyUnlocked ? (
         <div className="rounded-[24px] border border-lime/20 bg-lime/10 p-4 text-sm text-mist">
           Tuhle lokaci už máš jednou dokončenou. Klidně si ji projdi znovu, ale ve sbírce už je odemčená.
         </div>
       ) : null}
+
+      <p className="px-1 text-[11px] text-mist/80">
+        Bezpečnostní upozornění: {location.areaHint} Při startu hry běží check-in.
+      </p>
     </main>
   );
 }

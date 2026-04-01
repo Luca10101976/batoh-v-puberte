@@ -93,7 +93,7 @@ export const locations: MapLocation[] = [
     map: { x: 28, y: 58 },
     introLabel: "Úvodní mise",
     introStory:
-      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. A když budeš koukat pozorně, narazíš tu i na koňskou hlavu nebo... zadek.",
+      "Klamovka má divokou historii: od vinic Karla IV. přes klášter a šlechtu až po Sokol a underground. Dnes je to park, galerie a místo pro děti. Když budeš koukat pozorně, narazíš tu na koňskou hlavu i na jeden nečekaný detail na soše.",
     endingTitle: "Klamovka zase vypráví",
     endingStory:
       "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu byly rozházené po celém parku. Klamovka není rozbitá, jen je složená z víc časů najednou.",
@@ -110,7 +110,7 @@ export const locations: MapLocation[] = [
         id: "chramek",
         name: "Chrámek noci a poznání",
         intro:
-          "Nahoře nebe, dole peklo. Kruh i obdélník. Hvězdy i hadí hlavy. Chrámek působí, jako by byl složený ze dvou různých světů.",
+          "Nahoře nebe, dole peklo. Kruh i obdélník. Hvězdy i hadí hlavy. Chrámek působí, jako by byl složený ze dvou různých světů. Nebe i peklo.",
         background:
           "Vznikl na konci 18. století za Clam-Gallasů. Horní část představuje nebe, dolní část podzemí. Díry v kopuli měly zevnitř vytvořit iluzi hvězdné oblohy.",
         tasks: [
@@ -125,15 +125,15 @@ export const locations: MapLocation[] = [
             id: "klamovka-chramek-2",
             type: "question",
             typeLabel: "Otázka",
-            title: "Hvězdy na kopuli",
-            content: "Kolik hvězdiček je na chrámku?"
+            title: "Hvězdy v nebi",
+            content: "Kolik velkých hvězd je na chrámku?"
           },
           {
             id: "klamovka-chramek-3",
             type: "question",
             typeLabel: "Otázka",
-            title: "Úsměv mezi mračenými",
-            content: "Jedna hlava se usmívá, ostatní se mračí. Kolik jich je mračených?"
+            title: "Asi špatný den",
+            content: "Hodně zamračených hlav. Jsou tam nějaké s úsměvem?"
           },
           {
             id: "klamovka-chramek-4",
@@ -145,10 +145,11 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-chramek-5",
-            type: "photo",
-            typeLabel: "Výzva na místě",
-            title: "Spodní vstup chrámku",
-            content: "Najdi spodní vstup chrámku a potvrď, že jsi ho našel/našla."
+            type: "choice",
+            typeLabel: "Výběr",
+            title: "Kudy do pekla",
+            content: "Jak se jde do spodní části chrámku?",
+            options: ["Z kopce", "Do kopce", "Ze schodů"]
           }
         ],
         clue: [

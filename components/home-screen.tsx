@@ -286,10 +286,6 @@ export function HomeScreen() {
     };
   }, []);
 
-  const unlockedCount = locations.filter((location) =>
-    isLocationUnlocked(location.id, location.unlocked)
-  ).length;
-  const score = unlockedCount * 120;
   const localFriends = state.squadMembers.filter((member) => member.id !== "self");
   const fallbackFeed: FriendActivityRow[] = localFriends.map((friend, index) => ({
     friend_profile_code: friend.id,
@@ -297,13 +293,15 @@ export function HomeScreen() {
     created_at: new Date(Date.now() - (index + 1) * 60000).toISOString()
   }));
   const visibleFeed = friendFeed.length > 0 ? friendFeed : fallbackFeed;
-  const primaryLocation = locations[0];
+  const cityLocations = useMemo(() => locations.filter((location) => location.city === state.city), [state.city]);
+  const cityMissions = useMemo(() => nearbyMissions.filter((mission) => mission.city === state.city), [state.city]);
+  const primaryLocation = cityLocations[0] ?? locations[0];
+  const unlockedInCity = cityLocations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length;
+  const cityScore = unlockedInCity * 120;
   const primaryCoords = useMemo(
     () => (primaryLocation ? { lat: primaryLocation.lat, lng: primaryLocation.lng } : null),
     [primaryLocation]
   );
-  const distanceMeters = userCoords && primaryCoords ? calculateDistanceMeters(userCoords, primaryCoords) : null;
-  const walkingMinutes = distanceMeters ? Math.max(1, Math.round(distanceMeters / 80)) : null;
   const mapUrl = useMemo(() => {
     if (!primaryLocation || !primaryCoords) {
       return "";
@@ -366,11 +364,11 @@ export function HomeScreen() {
             <p className="text-xs uppercase tracking-[0.22em] text-mist">Tvoje skóre</p>
             <div className="mt-3 grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white/5 p-3">
-                <div className="text-lg font-semibold text-white">{unlockedCount}</div>
+                <div className="text-lg font-semibold text-white">{unlockedInCity}</div>
                 <div className="text-xs text-mist">Odemčeno</div>
               </div>
               <div className="rounded-2xl bg-white/5 p-3">
-                <div className="text-lg font-semibold text-white">{score}</div>
+                <div className="text-lg font-semibold text-white">{cityScore}</div>
                 <div className="text-xs text-mist">Body</div>
               </div>
               <div className="rounded-2xl bg-white/5 p-3">
@@ -429,8 +427,8 @@ export function HomeScreen() {
       <section className="glass-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-coral">Blízko tebe</p>
-            <h2 className="mt-2 text-xl font-semibold">Vyrazte ven ještě dnes</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Mise ve městě</p>
+            <h2 className="mt-2 text-xl font-semibold">{state.city}</h2>
           </div>
           <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">
             {geoState === "ready"
@@ -442,28 +440,43 @@ export function HomeScreen() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {nearbyMissions.map((mission) => (
-            <Link
-              key={mission.name}
-              href={`/locations/${mission.locationId}`}
-              className="block rounded-[24px] border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold">{mission.name}</h3>
-                  <p className="mt-1 text-sm text-mist">
-                    {distanceMeters ? `${formatDistance(distanceMeters)} od tebe` : mission.status}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-lime">
-                    {walkingMinutes ? `${walkingMinutes} min` : mission.distance}
+          {cityMissions.length === 0 ? (
+            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
+              Pro tohle město zatím nemáme připravenou misi.
+            </div>
+          ) : (
+            cityMissions.map((mission) => {
+              const missionLocation = locations.find((location) => location.id === mission.locationId);
+              const missionDistance =
+                userCoords && missionLocation
+                  ? calculateDistanceMeters(userCoords, { lat: missionLocation.lat, lng: missionLocation.lng })
+                  : null;
+              const missionMinutes = missionDistance ? Math.max(1, Math.round(missionDistance / 80)) : null;
+
+              return (
+                <Link
+                  key={mission.name}
+                  href={`/locations/${mission.locationId}`}
+                  className="block rounded-[24px] border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">{mission.name}</h3>
+                      <p className="mt-1 text-sm text-mist">
+                        {missionDistance && missionDistance < 50000 ? `${formatDistance(missionDistance)} od tebe` : mission.status}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-lime">
+                        {missionMinutes && missionDistance && missionDistance < 50000 ? `${missionMinutes} min` : mission.distance}
+                      </div>
+                      <div className="text-xs text-mist">{mission.boost}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-mist">{mission.boost}</div>
-                </div>
-              </div>
-            </Link>
-          ))}
+                </Link>
+              );
+            })
+          )}
         </div>
       </section>
 
@@ -475,40 +488,44 @@ export function HomeScreen() {
           </Link>
         </div>
 
-        {locations.map((location) => {
-          const unlocked = isLocationUnlocked(location.id, location.unlocked);
+        {cityLocations.length === 0 ? (
+          <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">V tomhle městě zatím není dostupná žádná lokace.</div>
+        ) : (
+          cityLocations.map((location) => {
+            const unlocked = isLocationUnlocked(location.id, location.unlocked);
 
-          return (
-            <Link
-              key={location.id}
-              href={`/locations/${location.id}`}
-              className="glass-card flex items-center gap-4 p-3"
-            >
-              <div
-                className="h-20 w-20 rounded-[20px] bg-cover bg-center"
-                style={{ backgroundImage: `url(${location.image})` }}
-              />
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold">{location.name}</h3>
-                  <span
-                    className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.2em] ${
-                      unlocked ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
-                    }`}
-                  >
-                    {unlocked ? "Odemčeno" : "Připraveno"}
-                  </span>
+            return (
+              <Link
+                key={location.id}
+                href={`/locations/${location.id}`}
+                className="glass-card flex items-center gap-4 p-3"
+              >
+                <div
+                  className="h-20 w-20 rounded-[20px] bg-cover bg-center"
+                  style={{ backgroundImage: `url(${location.image})` }}
+                />
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold">{location.name}</h3>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.2em] ${
+                        unlocked ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
+                      }`}
+                    >
+                      {unlocked ? "Odemčeno" : "Připraveno"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-mist">{location.teaser}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-mist">
+                    <span className="rounded-full bg-white/5 px-2 py-1">{location.distance}</span>
+                    <span className="rounded-full bg-white/5 px-2 py-1">{location.duration}</span>
+                    <span className="rounded-full bg-white/5 px-2 py-1">{location.difficulty}</span>
+                  </div>
                 </div>
-                <p className="mt-1 text-sm text-mist">{location.teaser}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-mist">
-                  <span className="rounded-full bg-white/5 px-2 py-1">{location.distance}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">{location.duration}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">{location.difficulty}</span>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+              </Link>
+            );
+          })
+        )}
       </section>
 
       <section className="glass-card p-5">

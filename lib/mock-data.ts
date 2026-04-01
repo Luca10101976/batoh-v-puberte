@@ -20,6 +20,7 @@ export type Episode = {
 
 export type MapLocation = {
   id: string;
+  city: string;
   name: string;
   teaser: string;
   subtitle: string;
@@ -50,9 +51,18 @@ export const nearbyMissions = [
   {
     name: "Ztracený příběh Klamovky",
     locationId: "klamovka",
+    city: "Praha",
     distance: "11 min",
     boost: "+120 bodů",
     status: "Blízko tebe"
+  },
+  {
+    name: "Budějovický kód: Operace Žába",
+    locationId: "budejovice-zaba",
+    city: "České Budějovice",
+    distance: "1-2 h v centru",
+    boost: "+180 bodů",
+    status: "Výletová mise"
   }
 ];
 
@@ -65,6 +75,7 @@ export const activityFeed = [
 export const locations: MapLocation[] = [
   {
     id: "klamovka",
+    city: "Praha",
     name: "Park Klamovka",
     subtitle: "Posbírej ztracený příběh",
     teaser: "Park, kde najdeš hlavu koně i peklo :)",
@@ -325,6 +336,200 @@ export const locations: MapLocation[] = [
           "Po všem rozpadlém je tu scéna, která drží pohromadě.",
           "Proto dává smysl, že hra končí právě tady."
         ]
+      }
+    ]
+  },
+  {
+    id: "budejovice-zaba",
+    city: "České Budějovice",
+    name: "Budějovický kód: Operace Žába",
+    subtitle: "Městská mise pro starší",
+    teaser: "Pátrání po ztracené žábě přes věž, náměstí a Solnici.",
+    story:
+      "V Budějovicích se ztratila kamenná žába. Po městě zůstaly jen stopy, útržky legend a tři čísla kódu. Jestli je dáš dohromady, dovede tě to až k cíli.",
+    image: "/images/klamovka-chramek.jpeg",
+    unlocked: false,
+    difficulty: "Vyšší",
+    distance: "Centrum města",
+    duration: "60-90 min",
+    areaHint: "Drž se v historickém centru Českých Budějovic.",
+    vibe: ["Městské pátrání", "Logika a kód", "Ideální na výlet"],
+    lat: 48.9747,
+    lng: 14.4749,
+    map: { x: 62, y: 46 },
+    introLabel: "Výpravná mise",
+    introStory:
+      "Tahle mise není jen na rychlou procházku kolem domu. Je to plnohodnotná městská bojovka, kterou můžeš hrát i při plánované dovolené.",
+    endingTitle: "Kód je kompletní",
+    endingStory:
+      "Poskládal/a jsi tři čísla i všechny stopy. Žába nebyla ztracená navždy, jen čekala na někoho, kdo dokáže číst město jako mapu stop.",
+    playerMessage:
+      "Výborně. Tohle byla těžší mise a zvládl/a jsi ji jako profík. Budějovice sis neprošel/prošla, ale opravdu přečetl/a.",
+    interludes: [
+      "Staré město rádo mluví, ale jen v narážkách.",
+      "Když nesedí legenda, hledej detail.",
+      "Kód je vždycky ukrytý v tom, co většina přejde bez povšimnutí."
+    ],
+    episodes: [
+      {
+        id: "cerna-vez",
+        name: "Černá věž: první číslo",
+        intro:
+          "Začínáš u Černé věže. Potřebuješ první číslo kódu a to nepřijde zadarmo: čeká tě kombinace pozorování a počítání.",
+        background:
+          "Černá věž vznikala v 16. století a měla strážní funkci. Je jedním z hlavních orientačních bodů centra.",
+        tasks: [
+          {
+            id: "budejovice-vez-1",
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Rok na dveřích",
+            content: "Najdi dveře do Černé věže. Jaký rok je na dveřích?"
+          },
+          {
+            id: "budejovice-vez-2",
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Počet schodů",
+            content: "Kolik schodů vede až nahoru?"
+          },
+          {
+            id: "budejovice-vez-3",
+            type: "question",
+            typeLabel: "Kód",
+            title: "První číslo",
+            content: "Vyřaď opakující se číslice, nech jedinečné, sečti je a zapiš výsledek."
+          }
+        ],
+        clue: ["Máš první číslo kódu.", "Věž dala číslo, ale žába pořád chybí."]
+      },
+      {
+        id: "orloj",
+        name: "Měsíční orloj",
+        intro:
+          "Pod ciferníkem věže najdeš měsíční kouli. Tady nejde o rychlost, ale o to, jestli si všimneš, co sedí a co ne.",
+        background:
+          "Koule pod ciferníkem ukazuje fázi Měsíce. Je to detail, který většina lidí mine, protože se dívá jen na hodiny.",
+        tasks: [
+          {
+            id: "budejovice-orloj-1",
+            type: "choice",
+            typeLabel: "Výběr",
+            title: "Jak vypadá měsíc",
+            content: "Jaká fáze Měsíce je dnes nejblíž realitě?",
+            options: ["Úplněk", "Půlměsíc", "Srpek", "Nevím"]
+          },
+          {
+            id: "budejovice-orloj-2",
+            type: "choice",
+            typeLabel: "Výběr",
+            title: "Sedí orloj?",
+            content: "Odpovídá světlá část koule tomu, co vidíš na obloze?",
+            options: ["Sedí", "Nesedí", "Nedá se ověřit"]
+          }
+        ],
+        clue: ["Technika může klamat.", "Ne každá stopa je číslo, ale každá je důležitá."]
+      },
+      {
+        id: "samson",
+        name: "Samsonova kašna a bludný kámen",
+        intro:
+          "Na náměstí hledáš bludný kámen. Legenda říká, že kdo ho po deváté večer překročí, může bloudit.",
+        background:
+          "Bludný kámen je historická stopa a zároveň městská legenda, která přežila až do dneška.",
+        tasks: [
+          {
+            id: "budejovice-samson-1",
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Devátá hodina",
+            content: "Jak vypadá na ciferníku 9 hodin? Zapiš to jako čas."
+          },
+          {
+            id: "budejovice-samson-2",
+            type: "photo",
+            typeLabel: "Výzva na místě",
+            title: "Kámen s křížkem",
+            content: "Najdi bludný kámen s křížkem a potvrď, že jsi na správném místě."
+          }
+        ],
+        clue: ["Město ti dává směr.", "Teď se přesouváš k druhému číslu."]
+      },
+      {
+        id: "loket",
+        name: "Vídeňský loket",
+        intro:
+          "Na radnici hledej měřítko zvané vídeňský loket. Druhé číslo kódu je schované právě tady.",
+        background:
+          "Vídeňský loket byla historická míra. Sloužila jako veřejný etalon, aby se obchodníci nehádali o délku.",
+        tasks: [
+          {
+            id: "budejovice-loket-1",
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Symbol na lokti",
+            content: "Kterému číslu se nejvíc podobá symbol na lokti?"
+          },
+          {
+            id: "budejovice-loket-2",
+            type: "question",
+            typeLabel: "Kód",
+            title: "Druhé číslo",
+            content: "Zapiš číslo, které bereš jako druhé číslo tajného kódu."
+          }
+        ],
+        clue: ["Máš druhé číslo.", "Teď rozhodne Solnice."]
+      },
+      {
+        id: "solnice",
+        name: "Solnice: tři hlavy",
+        intro:
+          "Na Solnici najdeš tři hlavy lupičů a tři nápovědy. Jen jedna tě dovede správně.",
+        background:
+          "Hlavy na Solnici jsou spojené s legendou o loupeži u klášterního kostela. Dnes fungují jako memento i městská záhada.",
+        tasks: [
+          {
+            id: "budejovice-solnice-1",
+            type: "choice",
+            typeLabel: "Výběr",
+            title: "Která hlava mluví pravdu",
+            content: "Která z hlav dala správnou stopu?",
+            options: ["Hlava 1", "Hlava 2", "Hlava 3"]
+          },
+          {
+            id: "budejovice-solnice-2",
+            type: "question",
+            typeLabel: "Kód",
+            title: "Třetí číslo",
+            content: "Zapiš číslo správné hlavy jako třetí číslo kódu."
+          }
+        ],
+        clue: ["Třetí číslo máš.", "Teď už zbývá najít žábu."]
+      },
+      {
+        id: "kostel-zaba",
+        name: "Kostel a kamenná žába",
+        intro:
+          "Poslední místo: severní strana kostela Obětování Panny Marie. Tady má být žába, kterou celé město hledalo.",
+        background:
+          "Kamenný chrlič ve tvaru žáby je spojený s místní pověstí. Ať je legenda jakákoliv, stopa je reálná a vede sem.",
+        tasks: [
+          {
+            id: "budejovice-final-1",
+            type: "photo",
+            typeLabel: "Výzva na místě",
+            title: "Najdi žábu",
+            content: "Najdi kamennou žábu na severní straně kostela a potvrď nález."
+          },
+          {
+            id: "budejovice-final-2",
+            type: "question",
+            typeLabel: "Finále",
+            title: "Kompletní kód",
+            content: "Zadej tři čísla kódu za sebe."
+          }
+        ],
+        clue: ["Kód byl správně.", "Mise je dokončená."]
       }
     ]
   }

@@ -183,6 +183,10 @@ export function ProfileScreen() {
     () => locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length,
     [isLocationUnlocked]
   );
+  const completedMissions = useMemo(
+    () => locations.filter((location) => state.completedLocationIds.includes(location.id)),
+    [state.completedLocationIds]
+  );
   const friends = state.squadMembers.filter((member) => member.id !== "self");
   const score = getPlayerScore();
 
@@ -514,6 +518,35 @@ export function ProfileScreen() {
             <div className="text-xs text-mist">Parta</div>
           </div>
         </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Moje mise</h2>
+        {completedMissions.length === 0 ? (
+          <p className="mt-3 text-sm text-mist">Zatím nemáš dokončenou žádnou misi.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {completedMissions.map((mission) => {
+              const maxPoints = 120;
+              const penalty = state.locationPenaltyPoints[mission.id] ?? 0;
+              const earnedPoints = Math.max(0, maxPoints - penalty);
+
+              return (
+                <div key={mission.id} className="rounded-2xl bg-white/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{mission.name}</div>
+                      <div className="mt-1 text-sm text-mist">{mission.city}</div>
+                    </div>
+                    <div className="rounded-full bg-lime/12 px-3 py-1 text-sm font-semibold text-lime">
+                      {earnedPoints}/{maxPoints} bodů
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <MobileAppCard />

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
+import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -517,6 +518,8 @@ export function ProfileScreen() {
           </div>
         </div>
       </section>
+
+      <MobileAppCard />
 
       <section className="glass-card p-5">
         <h2 className="section-title">Avatar studio</h2>

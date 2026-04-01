@@ -309,21 +309,23 @@ export function ParentAuthGate() {
             onClick={() => setMode("login")}
             className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold ${mode === "login" ? "bg-white text-night" : "text-mist"}`}
           >
-            Přihlášení rodiče
+            Přihlášení dítěte
           </button>
           <button
             onClick={() => setMode("signup")}
             className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold ${mode === "signup" ? "bg-white text-night" : "text-mist"}`}
           >
-            Nový rodičovský účet
+            Požádat rodiče o autorizaci
           </button>
         </div>
 
         <h1 className="mt-5 text-2xl font-bold">
-          {mode === "login" ? "Přihlášení rodiče" : "Vytvoření rodičovského účtu"}
+          {mode === "login" ? "Přihlášení dítěte" : "Požádej rodiče o autorizaci"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-mist">
-          Díky tomu se profil dítěte obnoví i po změně telefonu.
+          {mode === "login"
+            ? "Přihlas se rodičovským e-mailem a heslem. Profil se pak obnoví i po změně telefonu."
+            : "Pro první spuštění: zadej e-mail rodiče a heslo. Rodiči přijde potvrzovací e-mail."}
         </p>
 
         <form onSubmit={handleParentAuth} className="mt-5 space-y-4">
@@ -359,8 +361,8 @@ export function ParentAuthGate() {
             {saving
               ? "Ověřuju účet..."
               : mode === "login"
-                ? "Přihlásit a pokračovat"
-                : "Vytvořit účet a pokračovat"}
+                ? "Přihlásit dítě"
+                : "Požádat rodiče"}
           </button>
         </form>
       </section>

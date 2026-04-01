@@ -158,7 +158,6 @@ export function ProfileScreen() {
   const {
     state,
     updateProfile,
-    resetProgress,
     isLocationUnlocked,
     addFriendByCode,
     setFriendsFromCloud,
@@ -727,16 +726,6 @@ export function ProfileScreen() {
         {inviteMessage ? <p className="mt-3 text-sm text-mist">{inviteMessage}</p> : null}
       </section>
 
-      <section className="glass-card p-5">
-        <h2 className="section-title">Správa postupu</h2>
-        <p className="mt-2 text-sm text-mist">Tahle akce smaže jen herní postup. Profil a kamarádi zůstanou.</p>
-        <button
-          onClick={resetProgress}
-          className="mt-4 w-full rounded-[20px] border border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral"
-        >
-          Resetovat postup
-        </button>
-      </section>
     </main>
   );
 }

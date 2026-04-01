@@ -2,11 +2,12 @@
 
 import { useEffect, type ReactNode } from "react";
 import { BottomNav } from "@/components/bottom-nav";
+import { ChildPinGate } from "@/components/child-pin-gate";
 import { ParentAuthGate } from "@/components/parent-auth-gate";
 import { useAppState } from "@/components/app-state-provider";
 
 export function AppFrame({ children }: { children: ReactNode }) {
-  const { hydrated, state } = useAppState();
+  const { hydrated, pinUnlocked, state } = useAppState();
   const hasRegistration = state.registrationCompleted;
 
   useEffect(() => {
@@ -23,6 +24,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   if (!hasRegistration) {
     return <ParentAuthGate />;
+  }
+
+  if (state.childPinHash && !pinUnlocked) {
+    return <ChildPinGate />;
   }
 
   return (

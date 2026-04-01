@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAppState } from "@/components/app-state-provider";
 import { RegistrationGate } from "@/components/registration-gate";
+import { normalizePin } from "@/lib/pin";
 
 type ChildProfileRow = {
   child_name: string;
@@ -25,6 +26,8 @@ export function ParentAuthGate() {
   const [password, setPassword] = useState("");
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("11");
+  const [childPin, setChildPin] = useState("");
+  const [childPinConfirm, setChildPinConfirm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -176,6 +179,8 @@ export function ParentAuthGate() {
 
     const trimmedName = childName.trim();
     const numericAge = Number(childAge);
+    const normalizedPin = normalizePin(childPin);
+    const normalizedPinConfirm = normalizePin(childPinConfirm);
 
     if (trimmedName.length < 2) {
       setError("Napiš prosím jméno dítěte.");
@@ -184,6 +189,16 @@ export function ParentAuthGate() {
 
     if (!Number.isInteger(numericAge) || numericAge < 8 || numericAge > 16) {
       setError("Věk musí být číslo mezi 8 a 16.");
+      return;
+    }
+
+    if (normalizedPin.length < 4 || normalizedPin.length > 6) {
+      setError("PIN dítěte musí mít 4 až 6 číslic.");
+      return;
+    }
+
+    if (normalizedPin !== normalizedPinConfirm) {
+      setError("PIN a potvrzení PINu se neshodují.");
       return;
     }
 
@@ -231,7 +246,8 @@ export function ParentAuthGate() {
       name: trimmedName,
       age: numericAge,
       profileCode,
-      parentEmail: parentEmail || session.user.email || ""
+      parentEmail: parentEmail || session.user.email || "",
+      childPin: normalizedPin
     });
     setSaving(false);
     router.replace("/profile");
@@ -282,6 +298,34 @@ export function ParentAuthGate() {
                 onChange={(event) => setChildAge(event.target.value)}
                 min={8}
                 max={16}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-mist">PIN dítěte</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={childPin}
+                onChange={(event) => setChildPin(normalizePin(event.target.value))}
+                placeholder="4 až 6 číslic"
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-mist">Potvrdit PIN</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={childPinConfirm}
+                onChange={(event) => setChildPinConfirm(normalizePin(event.target.value))}
+                placeholder="Zopakuj stejný PIN"
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
               />
             </label>

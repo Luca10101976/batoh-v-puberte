@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { hashPin, normalizePin } from "@/lib/pin";
 
 type SquadMember = {
   id: string;
@@ -34,6 +35,7 @@ type PlayerProfile = {
 type AppState = {
   registrationCompleted: boolean;
   parentEmail: string;
+  childPinHash: string | null;
   profileCode: string;
   city: string;
   profile: PlayerProfile;
@@ -50,17 +52,20 @@ type AppState = {
 type AppStateContextValue = {
   state: AppState;
   hydrated: boolean;
+  pinUnlocked: boolean;
   completeRegistration: (payload: {
     name: string;
     age: number;
     parentEmail: string;
     profileCode?: string;
+    childPin?: string;
   }) => void;
   addFriendByCode: (payload: { friendCode: string; nickname?: string }) => { ok: boolean; message: string };
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
   setCurrentExpeditionId: (expeditionId: string | null) => void;
+  unlockWithPin: (pin: string) => boolean;
   toggleMember: (memberId: string) => void;
   updateProfile: (profile: Partial<PlayerProfile>) => void;
   completeLocation: (locationId: string, participantIds?: string[]) => void;
@@ -83,6 +88,7 @@ function normalizeCode(value: string) {
 const initialState: AppState = {
   registrationCompleted: false,
   parentEmail: "",
+  childPinHash: null,
   profileCode: generateProfileCode(),
   city: "Praha",
   profile: {
@@ -114,6 +120,7 @@ const AppStateContext = createContext<AppStateContextValue | null>(null);
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [pinUnlocked, setPinUnlocked] = useState(false);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -152,6 +159,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setPinUnlocked(!state.childPinHash);
+  }, [hydrated, state.childPinHash]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [hydrated, state]);
 
@@ -164,12 +179,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       name,
       age,
       parentEmail,
-      profileCode
+      profileCode,
+      childPin
     }: {
       name: string;
       age: number;
       parentEmail: string;
       profileCode?: string;
+      childPin?: string;
     }) => {
       const trimmedName = name.trim();
       const initials = trimmedName
@@ -183,6 +200,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...current,
         registrationCompleted: true,
         parentEmail: parentEmail.trim(),
+        childPinHash: childPin ? hashPin(childPin) : current.childPinHash,
         profileCode: profileCode || current.profileCode || generateProfileCode(),
         profile: {
           ...current.profile,
@@ -197,8 +215,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             : member
         )
       }));
+      setPinUnlocked(true);
     },
     []
+  );
+
+  const unlockWithPin = useCallback(
+    (pin: string) => {
+      const normalized = normalizePin(pin);
+
+      if (!state.childPinHash) {
+        setPinUnlocked(true);
+        return true;
+      }
+
+      if (normalized.length < 4) {
+        return false;
+      }
+
+      const ok = hashPin(normalized) === state.childPinHash;
+
+      if (ok) {
+        setPinUnlocked(true);
+      }
+
+      return ok;
+    },
+    [state.childPinHash]
   );
 
   const addFriendByCode = useCallback(
@@ -345,12 +388,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       hydrated,
+      pinUnlocked,
       completeRegistration,
       addFriendByCode,
       setFriendsFromCloud,
       setCity,
       setActiveMode,
       setCurrentExpeditionId,
+      unlockWithPin,
       toggleMember,
       updateProfile,
       completeLocation,
@@ -363,12 +408,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       completeRegistration,
       setFriendsFromCloud,
       hydrated,
+      pinUnlocked,
       isLocationUnlocked,
       resetProgress,
       setActiveMode,
       setCurrentExpeditionId,
       setCity,
       state,
+      unlockWithPin,
       toggleMember,
       updateProfile
     ]

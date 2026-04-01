@@ -166,7 +166,6 @@ export function ProfileScreen() {
     setCurrentExpeditionId
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
-  const [friendNickname, setFriendNickname] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
   const [savingFriend, setSavingFriend] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
@@ -310,10 +309,10 @@ export function ProfileScreen() {
   async function handleAddFriend() {
     setSavingFriend(true);
     const normalizedCode = friendCode.trim().toUpperCase();
-    const nickname = friendNickname.trim();
+    const nickname = "";
 
     if (!supabase) {
-      const result = addFriendByCode({ friendCode, nickname: friendNickname });
+      const result = addFriendByCode({ friendCode });
 
       if (!result.ok) {
         setSavingFriend(false);
@@ -324,7 +323,6 @@ export function ProfileScreen() {
       setSavingFriend(false);
       setFriendMessage("Kamarád přidán lokálně.");
       setFriendCode("");
-      setFriendNickname("");
       return;
     }
 
@@ -399,7 +397,6 @@ export function ProfileScreen() {
     setSavingFriend(false);
     setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
     setFriendCode("");
-    setFriendNickname("");
   }
 
   async function handleInviteFriend(friendCode: string, friendName: string) {
@@ -680,12 +677,7 @@ export function ProfileScreen() {
             placeholder="Kód kamaráda (např. BAT-AB12CD)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
-          <input
-            value={friendNickname}
-            onChange={(event) => setFriendNickname(event.target.value)}
-            placeholder="Jak se ti bude v appce zobrazovat"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
-          />
+          <p className="text-sm text-mist">Zadej jen kód. Jméno si appka vezme automaticky.</p>
           <button
             onClick={handleAddFriend}
             disabled={savingFriend}
@@ -695,12 +687,6 @@ export function ProfileScreen() {
           </button>
           {friendMessage ? <p className="text-sm text-mist">{friendMessage}</p> : null}
         </div>
-        <button
-          onClick={resetProgress}
-          className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
-        >
-          Resetovat postup
-        </button>
       </section>
 
       <section className="glass-card p-5">
@@ -739,6 +725,17 @@ export function ProfileScreen() {
           </div>
         )}
         {inviteMessage ? <p className="mt-3 text-sm text-mist">{inviteMessage}</p> : null}
+      </section>
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Správa postupu</h2>
+        <p className="mt-2 text-sm text-mist">Tahle akce smaže jen herní postup. Profil a kamarádi zůstanou.</p>
+        <button
+          onClick={resetProgress}
+          className="mt-4 w-full rounded-[20px] border border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral"
+        >
+          Resetovat postup
+        </button>
       </section>
     </main>
   );

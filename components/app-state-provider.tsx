@@ -6,10 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from "react";
 import { hashPin, normalizePin } from "@/lib/pin";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type SquadMember = {
   id: string;
@@ -59,6 +61,7 @@ type AppStateContextValue = {
     parentEmail: string;
     profileCode?: string;
     childPin?: string;
+    childPinHash?: string | null;
   }) => void;
   addFriendByCode: (payload: { friendCode: string; nickname?: string }) => { ok: boolean; message: string };
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
@@ -121,6 +124,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [pinUnlocked, setPinUnlocked] = useState(false);
+  const cloudHydratedRef = useRef(false);
+  const syncTimerRef = useRef<number | null>(null);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -170,6 +182,125 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [hydrated, state]);
 
+  useEffect(() => {
+    async function hydrateCloudState() {
+      if (!hydrated || cloudHydratedRef.current || !supabase || !state.registrationCompleted || !state.profileCode) {
+        return;
+      }
+
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        return;
+      }
+
+      const { data: childProfile } = await supabase
+        .from("child_profiles")
+        .select("child_name, child_age")
+        .eq("profile_code", state.profileCode)
+        .eq("parent_user_id", session.user.id)
+        .limit(1)
+        .maybeSingle<{ child_name: string; child_age: number }>();
+
+      if (!childProfile) {
+        cloudHydratedRef.current = true;
+        return;
+      }
+
+      const { data: pinRow } = await supabase
+        .from("child_profiles")
+        .select("pin_hash")
+        .eq("profile_code", state.profileCode)
+        .eq("parent_user_id", session.user.id)
+        .limit(1)
+        .maybeSingle<{ pin_hash: string | null }>();
+
+      const { data: progressRows } = await supabase
+        .from("child_location_progress")
+        .select("location_id, completed_at")
+        .eq("profile_code", state.profileCode);
+
+      const remoteRows = (progressRows as Array<{ location_id: string; completed_at: string }> | null) ?? [];
+
+      setState((current) => {
+        const completedLocationIds = Array.from(
+          new Set([...current.completedLocationIds, ...remoteRows.map((row) => row.location_id)])
+        );
+        const lastCompletedAt = { ...current.lastCompletedAt };
+
+        remoteRows.forEach((row) => {
+          const existing = lastCompletedAt[row.location_id];
+          if (!existing || new Date(row.completed_at).getTime() > new Date(existing).getTime()) {
+            lastCompletedAt[row.location_id] = row.completed_at;
+          }
+        });
+
+        return {
+          ...current,
+          childPinHash: pinRow?.pin_hash || current.childPinHash,
+          profile: {
+            ...current.profile,
+            name: childProfile.child_name || current.profile.name,
+            age: childProfile.child_age || current.profile.age
+          },
+          completedLocationIds,
+          lastCompletedAt
+        };
+      });
+
+      cloudHydratedRef.current = true;
+    }
+
+    void hydrateCloudState();
+  }, [hydrated, state.registrationCompleted, state.profileCode, supabase]);
+
+  useEffect(() => {
+    if (!hydrated || !supabase || !state.registrationCompleted || !state.profileCode || !cloudHydratedRef.current) {
+      return;
+    }
+
+    if (syncTimerRef.current) {
+      window.clearTimeout(syncTimerRef.current);
+    }
+
+    syncTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        const {
+          data: { session }
+        } = await supabase.auth.getSession();
+
+        if (!session?.user) {
+          return;
+        }
+
+        const progressRows = state.completedLocationIds.map((locationId) => ({
+          profile_code: state.profileCode,
+          location_id: locationId,
+          completed_at: state.lastCompletedAt[locationId] ?? new Date().toISOString()
+        }));
+
+        if (progressRows.length > 0) {
+          await supabase.from("child_location_progress").upsert(progressRows, { onConflict: "profile_code,location_id" });
+        }
+      })();
+    }, 300);
+
+    return () => {
+      if (syncTimerRef.current) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, [
+    hydrated,
+    state.registrationCompleted,
+    state.profileCode,
+    state.completedLocationIds,
+    state.lastCompletedAt,
+    supabase
+  ]);
+
   const setCity = useCallback((city: string) => {
     setState((current) => (current.city === city ? current : { ...current, city }));
   }, []);
@@ -180,13 +311,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       age,
       parentEmail,
       profileCode,
-      childPin
+      childPin,
+      childPinHash
     }: {
       name: string;
       age: number;
       parentEmail: string;
       profileCode?: string;
       childPin?: string;
+      childPinHash?: string | null;
     }) => {
       const trimmedName = name.trim();
       const initials = trimmedName
@@ -200,7 +333,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...current,
         registrationCompleted: true,
         parentEmail: parentEmail.trim(),
-        childPinHash: childPin ? hashPin(childPin) : current.childPinHash,
+        childPinHash: childPin ? hashPin(childPin) : childPinHash ?? current.childPinHash,
         profileCode: profileCode || current.profileCode || generateProfileCode(),
         profile: {
           ...current.profile,
@@ -366,17 +499,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetProgress = useCallback(() => {
-    setState((current) => ({
-      ...initialState,
-      registrationCompleted: current.registrationCompleted,
-      parentEmail: current.parentEmail,
-      profileCode: current.profileCode,
-      city: current.city,
-      profile: current.profile,
-      squadName: current.squadName,
-      squadMembers: current.squadMembers
-    }));
-  }, []);
+    setState((current) => {
+      if (supabase && current.profileCode) {
+        void supabase.from("child_location_progress").delete().eq("profile_code", current.profileCode);
+      }
+
+      return {
+        ...initialState,
+        registrationCompleted: current.registrationCompleted,
+        parentEmail: current.parentEmail,
+        childPinHash: current.childPinHash,
+        profileCode: current.profileCode,
+        city: current.city,
+        profile: current.profile,
+        squadName: current.squadName,
+        squadMembers: current.squadMembers
+      };
+    });
+  }, [supabase]);
 
   const isLocationUnlocked = useCallback(
     (locationId: string, defaultUnlocked = false) =>

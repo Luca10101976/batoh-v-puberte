@@ -58,9 +58,17 @@ create table public.child_profiles (
   parent_user_id uuid not null references auth.users(id) on delete cascade,
   child_name text not null,
   child_age integer not null check (child_age between 8 and 16),
+  pin_hash text,
   profile_code text not null unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table public.child_location_progress (
+  profile_code text not null,
+  location_id text not null,
+  completed_at timestamptz not null default now(),
+  primary key (profile_code, location_id)
 );
 
 create table public.child_friendships (
@@ -108,6 +116,7 @@ create index child_friendships_friend_child_profile_id_idx on public.child_frien
 create index child_expedition_invites_invitee_status_idx on public.child_expedition_invites (invitee_child_profile_id, status, created_at desc);
 create index child_expedition_invites_inviter_status_idx on public.child_expedition_invites (inviter_child_profile_id, status, created_at desc);
 create index child_push_subscriptions_profile_code_idx on public.child_push_subscriptions (profile_code);
+create index child_location_progress_completed_at_idx on public.child_location_progress (completed_at desc);
 
 alter table public.cities enable row level security;
 alter table public.locations enable row level security;
@@ -119,6 +128,7 @@ alter table public.child_profiles enable row level security;
 alter table public.child_friendships enable row level security;
 alter table public.child_expedition_invites enable row level security;
 alter table public.child_push_subscriptions enable row level security;
+alter table public.child_location_progress enable row level security;
 
 create policy "cities are readable by everyone"
 on public.cities for select
@@ -188,6 +198,62 @@ on public.child_profiles for update
 to authenticated
 using (auth.uid() = parent_user_id)
 with check (auth.uid() = parent_user_id);
+
+create policy "parents read own child location progress"
+on public.child_location_progress for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.profile_code = child_location_progress.profile_code
+      and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents insert own child location progress"
+on public.child_location_progress for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.profile_code = child_location_progress.profile_code
+      and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents update own child location progress"
+on public.child_location_progress for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.profile_code = child_location_progress.profile_code
+      and cp.parent_user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.profile_code = child_location_progress.profile_code
+      and cp.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents delete own child location progress"
+on public.child_location_progress for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles cp
+    where cp.profile_code = child_location_progress.profile_code
+      and cp.parent_user_id = auth.uid()
+  )
+);
 
 create policy "parents read own child friendships"
 on public.child_friendships for select

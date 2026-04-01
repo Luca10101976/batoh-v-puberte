@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAppState } from "@/components/app-state-provider";
 import { RegistrationGate } from "@/components/registration-gate";
-import { normalizePin } from "@/lib/pin";
+import { hashPin, normalizePin } from "@/lib/pin";
 
 type ChildProfileRow = {
   child_name: string;
@@ -68,12 +68,22 @@ export function ParentAuthGate() {
         return;
       }
 
+      let childPinHash: string | null = null;
+      const { data: pinRow } = await supabase
+        .from("child_profiles")
+        .select("pin_hash")
+        .eq("parent_user_id", parentUserId)
+        .limit(1)
+        .maybeSingle<{ pin_hash: string | null }>();
+      childPinHash = pinRow?.pin_hash ?? null;
+
       registrationAppliedRef.current = true;
       completeRegistration({
         name: data.child_name,
         age: data.child_age,
         profileCode: data.profile_code,
-        parentEmail: parentUserEmail
+        parentEmail: parentUserEmail,
+        childPinHash
       });
       router.replace("/profile");
     },
@@ -229,6 +239,8 @@ export function ParentAuthGate() {
       setError("Uložení profilu dítěte se nepodařilo.");
       return;
     }
+
+    await supabase.from("child_profiles").update({ pin_hash: hashPin(normalizedPin) }).eq("profile_code", profileCode);
 
     await fetch("/api/parent-alert", {
       method: "POST",

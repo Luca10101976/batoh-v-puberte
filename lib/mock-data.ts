@@ -161,10 +161,9 @@ export const locations: MapLocation[] = [
       {
         id: "cassel",
         name: "Cassel",
-        intro:
-          "Pomník má jen hlavu. Tělo chybí. Přesně ten typ podivnosti, kvůli kterému je Klamovka tak zvláštní.",
+        intro: "Někdo ztratí hlavu, někdo tělo.",
         background:
-          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Pomník se datuje rokem 1808 nebo 1838, historici se v tom neshodnou.",
+          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Jenže je tu háček. Pomník nejspíš vznikl roku 1808, to byly Edovi teprve 3 roky. To už měl válečného koně? Je tedy možné, že vznikl až roku 1838, historici sami neví.",
         tasks: [
           {
             id: "klamovka-cassel-1",
@@ -177,15 +176,8 @@ export const locations: MapLocation[] = [
             id: "klamovka-cassel-2",
             type: "question",
             typeLabel: "Otázka",
-            title: "Kdo to postavil",
-            content: "V roce 1808 měl Eduard jen 3 roky. Kdo pomník nejspíš nechal postavit?"
-          },
-          {
-            id: "klamovka-cassel-3",
-            type: "question",
-            typeLabel: "Otázka",
-            title: "Schody k orlům",
-            content: "Kolik schodů vede ke dvěma kamenným orlům v parku?"
+            title: "Kolik mu mohlo být",
+            content: "Sečti oba Eduardovy možné věky a číslo zapiš."
           },
           {
             id: "klamovka-cassel-4",
@@ -200,6 +192,14 @@ export const locations: MapLocation[] = [
             typeLabel: "Výzva",
             title: "Slovní hra",
             content: "Pod hlavou koně je nápis. Z písmen z toho nápisu vymysli aspoň 3 další slova."
+          },
+          {
+            id: "klamovka-cassel-3",
+            type: "question",
+            typeLabel: "Otázka",
+            title: "Hlídka sokolů",
+            content:
+              "Možná Casselovi tělo ukradli sokolové. Vydej se doprava, najdi, kde hlídkují dva kamenní orli, a spočítej schody."
           }
         ],
         clue: [

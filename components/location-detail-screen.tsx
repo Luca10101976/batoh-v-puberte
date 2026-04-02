@@ -1,13 +1,55 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation } from "@/lib/mock-data";
 
 export function LocationDetailScreen({ location }: { location: MapLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
+  const router = useRouter();
+  const [startMessage, setStartMessage] = useState("");
   const unlocked = isLocationUnlocked(location.id, location.unlocked);
   const joinedCount = state.squadMembers.filter((member) => member.joined).length;
+
+  const trustedContacts = state.trustedContacts.filter((item) => item.trim().length > 0);
+
+  async function runCheckinAndStart(mode: "solo" | "group") {
+    setStartMessage("");
+
+    if (trustedContacts.length === 0) {
+      setStartMessage("Nejdřív ulož aspoň jeden důvěryhodný kontakt v profilu.");
+      return;
+    }
+
+    const now = new Date().toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" });
+    const text =
+      `${state.profile.name} začíná misi ${location.name}. ` +
+      `Čas: ${now}. Oblast: ${location.areaHint}. ` +
+      `Otevřít hru: ${window.location.origin}/locations/${location.id}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Check-in mise",
+          text
+        });
+      } else {
+        const firstContact = trustedContacts[0];
+        const encoded = encodeURIComponent(text);
+        const target = firstContact.includes("@")
+          ? `mailto:${encodeURIComponent(firstContact)}?subject=${encodeURIComponent("Check-in mise")}&body=${encoded}`
+          : `sms:${encodeURIComponent(firstContact)}?body=${encoded}`;
+        window.location.href = target;
+      }
+
+      setActiveMode(mode);
+      router.push(`/play/${location.id}?mode=${mode}`);
+    } catch {
+      setStartMessage("Check-in nebyl odeslaný. Zkus to prosím znovu.");
+    }
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -88,7 +130,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Při startu hry běží bezpečnostní check-in.
+            Při startu hry se otevře check-in zpráva pro tvoje důvěryhodné kontakty.
           </p>
         </div>
       </section>
@@ -107,21 +149,23 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
       </section>
 
       <div className="grid grid-cols-2 gap-3">
-        <Link
-          href={`/play/${location.id}?mode=solo`}
-          onClick={() => setActiveMode("solo")}
+        <button
+          onClick={() => void runCheckinAndStart("solo")}
           className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 text-center text-base font-semibold text-white"
         >
           Hrát sám
-        </Link>
-        <Link
-          href={`/play/${location.id}?mode=group`}
-          onClick={() => setActiveMode("group")}
+        </button>
+        <button
+          onClick={() => void runCheckinAndStart("group")}
           className="rounded-[24px] bg-lime px-5 py-4 text-center text-base font-semibold text-night"
         >
           Hrát se skupinou
-        </Link>
+        </button>
       </div>
+      {startMessage ? <p className="text-sm text-mist">{startMessage}</p> : null}
+      <p className="text-xs text-mist/80">
+        Kontakt nastavíš při přihlášení. Kdykoliv ho můžeš změnit i v profilu.
+      </p>
     </main>
   );
 }

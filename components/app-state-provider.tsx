@@ -50,6 +50,7 @@ type AppState = {
   squadName: string;
   squadMembers: SquadMember[];
   safetyEmailsEnabled: boolean;
+  trustedContacts: string[];
 };
 
 type AppStateContextValue = {
@@ -68,6 +69,7 @@ type AppStateContextValue = {
   addFriendByCode: (payload: { friendCode: string; nickname?: string }) => { ok: boolean; message: string };
   removeFriendByCode: (friendCode: string) => void;
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
+  setTrustedContacts: (contacts: string[]) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
   setCurrentExpeditionId: (expeditionId: string | null) => void;
@@ -121,6 +123,8 @@ const initialState: AppState = {
     { id: SELF_MEMBER_ID, name: "Tyna", joined: true }
   ],
   safetyEmailsEnabled: true
+  ,
+  trustedContacts: []
 };
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
@@ -163,6 +167,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           currentExpeditionId: parsed.currentExpeditionId ?? null,
           squadMembers: migratedMembers
+          ,
+          trustedContacts: parsed.trustedContacts ?? []
         });
       } catch {
         window.localStorage.removeItem(STORAGE_KEY);
@@ -459,6 +465,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setTrustedContacts = useCallback((contacts: string[]) => {
+    const normalized = contacts
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 2);
+    setState((current) => ({
+      ...current,
+      trustedContacts: normalized
+    }));
+  }, []);
+
   const removeFriendByCode = useCallback((friendCode: string) => {
     const normalized = normalizeCode(friendCode);
     setState((current) => ({
@@ -570,6 +587,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addFriendByCode,
       removeFriendByCode,
       setFriendsFromCloud,
+      setTrustedContacts,
       setCity,
       setActiveMode,
       setCurrentExpeditionId,
@@ -587,6 +605,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       removeFriendByCode,
       completeRegistration,
       setFriendsFromCloud,
+      setTrustedContacts,
       hydrated,
       pinUnlocked,
       openParentAuthGate,

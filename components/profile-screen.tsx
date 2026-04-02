@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
@@ -167,6 +168,7 @@ function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: num
 }
 
 export function ProfileScreen() {
+  const router = useRouter();
   const {
     state,
     updateProfile,
@@ -176,7 +178,8 @@ export function ProfileScreen() {
     setFriendsFromCloud,
     setActiveMode,
     setCurrentExpeditionId,
-    getPlayerScore
+    getPlayerScore,
+    openParentAuthGate
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
@@ -185,6 +188,7 @@ export function ProfileScreen() {
   const [blockingFriendCode, setBlockingFriendCode] = useState<string | null>(null);
   const [sentInvites, setSentInvites] = useState<SentInviteRow[]>([]);
   const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
+  const [cloudReady, setCloudReady] = useState<boolean | null>(null);
   const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
@@ -210,6 +214,23 @@ export function ProfileScreen() {
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
   }, [state.profile.avatarConfig]);
+
+  useEffect(() => {
+    async function checkCloudSession() {
+      if (!supabase) {
+        setCloudReady(false);
+        return;
+      }
+
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      setCloudReady(Boolean(session?.user));
+    }
+
+    void checkCloudSession();
+  }, [supabase]);
 
   function selectedLabel(options: Array<{ value: string; label: string }>, value: string) {
     return options.find((option) => option.value === value)?.label ?? value;
@@ -901,6 +922,20 @@ export function ProfileScreen() {
 
       <section className="glass-card p-5">
         <h2 className="section-title">Přidat kamaráda</h2>
+        {cloudReady === false ? (
+          <div className="mt-3 rounded-2xl border border-coral/40 bg-coral/10 p-3">
+            <p className="text-sm text-white">Cloud účet rodiče není přihlášený.</p>
+            <button
+              onClick={() => {
+                openParentAuthGate();
+                router.replace("/");
+              }}
+              className="mt-3 rounded-xl bg-coral px-3 py-2 text-xs font-semibold text-white"
+            >
+              Přihlásit rodiče
+            </button>
+          </div>
+        ) : null}
         <div className="mt-4 space-y-3">
           <input
             value={friendCode}
@@ -911,7 +946,7 @@ export function ProfileScreen() {
           <p className="text-sm text-mist">Zadej kód kamaráda.</p>
           <button
             onClick={handleAddFriend}
-            disabled={savingFriend}
+            disabled={savingFriend || cloudReady === false}
             className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
           >
             {savingFriend ? "Přidávám..." : "Přidat kamaráda"}

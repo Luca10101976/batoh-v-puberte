@@ -56,6 +56,7 @@ type AppStateContextValue = {
   state: AppState;
   hydrated: boolean;
   pinUnlocked: boolean;
+  openParentAuthGate: () => void;
   completeRegistration: (payload: {
     name: string;
     age: number;
@@ -545,6 +546,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     });
   }, [supabase]);
 
+  const openParentAuthGate = useCallback(() => {
+    setState((current) => ({
+      ...current,
+      registrationCompleted: false
+    }));
+    setPinUnlocked(false);
+  }, []);
+
   const isLocationUnlocked = useCallback(
     (locationId: string, defaultUnlocked = false) =>
       defaultUnlocked || state.completedLocationIds.includes(locationId),
@@ -556,6 +565,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       state,
       hydrated,
       pinUnlocked,
+      openParentAuthGate,
       completeRegistration,
       addFriendByCode,
       removeFriendByCode,
@@ -579,6 +589,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setFriendsFromCloud,
       hydrated,
       pinUnlocked,
+      openParentAuthGate,
       isLocationUnlocked,
       getPlayerScore,
       resetProgress,

@@ -12,14 +12,18 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
   const [startMessage, setStartMessage] = useState("");
   const unlocked = isLocationUnlocked(location.id, location.unlocked);
   const joinedCount = state.squadMembers.filter((member) => member.joined).length;
-
-  const trustedContacts = state.trustedContacts.filter((item) => item.trim().length > 0);
+  const trustedEmails = state.trustedContacts
+    .map((item) => item.trim())
+    .filter((item) => item.includes("@"));
+  const fallbackEmail = state.parentEmail.trim();
 
   async function runCheckinAndStart(mode: "solo" | "group") {
     setStartMessage("");
 
-    if (trustedContacts.length === 0) {
-      setStartMessage("Nejdřív ulož aspoň jeden důvěryhodný kontakt v profilu.");
+    const targetEmail = trustedEmails[0] || (fallbackEmail.includes("@") ? fallbackEmail : "");
+
+    if (!targetEmail) {
+      setStartMessage("Nejdřív ulož check-in e-mail v profilu.");
       return;
     }
 
@@ -36,11 +40,8 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
           text
         });
       } else {
-        const firstContact = trustedContacts[0];
         const encoded = encodeURIComponent(text);
-        const target = firstContact.includes("@")
-          ? `mailto:${encodeURIComponent(firstContact)}?subject=${encodeURIComponent("Check-in mise")}&body=${encoded}`
-          : `sms:${encodeURIComponent(firstContact)}?body=${encoded}`;
+        const target = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent("Check-in mise")}&body=${encoded}`;
         window.location.href = target;
       }
 
@@ -130,7 +131,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Při startu hry se otevře check-in zpráva pro tvoje důvěryhodné kontakty.
+            Při startu hry se otevře check-in zpráva pro uložený e-mail.
           </p>
         </div>
       </section>
@@ -164,7 +165,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
       </div>
       {startMessage ? <p className="text-sm text-mist">{startMessage}</p> : null}
       <p className="text-xs text-mist/80">
-        Kontakt nastavíš při přihlášení. Kdykoliv ho můžeš změnit i v profilu.
+        Check-in e-mail nastavíš v profilu.
       </p>
     </main>
   );

@@ -699,8 +699,14 @@ export function ProfileScreen() {
   }
 
   function handleSaveTrustedContacts() {
-    setTrustedContacts([trustedContact1, trustedContact2]);
-    setInviteMessage("Důvěryhodné kontakty jsou uložené.");
+    const values = [trustedContact1, trustedContact2].map((item) => item.trim()).filter(Boolean);
+    const hasInvalid = values.some((item) => !item.includes("@"));
+    if (hasInvalid) {
+      setInviteMessage("Zadej prosím platný e-mail.");
+      return;
+    }
+    setTrustedContacts(values);
+    setInviteMessage("Check-in e-maily jsou uložené.");
   }
 
   return (
@@ -934,28 +940,28 @@ export function ProfileScreen() {
       </section>
 
       <section className="glass-card p-5">
-        <h2 className="section-title">Důvěryhodné kontakty</h2>
+        <h2 className="section-title">Check-in e-maily</h2>
         <p className="mt-2 text-sm text-mist">
-          Přidej 1 až 2 telefonní čísla. Při startu mise se dítěti otevře check-in ke sdílení.
+          Přidej 1 až 2 e-maily. Při startu mise se otevře check-in zpráva ke sdílení.
         </p>
         <div className="mt-4 space-y-3">
           <input
             value={trustedContact1}
             onChange={(event) => setTrustedContact1(event.target.value)}
-            placeholder="Telefon 1 (např. +420...)"
+            placeholder="E-mail 1 (např. rodic@email.cz)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
           <input
             value={trustedContact2}
             onChange={(event) => setTrustedContact2(event.target.value)}
-            placeholder="Telefon 2 (volitelné)"
+            placeholder="E-mail 2 (volitelné)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
           <button
             onClick={handleSaveTrustedContacts}
             className="w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
           >
-            Uložit kontakty
+            Uložit e-maily
           </button>
         </div>
       </section>

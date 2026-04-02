@@ -24,7 +24,6 @@ export function ParentAuthGate() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [trustedContact, setTrustedContact] = useState("");
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("11");
   const [childPin, setChildPin] = useState("");
@@ -57,7 +56,9 @@ export function ParentAuthGate() {
         .limit(1);
 
       if (profileError) {
-        setError("Nepodařilo se načíst profil dítěte. Zkus to znovu.");
+        setParentEmail(parentUserEmail);
+        setNeedsChildProfile(true);
+        setInfo("Profil dítěte se nepodařilo načíst, pokračuj vytvořením nového profilu.");
         setLoading(false);
         return;
       }
@@ -162,9 +163,7 @@ export function ParentAuthGate() {
         return;
       }
 
-      if (trustedContact.trim().length > 0) {
-        setTrustedContacts([trustedContact.trim()]);
-      }
+      setTrustedContacts([parentEmail.trim()]);
 
       await hydrateFromCloud(data.user.id, data.user.email ?? parentEmail.trim());
       setSaving(false);
@@ -241,11 +240,6 @@ export function ParentAuthGate() {
       return;
     }
 
-    if (trustedContact.trim().length > 0 && trustedContact.trim().length < 5) {
-      setError("Důvěryhodný kontakt je moc krátký.");
-      return;
-    }
-
     setSaving(true);
 
     const {
@@ -308,9 +302,7 @@ export function ParentAuthGate() {
       parentEmail: parentEmail || session.user.email || "",
       childPin: normalizedPin
     });
-    if (trustedContact.trim().length > 0) {
-      setTrustedContacts([trustedContact.trim()]);
-    }
+    setTrustedContacts([parentEmail || session.user.email || ""]);
     setSaving(false);
     router.replace("/profile");
   }
@@ -392,17 +384,6 @@ export function ParentAuthGate() {
               />
             </label>
 
-            <label className="block space-y-2">
-              <span className="text-sm text-mist">Telefon pro check-in (volitelné)</span>
-              <input
-                type="text"
-                value={trustedContact}
-                onChange={(event) => setTrustedContact(event.target.value)}
-                placeholder="+420 777 123 456"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
-              />
-            </label>
-
             {error ? <p className="text-sm text-coral">{error}</p> : null}
 
             <button
@@ -441,7 +422,7 @@ export function ParentAuthGate() {
         </h1>
         <p className="mt-2 text-sm leading-6 text-mist">
           {mode === "login"
-            ? "Přihlas se rodičovským e-mailem a heslem. Profil se pak obnoví i po změně telefonu."
+            ? "Přihlas se rodičovským e-mailem a heslem. Profil se pak obnoví i po změně zařízení."
             : "Pro první spuštění: zadej e-mail rodiče a heslo. Rodiči přijde potvrzovací e-mail."}
         </p>
 
@@ -463,17 +444,6 @@ export function ParentAuthGate() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="aspoň 6 znaků"
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="text-sm text-mist">Telefon pro check-in (volitelné)</span>
-            <input
-              type="text"
-              value={trustedContact}
-              onChange={(event) => setTrustedContact(event.target.value)}
-              placeholder="+420 777 123 456"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
             />
           </label>

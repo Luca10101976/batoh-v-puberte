@@ -1,4 +1,4 @@
-const CACHE_NAME = "batoh-v-puberte-v1";
+const CACHE_NAME = "batoh-v-puberte-v2";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icons/icon.svg"];
 
@@ -25,6 +25,12 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
 
   if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  // Never cache Next.js build assets. Caching these can mix old/new chunks after deploy.
+  if (requestUrl.pathname.startsWith("/_next/")) {
+    event.respondWith(fetch(event.request));
     return;
   }
 

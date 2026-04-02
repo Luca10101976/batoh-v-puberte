@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation } from "@/lib/mock-data";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export function LocationDetailScreen({ location }: { location: MapLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
@@ -12,43 +13,46 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
   const [startMessage, setStartMessage] = useState("");
   const unlocked = isLocationUnlocked(location.id, location.unlocked);
   const joinedCount = state.squadMembers.filter((member) => member.joined).length;
-  const trustedEmails = state.trustedContacts
-    .map((item) => item.trim())
-    .filter((item) => item.includes("@"));
-  const fallbackEmail = state.parentEmail.trim();
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
 
   async function runCheckinAndStart(mode: "solo" | "group") {
     setStartMessage("");
-
-    const targetEmail = trustedEmails[0] || (fallbackEmail.includes("@") ? fallbackEmail : "");
-
-    if (!targetEmail) {
-      setStartMessage("Nejdřív ulož check-in e-mail v profilu.");
+    const parentEmail = state.parentEmail.trim();
+    if (!parentEmail.includes("@")) {
+      setStartMessage("Nejdřív dokonči přihlášení rodiče.");
       return;
     }
 
-    const now = new Date().toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" });
-    const text =
-      `${state.profile.name} začíná misi ${location.name}. ` +
-      `Čas: ${now}. Oblast: ${location.areaHint}. ` +
-      `Otevřít hru: ${window.location.origin}/locations/${location.id}`;
-
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Check-in mise",
-          text
-        });
-      } else {
-        const encoded = encodeURIComponent(text);
-        const target = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent("Check-in mise")}&body=${encoded}`;
-        window.location.href = target;
+      if (supabase) {
+        const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+        if (accessToken) {
+          await fetch("/api/parent-alert", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              event: "checkin",
+              parentEmail,
+              childName: state.profile.name,
+              childAge: state.profile.age
+            })
+          }).catch(() => null);
+        }
       }
 
       setActiveMode(mode);
       router.push(`/play/${location.id}?mode=${mode}`);
     } catch {
-      setStartMessage("Check-in nebyl odeslaný. Zkus to prosím znovu.");
+      setStartMessage("Upozornění rodiči se nepodařilo odeslat.");
     }
   }
 
@@ -131,7 +135,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
           <p className="text-sm font-medium text-white">{location.areaHint}</p>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Při startu hry se otevře check-in zpráva pro uložený e-mail.
+            Při startu hry odejde informace na registrovaný rodičovský e-mail.
           </p>
         </div>
       </section>
@@ -164,9 +168,6 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         </button>
       </div>
       {startMessage ? <p className="text-sm text-mist">{startMessage}</p> : null}
-      <p className="text-xs text-mist/80">
-        Check-in e-mail nastavíš v profilu.
-      </p>
     </main>
   );
 }

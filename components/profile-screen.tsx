@@ -176,7 +176,6 @@ export function ProfileScreen() {
     addFriendByCode,
     removeFriendByCode,
     setFriendsFromCloud,
-    setTrustedContacts,
     setActiveMode,
     setCurrentExpeditionId,
     getPlayerScore,
@@ -190,8 +189,6 @@ export function ProfileScreen() {
   const [sentInvites, setSentInvites] = useState<SentInviteRow[]>([]);
   const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
   const [cloudReady, setCloudReady] = useState<boolean | null>(null);
-  const [trustedContact1, setTrustedContact1] = useState(state.trustedContacts[0] ?? "");
-  const [trustedContact2, setTrustedContact2] = useState(state.trustedContacts[1] ?? "");
   const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
@@ -217,11 +214,6 @@ export function ProfileScreen() {
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
   }, [state.profile.avatarConfig]);
-
-  useEffect(() => {
-    setTrustedContact1(state.trustedContacts[0] ?? "");
-    setTrustedContact2(state.trustedContacts[1] ?? "");
-  }, [state.trustedContacts]);
 
   useEffect(() => {
     async function checkCloudSession() {
@@ -698,17 +690,6 @@ export function ProfileScreen() {
     setInviteMessage("Čekající pozvánka byla zrušená.");
   }
 
-  function handleSaveTrustedContacts() {
-    const values = [trustedContact1, trustedContact2].map((item) => item.trim()).filter(Boolean);
-    const hasInvalid = values.some((item) => !item.includes("@"));
-    if (hasInvalid) {
-      setInviteMessage("Zadej prosím platný e-mail.");
-      return;
-    }
-    setTrustedContacts(values);
-    setInviteMessage("Check-in e-maily jsou uložené.");
-  }
-
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card overflow-hidden p-5">
@@ -936,33 +917,6 @@ export function ProfileScreen() {
           <p className="text-center text-sm leading-6 text-mist">
             Kamarád si tě přidá opsáním tohoto kódu.
           </p>
-        </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <h2 className="section-title">Check-in e-maily</h2>
-        <p className="mt-2 text-sm text-mist">
-          Přidej 1 až 2 e-maily. Při startu mise se otevře check-in zpráva ke sdílení.
-        </p>
-        <div className="mt-4 space-y-3">
-          <input
-            value={trustedContact1}
-            onChange={(event) => setTrustedContact1(event.target.value)}
-            placeholder="E-mail 1 (např. rodic@email.cz)"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
-          />
-          <input
-            value={trustedContact2}
-            onChange={(event) => setTrustedContact2(event.target.value)}
-            placeholder="E-mail 2 (volitelné)"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
-          />
-          <button
-            onClick={handleSaveTrustedContacts}
-            className="w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
-          >
-            Uložit e-maily
-          </button>
         </div>
       </section>
 

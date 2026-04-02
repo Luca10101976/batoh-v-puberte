@@ -737,7 +737,7 @@ export function ProfileScreen() {
             <div className="text-xs text-mist">Body</div>
           </div>
           <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-xl font-semibold">{state.squadMembers.filter((m) => m.joined).length}</div>
+            <div className="text-xl font-semibold">{friends.length}</div>
             <div className="text-xs text-mist">Parta</div>
           </div>
         </div>

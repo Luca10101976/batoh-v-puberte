@@ -243,7 +243,7 @@ export function ParentAuthGate() {
     await supabase.from("child_profiles").update({ pin_hash: hashPin(normalizedPin) }).eq("profile_code", profileCode);
 
     const accessToken = session.access_token ?? "";
-    await fetch("/api/parent-alert", {
+    const parentAlertResponse = await fetch("/api/parent-alert", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -255,7 +255,16 @@ export function ParentAuthGate() {
         childName: trimmedName,
         childAge: numericAge
       })
-    }).catch(() => undefined);
+    }).catch(() => null);
+
+    if (!parentAlertResponse?.ok) {
+      const responsePayload = await parentAlertResponse?.json().catch(() => null);
+      const responseMessage =
+        typeof responsePayload?.message === "string" ? responsePayload.message : "E-mail se nepodařilo odeslat.";
+      setInfo(`Profil dítěte je uložený. Upozornění rodiči neodešlo: ${responseMessage}`);
+    } else {
+      setInfo("Profil dítěte je uložený a upozornění rodiči bylo odeslané.");
+    }
 
     registrationAppliedRef.current = true;
     completeRegistration({

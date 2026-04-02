@@ -34,17 +34,37 @@ export default function AuthCallbackPage() {
 
       try {
         const url = new URL(window.location.href);
+        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+        const hashError = hashParams.get("error");
+        const hashErrorDescription = hashParams.get("error_description");
         const code = url.searchParams.get("code");
-        const tokenHash = url.searchParams.get("token_hash");
-        const type = url.searchParams.get("type");
+        const tokenHash = url.searchParams.get("token_hash") || hashParams.get("token_hash");
+        const type = url.searchParams.get("type") || hashParams.get("type");
+
+        if (hashError) {
+          const normalizedDescription = (hashErrorDescription || "").toLowerCase();
+          if (normalizedDescription.includes("otp_expired")) {
+            setMessage("Potvrzovací odkaz vypršel. Požádej prosím o nový.");
+          } else {
+            setMessage("Potvrzení se nepodařilo. Zkus otevřít nový odkaz z e-mailu.");
+          }
+          router.replace("/");
+          return;
+        }
 
         if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            throw error;
+          }
         } else if (tokenHash && type && ALLOWED_VERIFY_TYPES.has(type as VerifyType)) {
-          await supabase.auth.verifyOtp({
+          const { error } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: type as VerifyType
           });
+          if (error) {
+            throw error;
+          }
         }
 
         const {
@@ -57,10 +77,15 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        setMessage("Potvrzení proběhlo, přihlas se prosím rodičovským e-mailem a heslem.");
-        router.replace("/");
-      } catch {
-        setMessage("Potvrzení se nepodařilo dokončit. Zkus otevřít odkaz znovu.");
+        setMessage("Potvrzení proběhlo. Přihlas se prosím rodičovským e-mailem a heslem.");
+        router.replace("/?auth=confirmed");
+      } catch (error: any) {
+        const msg = String(error?.message || "").toLowerCase();
+        if (msg.includes("expired")) {
+          setMessage("Potvrzovací odkaz vypršel. Požádej prosím o nový.");
+        } else {
+          setMessage("Potvrzení se nepodařilo dokončit. Zkus otevřít nový odkaz z e-mailu.");
+        }
       }
     }
 

@@ -936,19 +936,19 @@ export function ProfileScreen() {
       <section className="glass-card p-5">
         <h2 className="section-title">Důvěryhodné kontakty</h2>
         <p className="mt-2 text-sm text-mist">
-          Přidej 1 až 2 kontakty (telefon nebo e-mail). Při startu mise se dítěti otevře check-in ke sdílení.
+          Přidej 1 až 2 telefonní čísla. Při startu mise se dítěti otevře check-in ke sdílení.
         </p>
         <div className="mt-4 space-y-3">
           <input
             value={trustedContact1}
             onChange={(event) => setTrustedContact1(event.target.value)}
-            placeholder="Kontakt 1 (např. +420..., nebo rodič@email.cz)"
+            placeholder="Telefon 1 (např. +420...)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
           <input
             value={trustedContact2}
             onChange={(event) => setTrustedContact2(event.target.value)}
-            placeholder="Kontakt 2 (volitelné)"
+            placeholder="Telefon 2 (volitelné)"
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
           <button

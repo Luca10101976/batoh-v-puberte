@@ -113,6 +113,20 @@ export function ParentAuthGate() {
     bootstrap();
   }, [hydrateFromCloud, supabase]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("auth") === "confirmed") {
+      setInfo("E-mail rodiče je potvrzený. Teď se přihlas rodičovským e-mailem a heslem.");
+      if (url.pathname === "/") {
+        url.searchParams.delete("auth");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+    }
+  }, []);
+
   async function handleParentAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -165,7 +179,15 @@ export function ParentAuthGate() {
 
     if (signUpError || !data.user) {
       setSaving(false);
-      setError(signUpError?.message || "Registrace rodiče se nepodařila.");
+      const message = String(signUpError?.message || "");
+      const normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.includes("rate limit")) {
+        setError("Limit pro odeslání e-mailu je teď vyčerpaný. Počkej chvíli a zkus to znovu.");
+      } else if (normalizedMessage.includes("already registered")) {
+        setError("Tento e-mail už je registrovaný. Přepni na Přihlášení dítěte.");
+      } else {
+        setError(message || "Registrace rodiče se nepodařila.");
+      }
       return;
     }
 
@@ -369,12 +391,12 @@ export function ParentAuthGate() {
             </label>
 
             <label className="block space-y-2">
-              <span className="text-sm text-mist">Telefon nebo e-mail pro check-in (volitelné)</span>
+              <span className="text-sm text-mist">Telefon pro check-in (volitelné)</span>
               <input
                 type="text"
                 value={trustedContact}
                 onChange={(event) => setTrustedContact(event.target.value)}
-                placeholder="+420 777 123 456 nebo rodic@email.cz"
+                placeholder="+420 777 123 456"
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
               />
             </label>
@@ -444,12 +466,12 @@ export function ParentAuthGate() {
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm text-mist">Telefon nebo e-mail pro check-in (volitelné)</span>
+            <span className="text-sm text-mist">Telefon pro check-in (volitelné)</span>
             <input
               type="text"
               value={trustedContact}
               onChange={(event) => setTrustedContact(event.target.value)}
-              placeholder="+420 777 123 456 nebo rodic@email.cz"
+              placeholder="+420 777 123 456"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
             />
           </label>

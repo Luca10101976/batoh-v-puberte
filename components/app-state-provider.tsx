@@ -65,6 +65,7 @@ type AppStateContextValue = {
     childPinHash?: string | null;
   }) => void;
   addFriendByCode: (payload: { friendCode: string; nickname?: string }) => { ok: boolean; message: string };
+  removeFriendByCode: (friendCode: string) => void;
   setFriendsFromCloud: (friends: Array<{ code: string; name: string }>) => void;
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
@@ -457,6 +458,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const removeFriendByCode = useCallback((friendCode: string) => {
+    const normalized = normalizeCode(friendCode);
+    setState((current) => ({
+      ...current,
+      squadMembers: current.squadMembers.filter((member) => member.id === SELF_MEMBER_ID || member.id !== normalized)
+    }));
+  }, []);
+
   const setActiveMode = useCallback((mode: "solo" | "group") => {
     setState((current) => (current.activeMode === mode ? current : { ...current, activeMode: mode }));
   }, []);
@@ -549,6 +558,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       pinUnlocked,
       completeRegistration,
       addFriendByCode,
+      removeFriendByCode,
       setFriendsFromCloud,
       setCity,
       setActiveMode,
@@ -564,6 +574,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [
       completeLocation,
       addFriendByCode,
+      removeFriendByCode,
       completeRegistration,
       setFriendsFromCloud,
       hydrated,

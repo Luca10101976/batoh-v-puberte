@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CitySelector } from "@/components/city-selector";
 import { HeroCard } from "@/components/hero-card";
@@ -94,142 +94,171 @@ export function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    async function loadFriendFeed() {
-      if (!supabase || !state.profileCode) {
-        setFeedLoaded(true);
-        return;
-      }
-
-      const { data: ownProfile } = await supabase
-        .from("child_profiles")
-        .select("id")
-        .eq("profile_code", state.profileCode)
-        .limit(1)
-        .maybeSingle<{ id: string }>();
-
-      if (!ownProfile?.id) {
-        setFriendFeed([]);
-        setFeedLoaded(true);
-        return;
-      }
-
-      const [{ data: outgoing }, { data: incoming }] = await Promise.all([
-        supabase
-          .from("child_friendships")
-          .select("friend_profile_code, friend_display_name, created_at")
-          .eq("child_profile_id", ownProfile.id)
-          .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("child_friendships")
-          .select("child_profile_id, created_at")
-          .eq("friend_child_profile_id", ownProfile.id)
-          .order("created_at", { ascending: false })
-          .limit(8)
-      ]);
-
-      const incomingRows = (incoming as IncomingFriendshipRow[] | null) ?? [];
-      const incomingIds = incomingRows.map((row) => row.child_profile_id);
-      let incomingProfilesById = new Map<string, { profile_code: string; child_name: string }>();
-
-      if (incomingIds.length > 0) {
-        const { data: incomingProfiles } = await supabase
-          .from("child_profiles")
-          .select("id, profile_code, child_name")
-          .in("id", incomingIds);
-
-        incomingProfilesById = new Map(
-          (((incomingProfiles as Array<{ id: string; profile_code: string; child_name: string }> | null) ?? []).map(
-            (row) => [row.id, { profile_code: row.profile_code, child_name: row.child_name }]
-          ))
-        );
-      }
-
-      const incomingFeed: FriendActivityRow[] = incomingRows
-        .map((row) => {
-          const profile = incomingProfilesById.get(row.child_profile_id);
-          if (!profile) {
-            return null;
-          }
-
-          return {
-            friend_profile_code: profile.profile_code,
-            friend_display_name: profile.child_name,
-            created_at: row.created_at
-          };
-        })
-        .filter((row): row is FriendActivityRow => Boolean(row));
-
-      const mergedFeed = [...((outgoing as FriendActivityRow[] | null) ?? []), ...incomingFeed]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 8);
-
-      setFriendFeed(mergedFeed);
+  const loadFriendFeed = useCallback(async () => {
+    if (!supabase || !state.profileCode) {
       setFeedLoaded(true);
+      return;
     }
 
-    loadFriendFeed();
+    const { data: ownProfile } = await supabase
+      .from("child_profiles")
+      .select("id")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (!ownProfile?.id) {
+      setFriendFeed([]);
+      setFeedLoaded(true);
+      return;
+    }
+
+    const [{ data: outgoing }, { data: incoming }] = await Promise.all([
+      supabase
+        .from("child_friendships")
+        .select("friend_profile_code, friend_display_name, created_at")
+        .eq("child_profile_id", ownProfile.id)
+        .order("created_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("child_friendships")
+        .select("child_profile_id, created_at")
+        .eq("friend_child_profile_id", ownProfile.id)
+        .order("created_at", { ascending: false })
+        .limit(8)
+    ]);
+
+    const incomingRows = (incoming as IncomingFriendshipRow[] | null) ?? [];
+    const incomingIds = incomingRows.map((row) => row.child_profile_id);
+    let incomingProfilesById = new Map<string, { profile_code: string; child_name: string }>();
+
+    if (incomingIds.length > 0) {
+      const { data: incomingProfiles } = await supabase
+        .from("child_profiles")
+        .select("id, profile_code, child_name")
+        .in("id", incomingIds);
+
+      incomingProfilesById = new Map(
+        (((incomingProfiles as Array<{ id: string; profile_code: string; child_name: string }> | null) ?? []).map(
+          (row) => [row.id, { profile_code: row.profile_code, child_name: row.child_name }]
+        ))
+      );
+    }
+
+    const incomingFeed: FriendActivityRow[] = incomingRows
+      .map((row) => {
+        const profile = incomingProfilesById.get(row.child_profile_id);
+        if (!profile) {
+          return null;
+        }
+
+        return {
+          friend_profile_code: profile.profile_code,
+          friend_display_name: profile.child_name,
+          created_at: row.created_at
+        };
+      })
+      .filter((row): row is FriendActivityRow => Boolean(row));
+
+    const mergedFeed = [...((outgoing as FriendActivityRow[] | null) ?? []), ...incomingFeed]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 8);
+
+    setFriendFeed(mergedFeed);
+    setFeedLoaded(true);
+  }, [state.profileCode, supabase]);
+
+  const loadInvites = useCallback(async () => {
+    if (!supabase || !state.profileCode) {
+      setInvitesLoaded(true);
+      return;
+    }
+
+    const { data: ownProfile } = await supabase
+      .from("child_profiles")
+      .select("id")
+      .eq("profile_code", state.profileCode)
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (!ownProfile?.id) {
+      setOwnChildProfileId(null);
+      setPendingInvites([]);
+      setInvitesLoaded(true);
+      return;
+    }
+
+    setOwnChildProfileId(ownProfile.id);
+
+    const { data } = await supabase
+      .from("child_expedition_invites")
+      .select("id, expedition_id, inviter_profile_code, inviter_display_name, created_at")
+      .eq("invitee_child_profile_id", ownProfile.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    setPendingInvites((data as PendingInviteRow[]) ?? []);
+    setInvitesLoaded(true);
   }, [state.profileCode, supabase]);
 
   useEffect(() => {
-    async function loadInvites() {
-      if (!supabase || !state.profileCode) {
-        setInvitesLoaded(true);
-        return;
-      }
+    void loadFriendFeed();
+  }, [loadFriendFeed]);
 
-      const { data: ownProfile } = await supabase
-        .from("child_profiles")
-        .select("id")
-        .eq("profile_code", state.profileCode)
-        .limit(1)
-        .maybeSingle<{ id: string }>();
+  useEffect(() => {
+    void loadInvites();
+  }, [loadInvites]);
 
-      if (!ownProfile?.id) {
-        setOwnChildProfileId(null);
-        setPendingInvites([]);
-        setInvitesLoaded(true);
-        return;
-      }
-
-      setOwnChildProfileId(ownProfile.id);
-
-      const { data } = await supabase
-        .from("child_expedition_invites")
-        .select("id, expedition_id, inviter_profile_code, inviter_display_name, created_at")
-        .eq("invitee_child_profile_id", ownProfile.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      setPendingInvites((data as PendingInviteRow[]) ?? []);
-      setInvitesLoaded(true);
+  useEffect(() => {
+    if (!supabase || !state.profileCode) {
+      return;
     }
 
-    loadInvites();
-  }, [state.profileCode, supabase]);
+    const channel = supabase
+      .channel(`home-live-${state.profileCode}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "child_expedition_invites" },
+        () => {
+          void loadInvites();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "child_friendships" },
+        () => {
+          void loadFriendFeed();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadFriendFeed, loadInvites, state.profileCode, supabase]);
 
   async function handleInviteResponse(invite: PendingInviteRow, decision: "accepted" | "rejected") {
-    if (!supabase || !ownChildProfileId) {
+    if (!supabase || !ownChildProfileId || !state.profileCode) {
       return;
     }
 
     setRespondingInviteId(invite.id);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = await fetch("/api/invites/respond", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify({
+        profileCode: state.profileCode,
+        inviteId: invite.id,
+        decision
+      })
+    }).catch(() => null);
 
-    const { error } = await supabase
-      .from("child_expedition_invites")
-      .update(
-        {
-          status: decision,
-          responded_at: new Date().toISOString()
-        } as never
-      )
-      .eq("id", invite.id)
-      .eq("invitee_child_profile_id", ownChildProfileId)
-      .eq("status", "pending");
-
-    if (error) {
+    if (!response?.ok) {
       setRespondingInviteId(null);
       return;
     }
@@ -237,14 +266,15 @@ export function HomeScreen() {
     setPendingInvites((current) => current.filter((row) => row.id !== invite.id));
 
     if (decision === "accepted") {
+      const payload = (await response.json()) as {
+        expeditionId?: string | null;
+        inviter?: { code: string; name: string };
+      };
       setActiveMode("group");
-      setCurrentExpeditionId(invite.expedition_id);
-      setFriendsFromCloud([
-        {
-          code: invite.inviter_profile_code,
-          name: invite.inviter_display_name
-        }
-      ]);
+      setCurrentExpeditionId(payload.expeditionId ?? invite.expedition_id);
+      if (payload.inviter?.code && payload.inviter?.name) {
+        setFriendsFromCloud([{ code: payload.inviter.code, name: payload.inviter.name }]);
+      }
     }
 
     setRespondingInviteId(null);

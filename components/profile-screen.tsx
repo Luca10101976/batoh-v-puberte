@@ -21,6 +21,12 @@ type IncomingFriendshipRow = {
   child_profile_id: string;
 };
 
+type SentInviteRow = {
+  id: string;
+  invitee_display_name: string;
+  created_at: string;
+};
+
 type ResolvedFriendProfile = {
   id: string;
   name: string;
@@ -166,6 +172,7 @@ export function ProfileScreen() {
     updateProfile,
     isLocationUnlocked,
     addFriendByCode,
+    removeFriendByCode,
     setFriendsFromCloud,
     setActiveMode,
     setCurrentExpeditionId,
@@ -175,6 +182,9 @@ export function ProfileScreen() {
   const [friendMessage, setFriendMessage] = useState("");
   const [savingFriend, setSavingFriend] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
+  const [blockingFriendCode, setBlockingFriendCode] = useState<string | null>(null);
+  const [sentInvites, setSentInvites] = useState<SentInviteRow[]>([]);
+  const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
   const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
@@ -264,6 +274,81 @@ export function ProfileScreen() {
     }
 
     syncCloudFriends();
+  }, [setFriendsFromCloud, state.profileCode, supabase]);
+
+  useEffect(() => {
+    async function loadSentInvites() {
+      if (!supabase || !state.profileCode) {
+        setSentInvites([]);
+        return;
+      }
+
+      const { data: ownProfile } = await supabase
+        .from("child_profiles")
+        .select("id")
+        .eq("profile_code", state.profileCode)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (!ownProfile?.id) {
+        setSentInvites([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("child_expedition_invites")
+        .select("id, invitee_display_name, created_at")
+        .eq("inviter_child_profile_id", ownProfile.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      setSentInvites((data as SentInviteRow[] | null) ?? []);
+    }
+
+    void loadSentInvites();
+  }, [state.profileCode, supabase, inviteMessage]);
+
+  useEffect(() => {
+    if (!supabase || !state.profileCode) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`profile-live-${state.profileCode}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "child_friendships" },
+        () => {
+          void (async () => {
+            const { data: ownProfile } = await supabase
+              .from("child_profiles")
+              .select("id")
+              .eq("profile_code", state.profileCode)
+              .limit(1)
+              .maybeSingle<{ id: string }>();
+            if (!ownProfile?.id) {
+              return;
+            }
+            const { data: outgoingFriendships } = await supabase
+              .from("child_friendships")
+              .select("friend_profile_code, friend_display_name")
+              .eq("child_profile_id", ownProfile.id);
+
+            const merged = (((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
+              code: row.friend_profile_code,
+              name: row.friend_display_name
+            })) as Array<{ code: string; name: string }>);
+
+            setFriendsFromCloud(merged);
+          })();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [setFriendsFromCloud, state.profileCode, supabase]);
 
   async function ensureOwnCloudProfile() {
@@ -458,45 +543,9 @@ export function ProfileScreen() {
       setInviteMessage("Kamarád s tímto kódem nebyl nalezen.");
       return;
     }
-
-    const { data: existingPending } = await supabase
-      .from("child_expedition_invites")
-      .select("id")
-      .eq("inviter_child_profile_id", ownProfile.id)
-      .eq("invitee_child_profile_id", targetProfile.id)
-      .eq("status", "pending")
-      .limit(1)
-      .maybeSingle<{ id: string }>();
-
-    if (existingPending?.id) {
-      setInvitingFriendCode(null);
-      setInviteMessage(`Pozvánka pro ${friendName} už čeká na potvrzení.`);
-      return;
-    }
-
-    const { data: inviteRow, error: inviteError } = await supabase
-      .from("child_expedition_invites")
-      .insert({
-        inviter_child_profile_id: ownProfile.id,
-        inviter_profile_code: ownProfile.profile_code,
-        inviter_display_name: ownProfile.child_name,
-        invitee_child_profile_id: targetProfile.id,
-        invitee_profile_code: targetProfile.code,
-        invitee_display_name: targetProfile.name,
-        status: "pending"
-      })
-      .select("id, expedition_id")
-      .single<{ id: string; expedition_id: string }>();
-
-    if (inviteError) {
-      setInvitingFriendCode(null);
-      setInviteMessage("Pozvánku se nepodařilo odeslat.");
-      return;
-    }
-
     const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
 
-    await fetch("/api/push/notify", {
+    const response = await fetch("/api/invites/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -504,18 +553,120 @@ export function ProfileScreen() {
       },
       body: JSON.stringify({
         sourceProfileCode: ownProfile.profile_code,
-        targetProfileCode: targetProfile.code,
-        inviteId: inviteRow?.id,
-        title: "Nová pozvánka do výpravy",
-        message: `${ownProfile.child_name} tě zve do výpravy.`,
-        url: "/"
+        targetProfileCode: targetProfile.code
       })
-    }).catch(() => undefined);
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setInvitingFriendCode(null);
+      const payload = (await response?.json().catch(() => ({}))) as { error?: string };
+      if (payload.error === "blocked") {
+        setInviteMessage(`Pozvánku nelze odeslat, ${friendName} má aktivní blokaci.`);
+      } else {
+        setInviteMessage("Pozvánku se nepodařilo odeslat.");
+      }
+      return;
+    }
+
+    const createPayload = (await response.json()) as {
+      alreadyPending?: boolean;
+      invite?: { id?: string; expeditionId?: string };
+    };
+    const inviteId = createPayload.invite?.id;
+    const expeditionId = createPayload.invite?.expeditionId ?? null;
+
+    if (inviteId) {
+      await fetch("/api/push/notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
+        body: JSON.stringify({
+          sourceProfileCode: ownProfile.profile_code,
+          targetProfileCode: targetProfile.code,
+          inviteId,
+          title: "Nová pozvánka do výpravy",
+          message: `${ownProfile.child_name} tě zve do výpravy.`,
+          url: "/"
+        })
+      }).catch(() => undefined);
+    }
 
     setActiveMode("group");
-    setCurrentExpeditionId(inviteRow?.expedition_id ?? null);
+    setCurrentExpeditionId(expeditionId);
     setInvitingFriendCode(null);
-    setInviteMessage(`Pozvánka pro ${friendName} byla odeslaná.`);
+    setInviteMessage(
+      createPayload.alreadyPending
+        ? `Pozvánka pro ${friendName} už čeká na potvrzení.`
+        : `Pozvánka pro ${friendName} byla odeslaná.`
+    );
+  }
+
+  async function handleBlockFriend(friendCode: string, friendName: string) {
+    if (!supabase || !state.profileCode) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Opravdu chceš zablokovat hráče ${friendName}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBlockingFriendCode(friendCode);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = await fetch("/api/invites/block", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify({
+        sourceProfileCode: state.profileCode,
+        targetProfileCode: friendCode,
+        block: true
+      })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setBlockingFriendCode(null);
+      setInviteMessage("Blokaci se nepodařilo uložit.");
+      return;
+    }
+
+    removeFriendByCode(friendCode);
+    setBlockingFriendCode(null);
+    setInviteMessage(`${friendName} byl zablokován/a.`);
+  }
+
+  async function handleCancelInvite(inviteId: string) {
+    if (!supabase || !state.profileCode) {
+      return;
+    }
+
+    setCancelingInviteId(inviteId);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = await fetch("/api/invites/cancel", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify({
+        sourceProfileCode: state.profileCode,
+        inviteId
+      })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setCancelingInviteId(null);
+      setInviteMessage("Zrušení pozvánky se nepodařilo.");
+      return;
+    }
+
+    setSentInvites((current) => current.filter((invite) => invite.id !== inviteId));
+    setCancelingInviteId(null);
+    setInviteMessage("Čekající pozvánka byla zrušená.");
   }
 
   return (
@@ -799,12 +950,44 @@ export function ProfileScreen() {
                   >
                     {invitingFriendCode === friend.id ? "Posílám…" : "Pozvat"}
                   </button>
+                  <button
+                    onClick={() => handleBlockFriend(friend.id, friend.name)}
+                    disabled={blockingFriendCode === friend.id}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-coral"
+                  >
+                    {blockingFriendCode === friend.id ? "Blokuju…" : "Blokovat"}
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
         {inviteMessage ? <p className="mt-3 text-sm text-mist">{inviteMessage}</p> : null}
+      </section>
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Odeslané pozvánky</h2>
+        {sentInvites.length === 0 ? (
+          <p className="mt-4 text-sm text-mist">Teď nemáš žádnou čekající pozvánku.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {sentInvites.map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
+                <div>
+                  <div className="font-medium">{invite.invitee_display_name}</div>
+                  <div className="text-sm text-mist">Čeká na potvrzení</div>
+                </div>
+                <button
+                  onClick={() => handleCancelInvite(invite.id)}
+                  disabled={cancelingInviteId === invite.id}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-coral"
+                >
+                  {cancelingInviteId === invite.id ? "Ruším…" : "Zrušit"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
     </main>

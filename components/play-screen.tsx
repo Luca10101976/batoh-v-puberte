@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation, type Task } from "@/lib/mock-data";
 import { taskAnswers } from "@/lib/task-answers";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown";
 const SELF_MEMBER_ID = "self";
@@ -37,6 +38,13 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
   const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
   const [partySnapshotIds, setPartySnapshotIds] = useState<string[]>([]);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     const mode = searchParams.get("mode");
@@ -104,6 +112,42 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     return `Body se připíšou ${joinedCount} potvrzeným členům skupiny ${state.squadName}.`;
   }, [joinedCount, state.activeMode, state.profile.name, state.squadName]);
 
+  async function finishLocation() {
+    const participants =
+      state.activeMode === "group" ? (partySnapshotIds.length > 0 ? partySnapshotIds : [SELF_MEMBER_ID]) : [SELF_MEMBER_ID];
+    const penaltyPoints = unknownCount * UNKNOWN_PENALTY_POINTS;
+    completeLocation(location.id, { participantIds: participants, penaltyPoints });
+
+    if (supabase && state.profileCode) {
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+      if (accessToken) {
+        const response = await fetch("/api/game/complete-location", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            profileCode: state.profileCode,
+            locationId: location.id,
+            expeditionId: state.currentExpeditionId,
+            mode: state.activeMode,
+            completedAt: new Date().toISOString()
+          })
+        }).catch(() => null);
+
+        if (response?.ok) {
+          const payload = (await response.json()) as { participantCodes?: string[] };
+          const participantIds = (payload.participantCodes ?? []).map((code) => code.trim().toUpperCase());
+          if (participantIds.length > 0) {
+            completeLocation(location.id, { participantIds, penaltyPoints });
+          }
+        }
+      }
+    }
+  }
+
   function advance() {
     setInput("");
     setStatus("idle");
@@ -120,11 +164,10 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       return;
     }
 
-    const participants =
-      state.activeMode === "group" ? (partySnapshotIds.length > 0 ? partySnapshotIds : [SELF_MEMBER_ID]) : [SELF_MEMBER_ID];
-    const penaltyPoints = unknownCount * UNKNOWN_PENALTY_POINTS;
-    completeLocation(location.id, { participantIds: participants, penaltyPoints });
-    setFinished(true);
+    void (async () => {
+      await finishLocation();
+      setFinished(true);
+    })();
   }
 
   function handleValidate() {

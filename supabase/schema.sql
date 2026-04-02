@@ -183,10 +183,39 @@ on public.child_profiles for select
 to authenticated
 using (auth.uid() = parent_user_id);
 
-create policy "authenticated can read child profiles for code matching"
+create policy "parents read connected child profiles via friendships"
 on public.child_profiles for select
 to authenticated
-using (true);
+using (
+  exists (
+    select 1
+    from public.child_profiles me
+    join public.child_friendships cf
+      on (
+        (cf.child_profile_id = me.id and cf.friend_child_profile_id = child_profiles.id)
+        or
+        (cf.friend_child_profile_id = me.id and cf.child_profile_id = child_profiles.id)
+      )
+    where me.parent_user_id = auth.uid()
+  )
+);
+
+create policy "parents read connected child profiles via invites"
+on public.child_profiles for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.child_profiles me
+    join public.child_expedition_invites inv
+      on (
+        (inv.inviter_child_profile_id = me.id and inv.invitee_child_profile_id = child_profiles.id)
+        or
+        (inv.invitee_child_profile_id = me.id and inv.inviter_child_profile_id = child_profiles.id)
+      )
+    where me.parent_user_id = auth.uid()
+  )
+);
 
 create policy "parents insert own child profiles"
 on public.child_profiles for insert

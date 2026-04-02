@@ -242,9 +242,13 @@ export function ParentAuthGate() {
 
     await supabase.from("child_profiles").update({ pin_hash: hashPin(normalizedPin) }).eq("profile_code", profileCode);
 
+    const accessToken = session.access_token ?? "";
     await fetch("/api/parent-alert", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
       body: JSON.stringify({
         event: "registration",
         parentEmail: parentEmail || session.user.email,

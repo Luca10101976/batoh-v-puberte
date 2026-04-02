@@ -38,16 +38,6 @@ export function RegistrationGate() {
     setError("");
     setSubmitting(true);
     completeRegistration({ name: trimmedName, age: numericAge, parentEmail: trimmedEmail });
-    void fetch("/api/parent-alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event: "registration",
-        parentEmail: trimmedEmail,
-        childName: trimmedName,
-        childAge: numericAge
-      })
-    }).catch(() => undefined);
     router.replace("/profile");
   }
 

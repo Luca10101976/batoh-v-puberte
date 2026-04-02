@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -27,6 +28,13 @@ export function MobileAppCard() {
   const [installHintOpen, setInstallHintOpen] = useState(false);
   const [pushStatus, setPushStatus] = useState<"idle" | "enabled" | "blocked" | "unsupported">("idle");
   const [pushMessage, setPushMessage] = useState("");
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     const isStandalone =
@@ -109,9 +117,14 @@ export function MobileAppCard() {
       });
     }
 
+    const accessToken = supabase ? (await supabase.auth.getSession()).data.session?.access_token ?? "" : "";
+
     const response = await fetch("/api/push/subscribe", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
       body: JSON.stringify({
         profileCode: state.profileCode,
         subscription: subscription.toJSON(),

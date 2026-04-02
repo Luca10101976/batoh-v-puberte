@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type PushSubscriptionPayload = {
-  endpoint: string;
-  keys?: {
-    p256dh?: string;
-    auth?: string;
-  };
+type ChildProfileRow = {
+  id: string;
+  child_name: string;
+  profile_code: string;
 };
+
+function normalizeCode(value: string) {
+  return value.trim().toUpperCase();
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -35,49 +37,47 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as {
-    profileCode?: string;
-    subscription?: PushSubscriptionPayload;
-    userAgent?: string;
-  };
+  const body = (await request.json()) as { profileCode?: string };
+  const requestedCode = normalizeCode(body.profileCode ?? "");
 
-  const profileCode = body.profileCode?.trim().toUpperCase();
-  const endpoint = body.subscription?.endpoint?.trim();
-  const p256dh = body.subscription?.keys?.p256dh?.trim();
-  const auth = body.subscription?.keys?.auth?.trim();
-
-  if (!profileCode || !endpoint || !p256dh || !auth) {
-    return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+  if (!requestedCode || requestedCode.length < 4) {
+    return NextResponse.json({ ok: false, error: "invalid_code" }, { status: 400 });
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+
   const { data: ownChildProfile } = await admin
     .from("child_profiles")
-    .select("id")
-    .eq("profile_code", profileCode)
+    .select("id, profile_code")
     .eq("parent_user_id", user.id)
     .limit(1)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; profile_code: string }>();
 
   if (!ownChildProfile?.id) {
-    return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
+    return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
 
-  const { error } = await admin.from("child_push_subscriptions").upsert(
-    {
-      profile_code: profileCode,
-      endpoint,
-      p256dh,
-      auth,
-      user_agent: body.userAgent || null,
-      updated_at: new Date().toISOString()
-    },
-    { onConflict: "endpoint" }
-  );
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: "save_failed" }, { status: 500 });
+  if (normalizeCode(ownChildProfile.profile_code) === requestedCode) {
+    return NextResponse.json({ ok: false, error: "own_code" }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  const { data: targetProfile } = await admin
+    .from("child_profiles")
+    .select("id, child_name, profile_code")
+    .eq("profile_code", requestedCode)
+    .limit(1)
+    .maybeSingle<ChildProfileRow>();
+
+  if (!targetProfile?.id) {
+    return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    profile: {
+      id: targetProfile.id,
+      name: targetProfile.child_name,
+      code: targetProfile.profile_code
+    }
+  });
 }

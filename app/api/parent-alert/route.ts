@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 type ParentAlertPayload = {
   parentEmail?: string;
@@ -10,6 +11,29 @@ type ParentAlertPayload = {
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 export async function POST(request: Request) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ ok: false, message: "Supabase auth není nastavené." }, { status: 500 });
+  }
+
+  const authHeader = request.headers.get("authorization") ?? "";
+  const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!accessToken) {
+    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
+  }
+
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+  const {
+    data: { user },
+    error: authError
+  } = await authClient.auth.getUser(accessToken);
+
+  if (authError || !user?.email) {
+    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
+  }
+
   const body = (await request.json()) as ParentAlertPayload;
   const parentEmail = body.parentEmail?.trim();
   const childName = body.childName?.trim();
@@ -22,6 +46,10 @@ export async function POST(request: Request) {
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
     return NextResponse.json({ ok: false, message: "Neplatný e-mail rodiče." }, { status: 400 });
+  }
+
+  if (user.email.toLowerCase() !== parentEmail.toLowerCase()) {
+    return NextResponse.json({ ok: false, message: "E-mail rodiče neodpovídá přihlášenému účtu." }, { status: 403 });
   }
 
   const resendApiKey = process.env.RESEND_API_KEY;

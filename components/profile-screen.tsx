@@ -21,6 +21,12 @@ type IncomingFriendshipRow = {
   child_profile_id: string;
 };
 
+type ResolvedFriendProfile = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 const HEAD_OPTIONS: Array<{ value: AvatarConfig["head"]; label: string }> = [
   { value: "round", label: "Kulatá" },
   { value: "oval", label: "Oválná" },
@@ -171,6 +177,7 @@ export function ProfileScreen() {
   const [inviteMessage, setInviteMessage] = useState("");
   const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
+  const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
   const [openAvatarPanel, setOpenAvatarPanel] = useState<AvatarPanel | null>("head");
   const supabase = useMemo(() => {
     try {
@@ -310,6 +317,34 @@ export function ProfileScreen() {
     return created ?? null;
   }
 
+  async function resolveFriendProfileByCode(code: string): Promise<ResolvedFriendProfile | null> {
+    if (!supabase) {
+      return null;
+    }
+
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+    if (!accessToken) {
+      return null;
+    }
+
+    const response = await fetch("/api/friends/resolve", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({ profileCode: code })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { ok?: boolean; profile?: ResolvedFriendProfile };
+    return payload.profile ?? null;
+  }
+
   async function handleAddFriend() {
     setSavingFriend(true);
     const normalizedCode = friendCode.trim().toUpperCase();
@@ -358,14 +393,9 @@ export function ProfileScreen() {
       return;
     }
 
-    const { data: targetProfile } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", normalizedCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
+    const targetProfile = await resolveFriendProfileByCode(normalizedCode);
 
-    if (!targetProfile) {
+    if (!targetProfile?.id) {
       setSavingFriend(false);
       setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
       return;
@@ -375,8 +405,8 @@ export function ProfileScreen() {
       {
         child_profile_id: ownProfile.id,
         friend_child_profile_id: targetProfile.id,
-        friend_profile_code: targetProfile.profile_code,
-        friend_display_name: nickname || targetProfile.child_name
+        friend_profile_code: targetProfile.code,
+        friend_display_name: nickname || targetProfile.name
       },
       { onConflict: "child_profile_id,friend_child_profile_id" }
     );
@@ -389,7 +419,7 @@ export function ProfileScreen() {
 
     const localAddResult = addFriendByCode({
       friendCode: normalizedCode,
-      nickname: nickname || targetProfile.child_name
+      nickname: nickname || targetProfile.name
     });
 
     if (!localAddResult.ok) {
@@ -421,14 +451,9 @@ export function ProfileScreen() {
       return;
     }
 
-    const { data: targetProfile } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", friendCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
+    const targetProfile = await resolveFriendProfileByCode(friendCode);
 
-    if (!targetProfile) {
+    if (!targetProfile?.id) {
       setInvitingFriendCode(null);
       setInviteMessage("Kamarád s tímto kódem nebyl nalezen.");
       return;
@@ -456,12 +481,12 @@ export function ProfileScreen() {
         inviter_profile_code: ownProfile.profile_code,
         inviter_display_name: ownProfile.child_name,
         invitee_child_profile_id: targetProfile.id,
-        invitee_profile_code: targetProfile.profile_code,
-        invitee_display_name: targetProfile.child_name,
+        invitee_profile_code: targetProfile.code,
+        invitee_display_name: targetProfile.name,
         status: "pending"
       })
-      .select("expedition_id")
-      .single<{ expedition_id: string }>();
+      .select("id, expedition_id")
+      .single<{ id: string; expedition_id: string }>();
 
     if (inviteError) {
       setInvitingFriendCode(null);
@@ -469,11 +494,18 @@ export function ProfileScreen() {
       return;
     }
 
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
     await fetch("/api/push/notify", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
       body: JSON.stringify({
-        targetProfileCode: targetProfile.profile_code,
+        sourceProfileCode: ownProfile.profile_code,
+        targetProfileCode: targetProfile.code,
+        inviteId: inviteRow?.id,
         title: "Nová pozvánka do výpravy",
         message: `${ownProfile.child_name} tě zve do výpravy.`,
         url: "/"
@@ -552,133 +584,148 @@ export function ProfileScreen() {
       <MobileAppCard />
 
       <section className="glass-card p-5">
-        <h2 className="section-title">Avatar studio</h2>
-        <p className="mt-2 text-sm text-mist">Vyber hlavu, oči, vlasy a barvu. Po výběru se lišta zavře.</p>
-
-        <div className="mt-4 flex justify-center">
-          <AvatarPreview config={avatarDraft} size={120} />
-        </div>
-
-        <div className="mt-5 space-y-4">
-          <div>
-            <button
-              onClick={() => setOpenAvatarPanel((current) => (current === "head" ? null : "head"))}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-            >
-              <span className="text-sm font-medium">Hlava: {selectedLabel(HEAD_OPTIONS, avatarDraft.head)}</span>
-              <span className="text-xs text-mist">{openAvatarPanel === "head" ? "Skrýt" : "Otevřít"}</span>
-            </button>
-            {openAvatarPanel === "head" ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {HEAD_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setAvatarDraft((current) => ({ ...current, head: option.value }));
-                      setOpenAvatarPanel(null);
-                    }}
-                    className={`rounded-xl px-3 py-2 text-sm ${
-                      avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <button
-              onClick={() => setOpenAvatarPanel((current) => (current === "eyes" ? null : "eyes"))}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-            >
-              <span className="text-sm font-medium">Oči: {selectedLabel(EYE_OPTIONS, avatarDraft.eyes)}</span>
-              <span className="text-xs text-mist">{openAvatarPanel === "eyes" ? "Skrýt" : "Otevřít"}</span>
-            </button>
-            {openAvatarPanel === "eyes" ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {EYE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setAvatarDraft((current) => ({ ...current, eyes: option.value }));
-                      setOpenAvatarPanel(null);
-                    }}
-                    className={`rounded-xl px-3 py-2 text-sm ${
-                      avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <button
-              onClick={() => setOpenAvatarPanel((current) => (current === "hair" ? null : "hair"))}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-            >
-              <span className="text-sm font-medium">Vlasy: {selectedLabel(HAIR_OPTIONS, avatarDraft.hair)}</span>
-              <span className="text-xs text-mist">{openAvatarPanel === "hair" ? "Skrýt" : "Otevřít"}</span>
-            </button>
-            {openAvatarPanel === "hair" ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {HAIR_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setAvatarDraft((current) => ({ ...current, hair: option.value }));
-                      setOpenAvatarPanel(null);
-                    }}
-                    className={`rounded-xl px-3 py-2 text-sm ${
-                      avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <button
-              onClick={() => setOpenAvatarPanel((current) => (current === "color" ? null : "color"))}
-              className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-            >
-              <span className="text-sm font-medium">Barva</span>
-              <span className="text-xs text-mist">{openAvatarPanel === "color" ? "Skrýt" : "Otevřít"}</span>
-            </button>
-            {openAvatarPanel === "color" ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {COLOR_OPTIONS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => {
-                      setAvatarDraft((current) => ({ ...current, color }));
-                      setOpenAvatarPanel(null);
-                    }}
-                    className={`h-9 w-9 rounded-full border-2 ${
-                      avatarDraft.color === color ? "border-lime" : "border-white/20"
-                    }`}
-                    style={{ backgroundColor: color }}
-                    aria-label={`Barva ${color}`}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="section-title">Avatar studio</h2>
           <button
-            onClick={() => updateProfile({ avatarConfig: avatarDraft })}
-            className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+            onClick={() => setAvatarStudioOpen((current) => !current)}
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold"
           >
-            Uložit avatar
+            {avatarStudioOpen ? "Zavřít" : "Upravit avatara"}
           </button>
         </div>
+        {avatarStudioOpen ? (
+          <>
+            <p className="mt-2 text-sm text-mist">Vyber hlavu, oči, vlasy a barvu. Po výběru se lišta zavře.</p>
+
+            <div className="mt-4 flex justify-center">
+              <AvatarPreview config={avatarDraft} size={120} />
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <button
+                  onClick={() => setOpenAvatarPanel((current) => (current === "head" ? null : "head"))}
+                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
+                >
+                  <span className="text-sm font-medium">Hlava: {selectedLabel(HEAD_OPTIONS, avatarDraft.head)}</span>
+                  <span className="text-xs text-mist">{openAvatarPanel === "head" ? "Skrýt" : "Otevřít"}</span>
+                </button>
+                {openAvatarPanel === "head" ? (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {HEAD_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setAvatarDraft((current) => ({ ...current, head: option.value }));
+                          setOpenAvatarPanel(null);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-sm ${
+                          avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <button
+                  onClick={() => setOpenAvatarPanel((current) => (current === "eyes" ? null : "eyes"))}
+                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
+                >
+                  <span className="text-sm font-medium">Oči: {selectedLabel(EYE_OPTIONS, avatarDraft.eyes)}</span>
+                  <span className="text-xs text-mist">{openAvatarPanel === "eyes" ? "Skrýt" : "Otevřít"}</span>
+                </button>
+                {openAvatarPanel === "eyes" ? (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {EYE_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setAvatarDraft((current) => ({ ...current, eyes: option.value }));
+                          setOpenAvatarPanel(null);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-sm ${
+                          avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <button
+                  onClick={() => setOpenAvatarPanel((current) => (current === "hair" ? null : "hair"))}
+                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
+                >
+                  <span className="text-sm font-medium">Vlasy: {selectedLabel(HAIR_OPTIONS, avatarDraft.hair)}</span>
+                  <span className="text-xs text-mist">{openAvatarPanel === "hair" ? "Skrýt" : "Otevřít"}</span>
+                </button>
+                {openAvatarPanel === "hair" ? (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {HAIR_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setAvatarDraft((current) => ({ ...current, hair: option.value }));
+                          setOpenAvatarPanel(null);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-sm ${
+                          avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <button
+                  onClick={() => setOpenAvatarPanel((current) => (current === "color" ? null : "color"))}
+                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
+                >
+                  <span className="text-sm font-medium">Barva</span>
+                  <span className="text-xs text-mist">{openAvatarPanel === "color" ? "Skrýt" : "Otevřít"}</span>
+                </button>
+                {openAvatarPanel === "color" ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {COLOR_OPTIONS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => {
+                          setAvatarDraft((current) => ({ ...current, color }));
+                          setOpenAvatarPanel(null);
+                        }}
+                        className={`h-9 w-9 rounded-full border-2 ${
+                          avatarDraft.color === color ? "border-lime" : "border-white/20"
+                        }`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Barva ${color}`}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <button
+                onClick={() => {
+                  updateProfile({ avatarConfig: avatarDraft });
+                  setAvatarStudioOpen(false);
+                }}
+                className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+              >
+                Uložit avatar
+              </button>
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="glass-card p-5">

@@ -49,18 +49,20 @@ export function ParentAuthGate() {
         return;
       }
 
-      const { data, error: profileError } = await supabase
+      const { data: profileRows, error: profileError } = await supabase
         .from("child_profiles")
         .select("child_name, child_age, profile_code")
         .eq("parent_user_id", parentUserId)
-        .limit(1)
-        .maybeSingle<ChildProfileRow>();
+        .order("created_at", { ascending: false })
+        .limit(1);
 
       if (profileError) {
         setError("Nepodařilo se načíst profil dítěte. Zkus to znovu.");
         setLoading(false);
         return;
       }
+
+      const data = (profileRows?.[0] as ChildProfileRow | undefined) ?? null;
 
       if (!data) {
         setParentEmail(parentUserEmail);
@@ -70,13 +72,13 @@ export function ParentAuthGate() {
       }
 
       let childPinHash: string | null = null;
-      const { data: pinRow } = await supabase
+      const { data: pinRows } = await supabase
         .from("child_profiles")
         .select("pin_hash")
         .eq("parent_user_id", parentUserId)
-        .limit(1)
-        .maybeSingle<{ pin_hash: string | null }>();
-      childPinHash = pinRow?.pin_hash ?? null;
+        .order("created_at", { ascending: false })
+        .limit(1);
+      childPinHash = pinRows?.[0]?.pin_hash ?? null;
 
       registrationAppliedRef.current = true;
       completeRegistration({

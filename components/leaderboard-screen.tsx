@@ -12,12 +12,12 @@ type LeaderboardEntry = {
 };
 
 export function LeaderboardScreen() {
-  const [tab, setTab] = useState<"friends" | "city">("friends");
+  const [tab, setTab] = useState<"friends" | "global">("friends");
   const { state, getPlayerScore } = useAppState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [friendsBoard, setFriendsBoard] = useState<LeaderboardEntry[]>([]);
-  const [cityBoard, setCityBoard] = useState<LeaderboardEntry[]>([]);
+  const [globalBoard, setGlobalBoard] = useState<LeaderboardEntry[]>([]);
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -45,7 +45,7 @@ export function LeaderboardScreen() {
         return;
       }
 
-      const [friendsResponse, cityResponse] = await Promise.all([
+      const [friendsResponse, globalResponse] = await Promise.all([
         fetch("/api/leaderboard", {
           method: "POST",
           headers: {
@@ -55,7 +55,6 @@ export function LeaderboardScreen() {
           body: JSON.stringify({
             scope: "friends",
             profileCode: state.profileCode,
-            city: state.city,
             limit: 20
           })
         }).catch(() => null),
@@ -66,30 +65,29 @@ export function LeaderboardScreen() {
             Authorization: `Bearer ${accessToken}`
           },
           body: JSON.stringify({
-            scope: "city",
+            scope: "global",
             profileCode: state.profileCode,
-            city: state.city,
             limit: 20
           })
         }).catch(() => null)
       ]);
 
-      if (!friendsResponse?.ok || !cityResponse?.ok) {
+      if (!friendsResponse?.ok || !globalResponse?.ok) {
         setLoading(false);
         setError("Žebříček se teď nepodařilo načíst.");
         return;
       }
 
       const friendsPayload = (await friendsResponse.json()) as { entries?: LeaderboardEntry[] };
-      const cityPayload = (await cityResponse.json()) as { entries?: LeaderboardEntry[] };
+      const globalPayload = (await globalResponse.json()) as { entries?: LeaderboardEntry[] };
 
       setFriendsBoard(friendsPayload.entries ?? []);
-      setCityBoard(cityPayload.entries ?? []);
+      setGlobalBoard(globalPayload.entries ?? []);
       setLoading(false);
     }
 
     void loadBoards();
-  }, [state.city, state.profileCode, supabase]);
+  }, [state.profileCode, supabase]);
 
   const fallbackFriendsBoard = useMemo(
     () =>
@@ -113,7 +111,7 @@ export function LeaderboardScreen() {
   );
 
   const visibleFriendsBoard = friendsBoard.length > 0 ? friendsBoard : fallbackFriendsBoard;
-  const visibleCityBoard = cityBoard;
+  const visibleGlobalBoard = globalBoard;
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -121,7 +119,7 @@ export function LeaderboardScreen() {
         <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
         <p className="mt-2 text-sm leading-6 text-mist">
-          Můžeš si přepnout soutěž mezi kamarády nebo širší žebříček hráčů v aktuálním městě.
+          Můžeš si přepnout soutěž mezi kamarády nebo plošným žebříčkem všech hráčů.
         </p>
       </section>
 
@@ -136,12 +134,12 @@ export function LeaderboardScreen() {
             Kamarádi
           </button>
           <button
-            onClick={() => setTab("city")}
+            onClick={() => setTab("global")}
             className={`rounded-[20px] px-4 py-3 text-sm font-semibold ${
-              tab === "city" ? "bg-white text-night" : "bg-white/5 text-mist"
+              tab === "global" ? "bg-white text-night" : "bg-white/5 text-mist"
             }`}
           >
-            {state.city}
+            Všichni
           </button>
         </div>
       </section>
@@ -178,12 +176,12 @@ export function LeaderboardScreen() {
           </div>
         ) : (
           <div className="space-y-3">
-            {visibleCityBoard.length === 0 ? (
+            {visibleGlobalBoard.length === 0 ? (
               <section className="glass-card p-4 text-sm text-mist">
-                Zatím tu není dost dat pro městský žebříček.
+                Zatím tu není dost dat pro plošný žebříček.
               </section>
             ) : null}
-            {visibleCityBoard.map((entry, index) => (
+            {visibleGlobalBoard.map((entry, index) => (
               <section
                 key={`${entry.name}-${index}`}
                 className={`glass-card flex items-center justify-between rounded-2xl p-4 ${
@@ -196,9 +194,7 @@ export function LeaderboardScreen() {
                   </div>
                   <div>
                     <div className="font-semibold">{entry.name}</div>
-                    <div className="text-sm text-mist">
-                      {entry.completed} dokončených misí v {state.city}
-                    </div>
+                    <div className="text-sm text-mist">{entry.completed} dokončených misí celkem</div>
                   </div>
                 </div>
                 <div className="text-right">

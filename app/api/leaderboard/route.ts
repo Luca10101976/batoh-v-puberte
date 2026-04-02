@@ -18,7 +18,7 @@ type ChildProgressRow = {
   location_id: string;
 };
 
-type LeaderboardScope = "friends" | "city";
+type LeaderboardScope = "friends" | "global";
 
 function normalizeCode(value: string) {
   return value.trim().toUpperCase();
@@ -38,7 +38,7 @@ function scoreRowsByProfile(rows: ChildProgressRow[]) {
   return map;
 }
 
-function cityAlias(name: string, profileCode: string) {
+function publicAlias(name: string, profileCode: string) {
   const cleanName = (name || "Hráč").trim();
   const firstWord = cleanName.split(/\s+/)[0] || "Hráč";
   const suffix = normalizeCode(profileCode).slice(-2) || "XX";
@@ -74,15 +74,13 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     scope?: LeaderboardScope;
     profileCode?: string;
-    city?: string;
     limit?: number;
   };
   const scope = body.scope;
   const requestedCode = normalizeCode(body.profileCode ?? "");
-  const city = (body.city ?? "").trim();
   const limit = Math.min(50, Math.max(5, Number(body.limit) || 20));
 
-  if (!scope || (scope !== "friends" && scope !== "city")) {
+  if (!scope || (scope !== "friends" && scope !== "global")) {
     return NextResponse.json({ ok: false, error: "invalid_scope" }, { status: 400 });
   }
 
@@ -160,16 +158,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, entries });
   }
 
-  const cityLocationIds = locations.filter((location) => location.city === city).map((location) => location.id);
-
-  if (cityLocationIds.length === 0) {
-    return NextResponse.json({ ok: true, entries: [] });
-  }
+  const allLocationIds = locations.map((location) => location.id);
 
   const { data: progressRows } = await admin
     .from("child_location_progress")
     .select("profile_code, location_id")
-    .in("location_id", cityLocationIds);
+    .in("location_id", allLocationIds);
 
   const scoredByProfile = scoreRowsByProfile((progressRows as ChildProgressRow[] | null) ?? []);
 
@@ -204,7 +198,7 @@ export async function POST(request: NextRequest) {
         return null;
       }
       return {
-        name: cityAlias(profile.child_name, profile.profile_code),
+        name: publicAlias(profile.child_name, profile.profile_code),
         score: entry.score,
         completed: entry.completed,
         isYou: normalizeCode(profile.profile_code) === normalizeCode(ownChildProfile.profile_code)

@@ -154,7 +154,7 @@ export function ParentAuthGate() {
       email: parentEmail.trim(),
       password,
       options: {
-        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/profile` : undefined
+        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined
       }
     });
 

@@ -1,47 +1,119 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { leaderboard, squads } from "@/lib/mock-data";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+type LeaderboardEntry = {
+  name: string;
+  score: number;
+  completed: number;
+  isYou: boolean;
+};
 
 export function LeaderboardScreen() {
-  const [tab, setTab] = useState<"players" | "groups">("players");
+  const [tab, setTab] = useState<"friends" | "city">("friends");
   const { state, getPlayerScore } = useAppState();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [friendsBoard, setFriendsBoard] = useState<LeaderboardEntry[]>([]);
+  const [cityBoard, setCityBoard] = useState<LeaderboardEntry[]>([]);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  }, []);
   const playerScore = getPlayerScore();
-  const groupScore = useMemo(
-    () =>
-      Object.values(state.groupCompletionMembers).reduce((sum, members) => sum + members.length * 120, 0),
-    [state.groupCompletionMembers]
-  );
 
-  const playerBoard = useMemo(
+  useEffect(() => {
+    async function loadBoards() {
+      if (!supabase || !state.profileCode) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+      if (!accessToken) {
+        setLoading(false);
+        setError("Pro načtení žebříčku je potřeba být přihlášený.");
+        return;
+      }
+
+      const [friendsResponse, cityResponse] = await Promise.all([
+        fetch("/api/leaderboard", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            scope: "friends",
+            profileCode: state.profileCode,
+            city: state.city,
+            limit: 20
+          })
+        }).catch(() => null),
+        fetch("/api/leaderboard", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            scope: "city",
+            profileCode: state.profileCode,
+            city: state.city,
+            limit: 20
+          })
+        }).catch(() => null)
+      ]);
+
+      if (!friendsResponse?.ok || !cityResponse?.ok) {
+        setLoading(false);
+        setError("Žebříček se teď nepodařilo načíst.");
+        return;
+      }
+
+      const friendsPayload = (await friendsResponse.json()) as { entries?: LeaderboardEntry[] };
+      const cityPayload = (await cityResponse.json()) as { entries?: LeaderboardEntry[] };
+
+      setFriendsBoard(friendsPayload.entries ?? []);
+      setCityBoard(cityPayload.entries ?? []);
+      setLoading(false);
+    }
+
+    void loadBoards();
+  }, [state.city, state.profileCode, supabase]);
+
+  const fallbackFriendsBoard = useMemo(
     () =>
       [
-        ...leaderboard,
         {
           name: state.profile.name,
-          city: state.city,
           score: playerScore,
-          squad: state.squadName,
-          delta: "Právě teď"
-        }
+          completed: Math.round(playerScore / 120),
+          isYou: true
+        },
+        ...state.squadMembers
+          .filter((member) => member.id !== "self")
+          .map((member) => ({
+            name: member.name,
+            score: 0,
+            completed: 0,
+            isYou: false
+          }))
       ].sort((a, b) => b.score - a.score),
-    [state.city, state.profile.name, state.squadName, playerScore]
+    [playerScore, state.profile.name, state.squadMembers]
   );
 
-  const groupBoard = useMemo(
-    () =>
-      [
-        ...squads,
-        {
-          name: state.squadName,
-          members: state.squadMembers.length,
-          score: groupScore,
-          city: state.city
-        }
-      ].sort((a, b) => b.score - a.score),
-    [groupScore, state.city, state.squadMembers.length, state.squadName]
-  );
+  const visibleFriendsBoard = friendsBoard.length > 0 ? friendsBoard : fallbackFriendsBoard;
+  const visibleCityBoard = cityBoard;
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -49,82 +121,95 @@ export function LeaderboardScreen() {
         <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
         <p className="mt-2 text-sm leading-6 text-mist">
-          Tady už se body počítají podle splněných misí, včetně odečtů za odpovědi Nevím.
+          Můžeš si přepnout soutěž mezi kamarády nebo širší žebříček hráčů v aktuálním městě.
         </p>
       </section>
 
       <section className="glass-card p-2">
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => setTab("players")}
+            onClick={() => setTab("friends")}
             className={`rounded-[20px] px-4 py-3 text-sm font-semibold ${
-              tab === "players" ? "bg-white text-night" : "bg-white/5 text-mist"
+              tab === "friends" ? "bg-white text-night" : "bg-white/5 text-mist"
             }`}
           >
-            Hráči
+            Kamarádi
           </button>
           <button
-            onClick={() => setTab("groups")}
+            onClick={() => setTab("city")}
             className={`rounded-[20px] px-4 py-3 text-sm font-semibold ${
-              tab === "groups" ? "bg-white text-night" : "bg-white/5 text-mist"
+              tab === "city" ? "bg-white text-night" : "bg-white/5 text-mist"
             }`}
           >
-            Skupiny
+            {state.city}
           </button>
         </div>
       </section>
 
-      {tab === "players" ? (
-        <div className="space-y-3">
-          {playerBoard.map((entry, index) => (
-            <section
-              key={`${entry.name}-${entry.city}`}
-              className={`glass-card flex items-center justify-between p-4 ${
-                entry.name === state.profile.name ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
-                  {index + 1}
-                </div>
-                <div>
-                  <div className="font-semibold">{entry.name}</div>
-                  <div className="text-sm text-mist">
-                    {entry.city} · {entry.squad}
+      {loading ? <p className="text-sm text-mist">Načítám žebříček…</p> : null}
+      {!loading && error ? <p className="text-sm text-mist">{error}</p> : null}
+
+      {!loading ? (
+        tab === "friends" ? (
+          <div className="space-y-3">
+            {visibleFriendsBoard.map((entry, index) => (
+              <section
+                key={`${entry.name}-${index}`}
+                className={`glass-card flex items-center justify-between p-4 ${
+                  entry.isYou ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{entry.name}</div>
+                    <div className="text-sm text-mist">{entry.completed} dokončených misí</div>
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xl font-semibold text-lime">{entry.score}</div>
-                <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
-                <div className="mt-1 text-[11px] text-mist">{entry.delta}</div>
-              </div>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {groupBoard.map((squad, index) => (
-            <div
-              key={`${squad.name}-${squad.city}`}
-              className={`glass-card flex items-center justify-between rounded-2xl p-4 ${
-                squad.name === state.squadName ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
-              }`}
-            >
-              <div>
-                <div className="font-semibold">{squad.name}</div>
-                <div className="text-sm text-mist">
-                  {squad.city} · {squad.members} členů
+                <div className="text-right">
+                  <div className="text-xl font-semibold text-lime">{entry.score}</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
+                  {entry.isYou ? <div className="mt-1 text-[11px] text-mist">Ty</div> : null}
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-semibold text-lime">{squad.score}</div>
-                <div className="text-xs text-mist">celkem bodů</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {visibleCityBoard.length === 0 ? (
+              <section className="glass-card p-4 text-sm text-mist">
+                Zatím tu není dost dat pro městský žebříček.
+              </section>
+            ) : null}
+            {visibleCityBoard.map((entry, index) => (
+              <section
+                key={`${entry.name}-${index}`}
+                className={`glass-card flex items-center justify-between rounded-2xl p-4 ${
+                  entry.isYou ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{entry.name}</div>
+                    <div className="text-sm text-mist">
+                      {entry.completed} dokončených misí v {state.city}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-semibold text-lime">{entry.score}</div>
+                  <div className="text-xs text-mist">bodů</div>
+                </div>
+              </section>
+            ))}
+          </div>
+        )
+      ) : null}
     </main>
   );
 }

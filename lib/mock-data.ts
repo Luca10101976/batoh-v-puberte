@@ -16,6 +16,8 @@ export type Episode = {
   name: string;
   intro: string;
   background: string;
+  illustrationImage?: string;
+  illustrationImageAlt?: string;
   tasks: Task[];
   clue: string[];
 };
@@ -112,6 +114,8 @@ export const locations: MapLocation[] = [
         id: "chramek",
         name: "Chrámek noci a poznání",
         intro: "Hvězdy i hadí hlavy. Nebe i peklo.",
+        illustrationImage: "/images/klamovka-nebe-peklo.png",
+        illustrationImageAlt: "Chrámek Klamovka - nebe a peklo",
         background:
           "Vznikl na konci 18. století za Clam-Gallasů. Horní část představuje nebe, dolní část podzemí. Díry v kopuli měly zevnitř vytvořit iluzi hvězdné oblohy.",
         tasks: [
@@ -142,9 +146,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Výběr",
             title: "Dvě poloviny",
             content: "Jak se jmenují dvě části chrámku?",
-            options: ["Nebe a peklo", "Den a noc", "Sláva a pád"],
-            illustrationImage: "/images/klamovka-nebe-peklo.png",
-            illustrationImageAlt: "Chrámek Klamovka - nebe a peklo"
+            options: ["Nebe a peklo", "Den a noc", "Sláva a pád"]
           },
           {
             id: "klamovka-chramek-5",

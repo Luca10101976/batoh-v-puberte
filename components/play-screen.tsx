@@ -335,6 +335,17 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         <span className="rounded-full bg-sky/12 px-3 py-1 text-xs uppercase tracking-[0.2em] text-sky">
           {activeEpisode.name}
         </span>
+        {activeEpisode.illustrationImage ? (
+          <figure className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+            <Image
+              src={activeEpisode.illustrationImage}
+              alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
+              width={1000}
+              height={560}
+              className="h-48 w-full object-cover"
+            />
+          </figure>
+        ) : null}
         <p className="mt-4 text-base leading-7 text-white/90">{activeEpisode.intro}</p>
 
         <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4">

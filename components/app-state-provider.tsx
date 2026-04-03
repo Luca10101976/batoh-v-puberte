@@ -222,19 +222,53 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { data: childProfiles } = await supabase
-        .from("child_profiles")
-        .select("child_name, child_age, profile_code, pin_hash, created_at")
-        .eq("parent_user_id", session.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const childProfile = (childProfiles?.[0] as {
+      const accessToken = session.access_token ?? "";
+      let childProfile: {
         child_name: string;
         child_age: number;
         profile_code: string;
         pin_hash: string | null;
-      } | undefined) ?? null;
+      } | null = null;
+      let remoteRows: Array<{ location_id: string; completed_at: string }> = [];
+
+      if (accessToken) {
+        const response = await fetch("/api/child-profile/me", {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }).catch(() => null);
+
+        if (response?.ok) {
+          const payload = (await response.json().catch(() => null)) as
+            | {
+                profile?: {
+                  child_name: string;
+                  child_age: number;
+                  profile_code: string;
+                  pin_hash: string | null;
+                } | null;
+                progress?: Array<{ location_id: string; completed_at: string }>;
+              }
+            | null;
+
+          childProfile = payload?.profile ?? null;
+          remoteRows = payload?.progress ?? [];
+        }
+      }
+
+      if (!childProfile) {
+        const { data: childProfiles } = await supabase
+          .from("child_profiles")
+          .select("child_name, child_age, profile_code, pin_hash, created_at")
+          .eq("parent_user_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        childProfile = (childProfiles?.[0] as {
+          child_name: string;
+          child_age: number;
+          profile_code: string;
+          pin_hash: string | null;
+        } | undefined) ?? null;
+      }
 
       if (!childProfile) {
         cloudHydratedRef.current = true;
@@ -242,13 +276,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
 
       const canonicalProfileCode = childProfile.profile_code || state.profileCode;
-
-      const { data: progressRows } = await supabase
-        .from("child_location_progress")
-        .select("location_id, completed_at")
-        .eq("profile_code", canonicalProfileCode);
-
-      const remoteRows = (progressRows as Array<{ location_id: string; completed_at: string }> | null) ?? [];
+      if (remoteRows.length === 0) {
+        const { data: progressRows } = await supabase
+          .from("child_location_progress")
+          .select("location_id, completed_at")
+          .eq("profile_code", canonicalProfileCode);
+        remoteRows = (progressRows as Array<{ location_id: string; completed_at: string }> | null) ?? [];
+      }
 
       setState((current) => {
         const completedLocationIds = Array.from(

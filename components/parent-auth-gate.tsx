@@ -11,6 +11,7 @@ type ChildProfileRow = {
   child_name: string;
   child_age: number;
   profile_code: string;
+  pin_hash?: string | null;
 };
 
 function generateProfileCode() {
@@ -48,22 +49,43 @@ export function ParentAuthGate() {
         return;
       }
 
-      const { data: profileRows, error: profileError } = await supabase
-        .from("child_profiles")
-        .select("child_name, child_age, profile_code")
-        .eq("parent_user_id", parentUserId)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      let data: ChildProfileRow | null = null;
+      let childPinHash: string | null = null;
 
-      if (profileError) {
-        setParentEmail(parentUserEmail);
-        setNeedsChildProfile(true);
-        setInfo("Profil dítěte se nepodařilo načíst, pokračuj vytvořením nového profilu.");
-        setLoading(false);
-        return;
+      if (accessToken) {
+        const response = await fetch("/api/child-profile/me", {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }).catch(() => null);
+
+        if (response?.ok) {
+          const payload = (await response.json().catch(() => null)) as
+            | { profile?: ChildProfileRow | null }
+            | null;
+          data = payload?.profile ?? null;
+          childPinHash = data?.pin_hash ?? null;
+        }
       }
 
-      const data = (profileRows?.[0] as ChildProfileRow | undefined) ?? null;
+      if (!data) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from("child_profiles")
+          .select("child_name, child_age, profile_code, pin_hash")
+          .eq("parent_user_id", parentUserId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (profileError) {
+          setParentEmail(parentUserEmail);
+          setNeedsChildProfile(true);
+          setInfo("Profil dítěte se nepodařilo načíst, pokračuj vytvořením nového profilu.");
+          setLoading(false);
+          return;
+        }
+
+        data = (profileRows?.[0] as ChildProfileRow | undefined) ?? null;
+        childPinHash = data?.pin_hash ?? null;
+      }
 
       if (!data) {
         setParentEmail(parentUserEmail);
@@ -71,15 +93,6 @@ export function ParentAuthGate() {
         setLoading(false);
         return;
       }
-
-      let childPinHash: string | null = null;
-      const { data: pinRows } = await supabase
-        .from("child_profiles")
-        .select("pin_hash")
-        .eq("parent_user_id", parentUserId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      childPinHash = pinRows?.[0]?.pin_hash ?? null;
 
       registrationAppliedRef.current = true;
       completeRegistration({

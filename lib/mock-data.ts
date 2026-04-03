@@ -120,9 +120,7 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Hadí hlavy",
-            content: "Kolik hadích hlav najdeš pod střechou?",
-            illustrationImage: "/images/klamovka-chramek.jpeg",
-            illustrationImageAlt: "Chrámek v parku Klamovka"
+            content: "Kolik hadích hlav najdeš pod střechou?"
           },
           {
             id: "klamovka-chramek-2",

@@ -216,20 +216,47 @@ export function ProfileScreen() {
   }, [state.profile.avatarConfig]);
 
   useEffect(() => {
-    async function checkCloudSession() {
-      if (!supabase) {
-        setCloudReady(false);
-        return;
-      }
+    if (!supabase) {
+      setCloudReady(false);
+      return;
+    }
+    const client = supabase;
 
+    let cancelled = false;
+
+    async function checkCloudSession() {
       const {
         data: { session }
-      } = await supabase.auth.getSession();
+      } = await client.auth.getSession();
 
-      setCloudReady(Boolean(session?.user));
+      if (!cancelled) {
+        setCloudReady(Boolean(session?.user));
+      }
     }
 
     void checkCloudSession();
+
+    const {
+      data: { subscription }
+    } = client.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) {
+        setCloudReady(Boolean(session?.user));
+      }
+    });
+
+    const onVisibility = () => {
+      if (!document.hidden) {
+        void checkCloudSession();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
   function selectedLabel(options: Array<{ value: string; label: string }>, value: string) {
@@ -495,7 +522,7 @@ export function ProfileScreen() {
 
     if (!ownProfile) {
       setSavingFriend(false);
-      setFriendMessage("Nejdřív dokonči přihlášení rodiče. Pak půjde přidávání i pozvánky.");
+      setFriendMessage("Rodičovský účet není aktivní. Odhlaš se a přihlas rodiče znovu.");
       return;
     }
 
@@ -553,7 +580,7 @@ export function ProfileScreen() {
 
     if (!ownProfile) {
       setInvitingFriendCode(null);
-      setInviteMessage("Nejdřív dokonči přihlášení rodiče. Pak půjde posílat pozvánky.");
+      setInviteMessage("Rodičovský účet není aktivní. Odhlaš se a přihlas rodiče znovu.");
       return;
     }
 
@@ -960,7 +987,7 @@ export function ProfileScreen() {
           <p className="text-sm text-mist">Zadej kód kamaráda.</p>
           <button
             onClick={handleAddFriend}
-            disabled={savingFriend || cloudReady === false}
+            disabled={savingFriend}
             className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
           >
             {savingFriend ? "Přidávám..." : "Přidat kamaráda"}

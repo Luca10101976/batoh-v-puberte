@@ -312,14 +312,20 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       </section>
 
       {taskIndex === 0 && previousEpisode ? (
-        <section className="glass-card border-lime/30 bg-lime/10 p-5">
-          <p className="text-xs uppercase tracking-[0.22em] text-lime">Přechod na další zastavení</p>
-          <p className="mt-2 text-sm text-mist">
-            Hotovo: <span className="font-semibold text-white">{previousEpisode.name}</span>
-          </p>
-          <p className="mt-1 text-base font-semibold text-white">
-            Teď pokračuješ na: {activeEpisode.name}
-          </p>
+        <section className="rounded-[28px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_32px_rgba(178,247,93,0.18)]">
+          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Blok splněn</p>
+          <div className="mt-4 rounded-2xl bg-night/45 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
+            <p className="mt-1 text-lg font-semibold text-white">{previousEpisode.name}</p>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-lime text-xl font-bold text-night">→</div>
+            <p className="text-sm font-semibold text-white">Pokračuj na další zastavení</p>
+          </div>
+          <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-lime">Teď hraješ</p>
+            <p className="mt-1 text-2xl font-bold text-white">{activeEpisode.name}</p>
+          </div>
         </section>
       ) : null}
 

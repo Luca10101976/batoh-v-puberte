@@ -27,38 +27,6 @@ type PendingInviteRow = {
   created_at: string;
 };
 
-type UserCoords = {
-  lat: number;
-  lng: number;
-};
-
-function toRadians(value: number) {
-  return (value * Math.PI) / 180;
-}
-
-function calculateDistanceMeters(from: UserCoords, to: UserCoords) {
-  const earthRadius = 6371000;
-  const dLat = toRadians(to.lat - from.lat);
-  const dLng = toRadians(to.lng - from.lng);
-  const lat1 = toRadians(from.lat);
-  const lat2 = toRadians(to.lat);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return Math.round(earthRadius * c);
-}
-
-function formatDistance(meters: number) {
-  if (meters < 1000) {
-    return `${meters} m`;
-  }
-
-  return `${(meters / 1000).toFixed(1)} km`;
-}
-
 function formatAgo(value: string) {
   const diffMs = Date.now() - new Date(value).getTime();
   const minutes = Math.max(1, Math.floor(diffMs / 60000));
@@ -84,8 +52,6 @@ export function HomeScreen() {
   const [invitesLoaded, setInvitesLoaded] = useState(false);
   const [ownChildProfileId, setOwnChildProfileId] = useState<string | null>(null);
   const [respondingInviteId, setRespondingInviteId] = useState<string | null>(null);
-  const [userCoords, setUserCoords] = useState<UserCoords | null>(null);
-  const [geoState, setGeoState] = useState<"locating" | "ready" | "denied" | "error" | "unsupported">("locating");
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -292,77 +258,24 @@ export function HomeScreen() {
     setRespondingInviteId(null);
   }
 
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setGeoState("unsupported");
-      return;
-    }
-
-    setGeoState("locating");
-
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        setUserCoords({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setGeoState("ready");
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setGeoState("denied");
-          return;
-        }
-
-        setGeoState("error");
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 20000,
-        timeout: 10000
-      }
-    );
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
-    };
-  }, []);
-
   const visibleFeed = friendFeed;
   const cityLocations = useMemo(() => locations.filter((location) => location.city === state.city), [state.city]);
   const cityMissions = useMemo(() => nearbyMissions.filter((mission) => mission.city === state.city), [state.city]);
   const primaryLocation = cityLocations[0] ?? locations[0];
   const unlockedInCity = cityLocations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length;
   const cityScore = unlockedInCity * 120;
-  const primaryCoords = useMemo(
-    () => (primaryLocation ? { lat: primaryLocation.lat, lng: primaryLocation.lng } : null),
-    [primaryLocation]
-  );
   const mapUrl = useMemo(() => {
-    if (!primaryLocation || !primaryCoords) {
+    if (!primaryLocation) {
       return "";
     }
 
-    if (!userCoords) {
-      const mapDelta = 0.0075;
-      return `https://www.openstreetmap.org/export/embed.html?bbox=${primaryLocation.lng - mapDelta}%2C${
-        primaryLocation.lat - mapDelta
-      }%2C${primaryLocation.lng + mapDelta}%2C${primaryLocation.lat + mapDelta}&layer=mapnik&marker=${
-        primaryLocation.lat
-      }%2C${primaryLocation.lng}`;
-    }
-
-    const minLat = Math.min(primaryCoords.lat, userCoords.lat);
-    const maxLat = Math.max(primaryCoords.lat, userCoords.lat);
-    const minLng = Math.min(primaryCoords.lng, userCoords.lng);
-    const maxLng = Math.max(primaryCoords.lng, userCoords.lng);
-    const latPadding = Math.max(0.0045, (maxLat - minLat) * 0.4);
-    const lngPadding = Math.max(0.0045, (maxLng - minLng) * 0.4);
-
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${minLng - lngPadding}%2C${minLat - latPadding}%2C${
-      maxLng + lngPadding
-    }%2C${maxLat + latPadding}&layer=mapnik&marker=${primaryCoords.lat}%2C${primaryCoords.lng}`;
-  }, [primaryCoords, primaryLocation, userCoords]);
+    const mapDelta = 0.0075;
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${primaryLocation.lng - mapDelta}%2C${
+      primaryLocation.lat - mapDelta
+    }%2C${primaryLocation.lng + mapDelta}%2C${primaryLocation.lat + mapDelta}&layer=mapnik&marker=${
+      primaryLocation.lat
+    }%2C${primaryLocation.lng}`;
+  }, [primaryLocation]);
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
@@ -467,11 +380,7 @@ export function HomeScreen() {
             <h2 className="mt-2 text-xl font-semibold">{state.city}</h2>
           </div>
           <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">
-            {geoState === "ready"
-              ? "Poloha zapnutá"
-              : geoState === "locating"
-                ? "Zjišťuju polohu…"
-                : "Poloha vypnutá"}
+            Check-in e-mail při startu
           </div>
         </div>
 
@@ -482,13 +391,6 @@ export function HomeScreen() {
             </div>
           ) : (
             cityMissions.map((mission) => {
-              const missionLocation = locations.find((location) => location.id === mission.locationId);
-              const missionDistance =
-                userCoords && missionLocation
-                  ? calculateDistanceMeters(userCoords, { lat: missionLocation.lat, lng: missionLocation.lng })
-                  : null;
-              const missionMinutes = missionDistance ? Math.max(1, Math.round(missionDistance / 80)) : null;
-
               return (
                 <Link
                   key={mission.name}
@@ -498,14 +400,10 @@ export function HomeScreen() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">{mission.name}</h3>
-                      <p className="mt-1 text-sm text-mist">
-                        {missionDistance && missionDistance < 50000 ? `${formatDistance(missionDistance)} od tebe` : mission.status}
-                      </p>
+                      <p className="mt-1 text-sm text-mist">{mission.status}</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-semibold text-lime">
-                        {missionMinutes && missionDistance && missionDistance < 50000 ? `${missionMinutes} min` : mission.distance}
-                      </div>
+                      <div className="text-sm font-semibold text-lime">{mission.distance}</div>
                       <div className="text-xs text-mist">{mission.boost}</div>
                     </div>
                   </div>

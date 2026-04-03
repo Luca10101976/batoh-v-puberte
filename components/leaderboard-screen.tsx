@@ -97,17 +97,9 @@ export function LeaderboardScreen() {
           score: playerScore,
           completed: Math.round(playerScore / 120),
           isYou: true
-        },
-        ...state.squadMembers
-          .filter((member) => member.id !== "self")
-          .map((member) => ({
-            name: member.name,
-            score: 0,
-            completed: 0,
-            isYou: false
-          }))
+        }
       ].sort((a, b) => b.score - a.score),
-    [playerScore, state.profile.name, state.squadMembers]
+    [playerScore, state.profile.name]
   );
 
   const visibleFriendsBoard = friendsBoard.length > 0 ? friendsBoard : fallbackFriendsBoard;

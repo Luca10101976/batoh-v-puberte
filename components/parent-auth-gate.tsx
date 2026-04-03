@@ -388,7 +388,6 @@ export function ParentAuthGate() {
                 value={childAge}
                 onChange={(event) => setChildAge(event.target.value)}
                 min={8}
-                max={16}
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
               />
             </label>

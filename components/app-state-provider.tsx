@@ -103,8 +103,8 @@ const initialState: AppState = {
   profileCode: generateProfileCode(),
   city: "Praha",
   profile: {
-    name: "Tyna",
-    age: 12,
+    name: "Hráč",
+    age: 11,
     title: "Lovec městských tajemství",
     avatar: "PB",
     avatarConfig: {
@@ -119,13 +119,12 @@ const initialState: AppState = {
   locationPenaltyPoints: {},
   groupCompletionMembers: {},
   currentExpeditionId: null,
-  activeMode: "group",
-  squadName: "Lovci stop",
+  activeMode: "solo",
+  squadName: "Moje výprava",
   squadMembers: [
-    { id: SELF_MEMBER_ID, name: "Tyna", joined: true }
+    { id: SELF_MEMBER_ID, name: "Hráč", joined: true }
   ],
-  safetyEmailsEnabled: true
-  ,
+  safetyEmailsEnabled: true,
   trustedContacts: []
 };
 
@@ -402,12 +401,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           age,
           avatar: initials || current.profile.avatar
         },
+        completedLocationIds: [],
+        lastCompletedAt: {},
+        locationPenaltyPoints: {},
+        groupCompletionMembers: {},
+        currentExpeditionId: null,
+        activeMode: "solo",
         squadName: `${trimmedName || current.profile.name} a parta`,
-        squadMembers: current.squadMembers.map((member) =>
-          member.id === SELF_MEMBER_ID
-            ? { ...member, name: trimmedName || member.name, joined: true }
-            : member
-        )
+        squadMembers: [{ id: SELF_MEMBER_ID, name: trimmedName || current.profile.name, joined: true }]
       }));
       setPinUnlocked(true);
       try {
@@ -494,23 +495,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       const mergedFriends = new Map<string, SquadMember>();
 
-      current.squadMembers
-        .filter((member) => member.id !== SELF_MEMBER_ID)
-        .forEach((member) => {
-          mergedFriends.set(normalizeCode(member.id), {
-            ...member,
-            id: normalizeCode(member.id)
-          });
-        });
-
       friends.forEach((friend) => {
         const normalizedId = normalizeCode(friend.code);
-        const existing = mergedFriends.get(normalizedId);
+        if (!normalizedId || normalizedId === normalizeCode(current.profileCode)) {
+          return;
+        }
 
         mergedFriends.set(normalizedId, {
           id: normalizedId,
-          name: friend.name || existing?.name || "Kamarád",
-          joined: existing?.joined ?? true
+          name: friend.name || "Kamarád",
+          joined: false
         });
       });
 

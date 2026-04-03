@@ -273,7 +273,19 @@ export function HomeScreen() {
       setActiveMode("group");
       setCurrentExpeditionId(payload.expeditionId ?? invite.expedition_id);
       if (payload.inviter?.code && payload.inviter?.name) {
-        setFriendsFromCloud([{ code: payload.inviter.code, name: payload.inviter.name }]);
+        const existingFriends = state.squadMembers
+          .filter((member) => member.id !== "self")
+          .map((member) => ({
+            code: member.id,
+            name: member.name
+          }));
+
+        const mergedFriends = [
+          { code: payload.inviter.code, name: payload.inviter.name },
+          ...existingFriends
+        ];
+
+        setFriendsFromCloud(mergedFriends);
       }
     }
 
@@ -316,13 +328,7 @@ export function HomeScreen() {
     };
   }, []);
 
-  const localFriends = state.squadMembers.filter((member) => member.id !== "self");
-  const fallbackFeed: FriendActivityRow[] = localFriends.map((friend, index) => ({
-    friend_profile_code: friend.id,
-    friend_display_name: friend.name,
-    created_at: new Date(Date.now() - (index + 1) * 60000).toISOString()
-  }));
-  const visibleFeed = friendFeed.length > 0 ? friendFeed : fallbackFeed;
+  const visibleFeed = friendFeed;
   const cityLocations = useMemo(() => locations.filter((location) => location.city === state.city), [state.city]);
   const cityMissions = useMemo(() => nearbyMissions.filter((mission) => mission.city === state.city), [state.city]);
   const primaryLocation = cityLocations[0] ?? locations[0];

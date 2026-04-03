@@ -277,6 +277,7 @@ export function ProfileScreen() {
         .maybeSingle<{ id: string }>();
 
       if (!ownProfile?.id) {
+        setFriendsFromCloud([]);
         return;
       }
 
@@ -313,10 +314,6 @@ export function ProfileScreen() {
           name: profile.child_name
         }))
       ];
-
-      if (merged.length === 0) {
-        return;
-      }
 
       setFriendsFromCloud(merged);
     }
@@ -376,17 +373,42 @@ export function ProfileScreen() {
               .limit(1)
               .maybeSingle<{ id: string }>();
             if (!ownProfile?.id) {
+              setFriendsFromCloud([]);
               return;
             }
-            const { data: outgoingFriendships } = await supabase
-              .from("child_friendships")
-              .select("friend_profile_code, friend_display_name")
-              .eq("child_profile_id", ownProfile.id);
+            const [{ data: outgoingFriendships }, { data: incomingFriendships }] = await Promise.all([
+              supabase
+                .from("child_friendships")
+                .select("friend_profile_code, friend_display_name")
+                .eq("child_profile_id", ownProfile.id),
+              supabase.from("child_friendships").select("child_profile_id").eq("friend_child_profile_id", ownProfile.id)
+            ]);
 
-            const merged = (((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
-              code: row.friend_profile_code,
-              name: row.friend_display_name
-            })) as Array<{ code: string; name: string }>);
+            const incomingIds = ((incomingFriendships as IncomingFriendshipRow[] | null) ?? []).map(
+              (row) => row.child_profile_id
+            );
+
+            let incomingProfiles: Array<{ profile_code: string; child_name: string }> = [];
+
+            if (incomingIds.length > 0) {
+              const { data } = await supabase
+                .from("child_profiles")
+                .select("profile_code, child_name")
+                .in("id", incomingIds);
+
+              incomingProfiles = (data as Array<{ profile_code: string; child_name: string }> | null) ?? [];
+            }
+
+            const merged = [
+              ...(((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
+                code: row.friend_profile_code,
+                name: row.friend_display_name
+              })) as Array<{ code: string; name: string }>),
+              ...incomingProfiles.map((profile) => ({
+                code: profile.profile_code,
+                name: profile.child_name
+              }))
+            ];
 
             setFriendsFromCloud(merged);
           })();

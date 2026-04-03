@@ -68,6 +68,7 @@ create table public.child_location_progress (
   profile_code text not null,
   location_id text not null,
   completed_at timestamptz not null default now(),
+  penalty_points integer not null default 0 check (penalty_points >= 0),
   primary key (profile_code, location_id)
 );
 

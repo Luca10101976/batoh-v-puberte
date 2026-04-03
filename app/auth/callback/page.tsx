@@ -72,8 +72,8 @@ export default function AuthCallbackPage() {
         } = await supabase.auth.getSession();
 
         if (session?.user) {
-          setMessage("Účet je potvrzený. Přesměrovávám…");
-          router.replace("/profile");
+          setMessage("Účet je potvrzený. Přesměrovávám na přihlášení dítěte…");
+          router.replace("/?auth=confirmed");
           return;
         }
 

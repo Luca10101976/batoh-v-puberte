@@ -12,6 +12,13 @@ type AcceptedInviteRow = {
   invitee_profile_code: string;
 };
 
+type ProgressUpsertRow = {
+  profile_code: string;
+  location_id: string;
+  completed_at: string;
+  penalty_points?: number;
+};
+
 function normalizeCode(value: string) {
   return value.trim().toUpperCase();
 }
@@ -48,6 +55,7 @@ export async function POST(request: NextRequest) {
     expeditionId?: string | null;
     mode?: "solo" | "group";
     completedAt?: string;
+    penaltyPoints?: number;
   };
 
   const profileCode = normalizeCode(body.profileCode ?? "");
@@ -55,6 +63,7 @@ export async function POST(request: NextRequest) {
   const expeditionId = (body.expeditionId ?? "").trim();
   const mode = body.mode === "group" ? "group" : "solo";
   const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
+  const penaltyPoints = Math.max(0, Number(body.penaltyPoints) || 0);
 
   if (!profileCode || !locationId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -96,15 +105,28 @@ export async function POST(request: NextRequest) {
 
   const safeParticipants = Array.from(participantCodes).slice(0, 8);
 
-  const rows = safeParticipants.map((code) => ({
+  const rows: ProgressUpsertRow[] = safeParticipants.map((code) => ({
     profile_code: code,
     location_id: locationId,
-    completed_at: completedAt
+    completed_at: completedAt,
+    penalty_points: penaltyPoints
   }));
 
-  const { error: saveError } = await admin.from("child_location_progress").upsert(rows, {
+  let saveError: { code?: string } | null = null;
+
+  const { error: saveWithPenaltyError } = await admin.from("child_location_progress").upsert(rows, {
     onConflict: "profile_code,location_id"
   });
+
+  if (saveWithPenaltyError?.code === "42703") {
+    const fallbackRows = rows.map(({ penalty_points: _ignoredPenalty, ...row }) => row);
+    const { error: saveFallbackError } = await admin.from("child_location_progress").upsert(fallbackRows, {
+      onConflict: "profile_code,location_id"
+    });
+    saveError = saveFallbackError;
+  } else {
+    saveError = saveWithPenaltyError;
+  }
 
   if (saveError) {
     return NextResponse.json({ ok: false, error: "save_progress_failed" }, { status: 500 });

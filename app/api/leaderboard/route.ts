@@ -16,6 +16,7 @@ type ChildFriendshipRow = {
 type ChildProgressRow = {
   profile_code: string;
   location_id: string;
+  penalty_points?: number | null;
 };
 
 type LeaderboardScope = "friends" | "global";
@@ -25,14 +26,25 @@ function normalizeCode(value: string) {
 }
 
 function scoreRowsByProfile(rows: ChildProgressRow[]) {
-  const map = new Map<string, Set<string>>();
+  const map = new Map<string, { locations: Set<string>; score: number }>();
 
   rows.forEach((row) => {
     const code = normalizeCode(row.profile_code);
     if (!map.has(code)) {
-      map.set(code, new Set<string>());
+      map.set(code, { locations: new Set<string>(), score: 0 });
     }
-    map.get(code)?.add(row.location_id);
+
+    const entry = map.get(code);
+    if (!entry) {
+      return;
+    }
+    if (entry.locations.has(row.location_id)) {
+      return;
+    }
+
+    entry.locations.add(row.location_id);
+    const penaltyPoints = Math.max(0, Number(row.penalty_points) || 0);
+    entry.score += Math.max(0, 120 - penaltyPoints);
   });
 
   return map;
@@ -135,19 +147,30 @@ export async function POST(request: NextRequest) {
     const typedProfiles = (profiles as ChildProfileRow[] | null) ?? [];
     const profileCodes = typedProfiles.map((profile) => profile.profile_code);
 
-    const { data: progressRows } = await admin
+    let progressRows: ChildProgressRow[] = [];
+    const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await admin
       .from("child_location_progress")
-      .select("profile_code, location_id")
+      .select("profile_code, location_id, penalty_points")
       .in("profile_code", profileCodes);
+    if (progressRowsWithPenaltyError?.code === "42703") {
+      const { data: progressRowsLegacy } = await admin
+        .from("child_location_progress")
+        .select("profile_code, location_id")
+        .in("profile_code", profileCodes);
+      progressRows = (progressRowsLegacy as ChildProgressRow[] | null) ?? [];
+    } else {
+      progressRows = (progressRowsWithPenalty as ChildProgressRow[] | null) ?? [];
+    }
 
-    const scoreMap = scoreRowsByProfile((progressRows as ChildProgressRow[] | null) ?? []);
+    const scoreMap = scoreRowsByProfile(progressRows);
 
     const entries = typedProfiles
       .map((profile) => {
-        const completed = scoreMap.get(normalizeCode(profile.profile_code))?.size ?? 0;
+        const stats = scoreMap.get(normalizeCode(profile.profile_code));
+        const completed = stats?.locations.size ?? 0;
         return {
           name: profile.child_name,
-          score: completed * 120,
+          score: stats?.score ?? 0,
           completed,
           isYou: profile.id === ownChildProfile.id
         };
@@ -160,18 +183,28 @@ export async function POST(request: NextRequest) {
 
   const allLocationIds = locations.map((location) => location.id);
 
-  const { data: progressRows } = await admin
+  let progressRows: ChildProgressRow[] = [];
+  const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await admin
     .from("child_location_progress")
-    .select("profile_code, location_id")
+    .select("profile_code, location_id, penalty_points")
     .in("location_id", allLocationIds);
+  if (progressRowsWithPenaltyError?.code === "42703") {
+    const { data: progressRowsLegacy } = await admin
+      .from("child_location_progress")
+      .select("profile_code, location_id")
+      .in("location_id", allLocationIds);
+    progressRows = (progressRowsLegacy as ChildProgressRow[] | null) ?? [];
+  } else {
+    progressRows = (progressRowsWithPenalty as ChildProgressRow[] | null) ?? [];
+  }
 
-  const scoredByProfile = scoreRowsByProfile((progressRows as ChildProgressRow[] | null) ?? []);
+  const scoredByProfile = scoreRowsByProfile(progressRows);
 
   const topCodes = Array.from(scoredByProfile.entries())
-    .map(([profileCode, completedLocations]) => ({
+    .map(([profileCode, stats]) => ({
       profileCode,
-      completed: completedLocations.size,
-      score: completedLocations.size * 120
+      completed: stats.locations.size,
+      score: stats.score
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);

@@ -221,6 +221,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const sessionEmail = session.user.email?.trim().toLowerCase() ?? "";
+      const localParentEmail = state.parentEmail.trim().toLowerCase();
+
+      if (localParentEmail && sessionEmail && localParentEmail !== sessionEmail) {
+        setState((current) => ({
+          ...initialState,
+          registrationCompleted: false,
+          parentEmail: session.user.email?.trim() ?? "",
+          city: current.city
+        }));
+        setPinUnlocked(false);
+        cloudHydratedRef.current = true;
+        return;
+      }
+
       const accessToken = session.access_token ?? "";
       let childProfile: {
         child_name: string;
@@ -228,7 +243,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         profile_code: string;
         pin_hash: string | null;
       } | null = null;
-      let remoteRows: Array<{ location_id: string; completed_at: string }> = [];
+      let remoteRows: Array<{ location_id: string; completed_at: string; penalty_points?: number | null }> = [];
 
       if (accessToken) {
         const response = await fetch("/api/child-profile/me", {
@@ -244,7 +259,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   profile_code: string;
                   pin_hash: string | null;
                 } | null;
-                progress?: Array<{ location_id: string; completed_at: string }>;
+                progress?: Array<{ location_id: string; completed_at: string; penalty_points?: number | null }>;
               }
             | null;
 
@@ -270,17 +285,46 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
 
       if (!childProfile) {
+        setState((current) => ({
+          ...current,
+          registrationCompleted: false,
+          childPinHash: null,
+          completedLocationIds: [],
+          lastCompletedAt: {},
+          locationPenaltyPoints: {},
+          groupCompletionMembers: {},
+          currentExpeditionId: null,
+          activeMode: "solo",
+          squadMembers: [
+            {
+              id: SELF_MEMBER_ID,
+              name: current.profile.name || "Hráč",
+              joined: true
+            }
+          ]
+        }));
+        setPinUnlocked(false);
         cloudHydratedRef.current = true;
         return;
       }
 
       const canonicalProfileCode = childProfile.profile_code || state.profileCode;
       if (remoteRows.length === 0) {
-        const { data: progressRows } = await supabase
+        const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await supabase
           .from("child_location_progress")
-          .select("location_id, completed_at")
+          .select("location_id, completed_at, penalty_points")
           .eq("profile_code", canonicalProfileCode);
-        remoteRows = (progressRows as Array<{ location_id: string; completed_at: string }> | null) ?? [];
+        if (progressRowsWithPenaltyError?.code === "42703") {
+          const { data: progressRowsLegacy } = await supabase
+            .from("child_location_progress")
+            .select("location_id, completed_at")
+            .eq("profile_code", canonicalProfileCode);
+          remoteRows = (progressRowsLegacy as Array<{ location_id: string; completed_at: string }> | null) ?? [];
+        } else {
+          remoteRows =
+            (progressRowsWithPenalty as Array<{ location_id: string; completed_at: string; penalty_points?: number | null }> | null) ??
+            [];
+        }
       }
 
       setState((current) => {
@@ -288,11 +332,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           new Set([...current.completedLocationIds, ...remoteRows.map((row) => row.location_id)])
         );
         const lastCompletedAt = { ...current.lastCompletedAt };
+        const locationPenaltyPoints = { ...current.locationPenaltyPoints };
 
         remoteRows.forEach((row) => {
           const existing = lastCompletedAt[row.location_id];
           if (!existing || new Date(row.completed_at).getTime() > new Date(existing).getTime()) {
             lastCompletedAt[row.location_id] = row.completed_at;
+          }
+          if (typeof row.penalty_points === "number" && row.penalty_points >= 0) {
+            locationPenaltyPoints[row.location_id] = row.penalty_points;
           }
         });
 
@@ -306,7 +354,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             age: childProfile.child_age || current.profile.age
           },
           completedLocationIds,
-          lastCompletedAt
+          lastCompletedAt,
+          locationPenaltyPoints
         };
       });
 
@@ -314,7 +363,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
 
     void hydrateCloudState();
-  }, [hydrated, state.registrationCompleted, state.profileCode, supabase]);
+  }, [hydrated, state.parentEmail, state.registrationCompleted, state.profileCode, supabase]);
 
   useEffect(() => {
     if (!hydrated || !supabase || !state.registrationCompleted || !state.profileCode || !cloudHydratedRef.current) {
@@ -338,11 +387,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const progressRows = state.completedLocationIds.map((locationId) => ({
           profile_code: state.profileCode,
           location_id: locationId,
-          completed_at: state.lastCompletedAt[locationId] ?? new Date().toISOString()
+          completed_at: state.lastCompletedAt[locationId] ?? new Date().toISOString(),
+          penalty_points: Math.max(0, state.locationPenaltyPoints[locationId] ?? 0)
         }));
 
         if (progressRows.length > 0) {
-          await supabase.from("child_location_progress").upsert(progressRows, { onConflict: "profile_code,location_id" });
+          const { error: upsertWithPenaltyError } = await supabase
+            .from("child_location_progress")
+            .upsert(progressRows, { onConflict: "profile_code,location_id" });
+
+          if (upsertWithPenaltyError?.code === "42703") {
+            const fallbackRows = progressRows.map(({ penalty_points: _ignoredPenalty, ...row }) => row);
+            await supabase.from("child_location_progress").upsert(fallbackRows, { onConflict: "profile_code,location_id" });
+          }
         }
       })();
     }, 300);
@@ -358,6 +415,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     state.profileCode,
     state.completedLocationIds,
     state.lastCompletedAt,
+    state.locationPenaltyPoints,
     supabase
   ]);
 

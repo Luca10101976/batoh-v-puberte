@@ -7,6 +7,12 @@ create table if not exists public.child_location_progress (
   completed_at timestamptz not null default now(),
   primary key (profile_code, location_id)
 );
+alter table if exists public.child_location_progress
+add column if not exists penalty_points integer not null default 0;
+alter table if exists public.child_location_progress
+drop constraint if exists child_location_progress_penalty_points_check;
+alter table if exists public.child_location_progress
+add constraint child_location_progress_penalty_points_check check (penalty_points >= 0);
 
 create index if not exists child_location_progress_completed_at_idx
 on public.child_location_progress (completed_at desc);

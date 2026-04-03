@@ -51,15 +51,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, profile: null, progress: [] });
   }
 
-  const { data: progressRows } = await adminClient
+  let progressRows:
+    | Array<{ location_id: string; completed_at: string; penalty_points?: number | null }>
+    | null = null;
+
+  const { data: progressWithPenalty, error: progressWithPenaltyError } = await adminClient
     .from("child_location_progress")
-    .select("location_id, completed_at")
+    .select("location_id, completed_at, penalty_points")
     .eq("profile_code", profile.profile_code);
+
+  if (progressWithPenaltyError?.code === "42703") {
+    const { data: progressLegacy } = await adminClient
+      .from("child_location_progress")
+      .select("location_id, completed_at")
+      .eq("profile_code", profile.profile_code);
+
+    progressRows = (progressLegacy ?? []) as Array<{ location_id: string; completed_at: string }>;
+  } else {
+    progressRows = (progressWithPenalty ?? []) as Array<{
+      location_id: string;
+      completed_at: string;
+      penalty_points?: number | null;
+    }>;
+  }
 
   return NextResponse.json({
     ok: true,
     profile,
-    progress: (progressRows ?? []) as Array<{ location_id: string; completed_at: string }>
+    progress: progressRows ?? []
   });
 }
-

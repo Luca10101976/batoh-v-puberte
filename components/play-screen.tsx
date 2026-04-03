@@ -134,7 +134,8 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             locationId: location.id,
             expeditionId: state.currentExpeditionId,
             mode: state.activeMode,
-            completedAt: new Date().toISOString()
+            completedAt: new Date().toISOString(),
+            penaltyPoints
           })
         }).catch(() => null);
 

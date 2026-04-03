@@ -328,17 +328,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
 
       setState((current) => {
-        const completedLocationIds = Array.from(
-          new Set([...current.completedLocationIds, ...remoteRows.map((row) => row.location_id)])
-        );
-        const lastCompletedAt = { ...current.lastCompletedAt };
-        const locationPenaltyPoints = { ...current.locationPenaltyPoints };
+        const completedLocationIds = Array.from(new Set(remoteRows.map((row) => row.location_id)));
+        const lastCompletedAt: Record<string, string> = {};
+        const locationPenaltyPoints: Record<string, number> = {};
 
         remoteRows.forEach((row) => {
-          const existing = lastCompletedAt[row.location_id];
-          if (!existing || new Date(row.completed_at).getTime() > new Date(existing).getTime()) {
-            lastCompletedAt[row.location_id] = row.completed_at;
-          }
+          lastCompletedAt[row.location_id] = row.completed_at;
           if (typeof row.penalty_points === "number" && row.penalty_points >= 0) {
             locationPenaltyPoints[row.location_id] = row.penalty_points;
           }

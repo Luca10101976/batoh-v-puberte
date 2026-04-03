@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
     mode?: "solo" | "group";
     completedAt?: string;
     penaltyPoints?: number;
+    childName?: string;
+    childAge?: number;
   };
 
   const profileCode = normalizeCode(body.profileCode ?? "");
@@ -64,6 +66,8 @@ export async function POST(request: NextRequest) {
   const mode = body.mode === "group" ? "group" : "solo";
   const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
   const penaltyPoints = Math.max(0, Number(body.penaltyPoints) || 0);
+  const childName = String(body.childName ?? "").trim() || "Hráč";
+  const childAge = Math.max(8, Number(body.childAge) || 11);
 
   if (!profileCode || !locationId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -75,13 +79,39 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-  const { data: ownProfile } = await admin
+  let { data: ownProfile } = await admin
     .from("child_profiles")
     .select("id, profile_code")
     .eq("profile_code", profileCode)
     .eq("parent_user_id", user.id)
     .limit(1)
     .maybeSingle<ChildProfileRow>();
+
+  if (!ownProfile?.id) {
+    const { error: createProfileError } = await admin.from("child_profiles").upsert(
+      {
+        parent_user_id: user.id,
+        child_name: childName,
+        child_age: childAge,
+        profile_code: profileCode
+      },
+      { onConflict: "profile_code" }
+    );
+
+    if (createProfileError) {
+      return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
+    }
+
+    const { data: createdProfile } = await admin
+      .from("child_profiles")
+      .select("id, profile_code")
+      .eq("profile_code", profileCode)
+      .eq("parent_user_id", user.id)
+      .limit(1)
+      .maybeSingle<ChildProfileRow>();
+
+    ownProfile = createdProfile;
+  }
 
   if (!ownProfile?.id) {
     return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });

@@ -30,7 +30,7 @@ export const taskAnswers: Record<string, string[]> = {
   "klamovka-altan-3": ["ryzovy spacek jmenem atbaliba", "rýžový špaček jménem atbaliba"],
   "klamovka-hodiny-1": ["4", "ctyri", "čtyři"],
   "klamovka-hodiny-2": ["praha"],
-  "klamovka-hodiny-3": ["ne"],
+  "klamovka-hodiny-3": ["ne", "mozna v jinem vesmiru", "možná v jiném vesmíru"],
   "klamovka-rodina-1": ["4", "ctyri", "čtyři"],
   "klamovka-rodina-2": ["piskovec"],
   "klamovka-rodina-3": ["muz", "muž", "pan", "otec", "tata", "táta", "chlap"]

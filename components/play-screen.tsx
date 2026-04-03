@@ -89,6 +89,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   }, [state.activeMode, state.squadMembers]);
 
   const activeEpisode = location.episodes[episodeIndex];
+  const previousEpisode = episodeIndex > 0 ? location.episodes[episodeIndex - 1] : null;
   const activeTask = activeEpisode.tasks[taskIndex];
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
@@ -135,7 +136,9 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             expeditionId: state.currentExpeditionId,
             mode: state.activeMode,
             completedAt: new Date().toISOString(),
-            penaltyPoints
+            penaltyPoints,
+            childName: state.profile.name,
+            childAge: state.profile.age
           })
         }).catch(() => null);
 
@@ -307,6 +310,18 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           </p>
         </div>
       </section>
+
+      {taskIndex === 0 && previousEpisode ? (
+        <section className="glass-card border-lime/30 bg-lime/10 p-5">
+          <p className="text-xs uppercase tracking-[0.22em] text-lime">Přechod na další zastavení</p>
+          <p className="mt-2 text-sm text-mist">
+            Hotovo: <span className="font-semibold text-white">{previousEpisode.name}</span>
+          </p>
+          <p className="mt-1 text-base font-semibold text-white">
+            Teď pokračuješ na: {activeEpisode.name}
+          </p>
+        </section>
+      ) : null}
 
       {state.activeMode === "group" ? (
         <section className="glass-card p-5">

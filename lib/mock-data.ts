@@ -7,6 +7,8 @@ export type Task = {
   title: string;
   content: string;
   options?: string[];
+  illustrationImage?: string;
+  illustrationImageAlt?: string;
 };
 
 export type Episode = {
@@ -118,7 +120,9 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Hadí hlavy",
-            content: "Kolik hadích hlav najdeš pod střechou?"
+            content: "Kolik hadích hlav najdeš pod střechou?",
+            illustrationImage: "/images/klamovka-chramek.jpeg",
+            illustrationImageAlt: "Chrámek v parku Klamovka"
           },
           {
             id: "klamovka-chramek-2",

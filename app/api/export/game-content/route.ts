@@ -13,6 +13,7 @@ type ExportRow = {
   title: string;
   content: string;
   taskType: string;
+  illustrationImage: string;
   options: string;
   acceptedAnswers: string;
 };
@@ -35,6 +36,7 @@ function toCsv(rows: ExportRow[]) {
     "title",
     "content",
     "taskType",
+    "illustrationImage",
     "options",
     "acceptedAnswers"
   ];
@@ -62,6 +64,7 @@ function buildRows(): ExportRow[] {
       title: `${location.name} – intro`,
       content: `${location.introStory}\n\n${location.story}`,
       taskType: "",
+      illustrationImage: "",
       options: "",
       acceptedAnswers: ""
     });
@@ -78,6 +81,7 @@ function buildRows(): ExportRow[] {
         title: `Mezitext ${interludeIndex + 1}`,
         content: interlude,
         taskType: "",
+        illustrationImage: "",
         options: "",
         acceptedAnswers: ""
       });
@@ -95,6 +99,7 @@ function buildRows(): ExportRow[] {
         title: episode.name,
         content: `${episode.intro}\n\n${episode.background}`,
         taskType: "",
+        illustrationImage: "",
         options: "",
         acceptedAnswers: ""
       });
@@ -111,6 +116,7 @@ function buildRows(): ExportRow[] {
           title: task.title,
           content: task.content,
           taskType: task.type,
+          illustrationImage: task.illustrationImage ?? "",
           options: task.options?.join(" | ") ?? "",
           acceptedAnswers: (taskAnswers[task.id] ?? []).join(" | ")
         });
@@ -128,6 +134,7 @@ function buildRows(): ExportRow[] {
           title: `Stopa ${clueIndex + 1}`,
           content: clue,
           taskType: "",
+          illustrationImage: "",
           options: "",
           acceptedAnswers: ""
         });

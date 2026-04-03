@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
 import { type MapLocation, type Task } from "@/lib/mock-data";
@@ -351,6 +352,18 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         </div>
         <h2 className="mt-4 text-2xl font-semibold">{activeTask.title}</h2>
         <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>
+        {activeTask.illustrationImage ? (
+          <figure className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+            <Image
+              src={activeTask.illustrationImage}
+              alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
+              width={1000}
+              height={560}
+              className="h-48 w-full object-cover"
+            />
+            <figcaption className="px-3 py-2 text-xs text-mist">Ilustrační foto k úkolu</figcaption>
+          </figure>
+        ) : null}
 
         <div className="mt-5 rounded-[24px] border border-dashed border-white/15 bg-night/70 p-4">
           {activeTask.type === "choice" ? (

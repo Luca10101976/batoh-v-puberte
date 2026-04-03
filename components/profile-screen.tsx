@@ -690,6 +690,14 @@ export function ProfileScreen() {
     setInviteMessage("Čekající pozvánka byla zrušená.");
   }
 
+  async function handleLogout() {
+    if (supabase) {
+      await supabase.auth.signOut().catch(() => null);
+    }
+    openParentAuthGate();
+    router.replace("/");
+  }
+
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card overflow-hidden p-5">
@@ -722,6 +730,12 @@ export function ProfileScreen() {
             <div className="text-xs text-mist">Parta</div>
           </div>
         </div>
+        <button
+          onClick={() => void handleLogout()}
+          className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-mist"
+        >
+          Odhlásit
+        </button>
       </section>
 
       <section className="glass-card p-5">

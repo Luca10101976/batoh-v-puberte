@@ -33,7 +33,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
       if (supabase) {
         const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
         if (accessToken) {
-          await fetch("/api/parent-alert", {
+          const response = await fetch("/api/parent-alert", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -41,11 +41,18 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
             },
             body: JSON.stringify({
               event: "checkin",
-              parentEmail,
               childName: state.profile.name,
               childAge: state.profile.age
             })
           }).catch(() => null);
+
+          if (!response?.ok) {
+            const payload = await response?.json().catch(() => null);
+            const reason = typeof payload?.message === "string" ? payload.message : "Neznámá chyba";
+            setStartMessage(`Upozornění rodiči neodešlo: ${reason}`);
+          }
+        } else {
+          setStartMessage("Rodičovská relace vypršela. Přihlas se znovu.");
         }
       }
 

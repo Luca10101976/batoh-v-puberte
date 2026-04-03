@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 type ParentAlertPayload = {
-  parentEmail?: string;
   childName?: string;
   childAge?: number;
   event?: "registration" | "checkin";
@@ -35,21 +34,13 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as ParentAlertPayload;
-  const parentEmail = body.parentEmail?.trim();
+  const parentEmail = user.email.trim();
   const childName = body.childName?.trim();
   const childAge = body.childAge;
   const event = body.event ?? "registration";
 
-  if (!parentEmail || !childName) {
+  if (!childName) {
     return NextResponse.json({ ok: false, message: "Chybí povinná data." }, { status: 400 });
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
-    return NextResponse.json({ ok: false, message: "Neplatný e-mail rodiče." }, { status: 400 });
-  }
-
-  if (user.email.toLowerCase() !== parentEmail.toLowerCase()) {
-    return NextResponse.json({ ok: false, message: "E-mail rodiče neodpovídá přihlášenému účtu." }, { status: 403 });
   }
 
   const resendApiKey = process.env.RESEND_API_KEY;

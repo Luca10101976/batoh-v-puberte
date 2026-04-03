@@ -152,7 +152,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Výběr",
             title: "Kudy do pekla",
             content: "Jak se jde do spodní části chrámku?",
-            options: ["Z kopce", "Do kopce", "Ze schodů"]
+            options: ["Ze schodů", "Do kopce"]
           }
         ],
         clue: [
@@ -184,8 +184,8 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-cassel-4",
-            type: "question",
-            typeLabel: "Otázka",
+            type: "choice",
+            typeLabel: "Výběr",
             title: "Vědro",
             content: "Snad v tom vědru nemá žádlo, to by se moc nenajedl. Kde má vědro?",
             options: ["Na hlavě", "Na zadku co mu utekl"]
@@ -257,8 +257,8 @@ export const locations: MapLocation[] = [
           },
           {
             id: "klamovka-hodiny-2",
-            type: "question",
-            typeLabel: "Otázka",
+            type: "choice",
+            typeLabel: "Výběr",
             title: "Znak",
             content: "Jaký znak je na hodinách?",
             options: ["Praha", "Praha 5"]

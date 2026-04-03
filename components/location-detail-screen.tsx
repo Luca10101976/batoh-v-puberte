@@ -41,6 +41,8 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
             },
             body: JSON.stringify({
               event: "checkin",
+              parentEmail,
+              profileCode: state.profileCode,
               childName: state.profile.name,
               childAge: state.profile.age
             })
@@ -50,9 +52,27 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
             const payload = await response?.json().catch(() => null);
             const reason = typeof payload?.message === "string" ? payload.message : "Neznámá chyba";
             setStartMessage(`Upozornění rodiči neodešlo: ${reason}`);
+            return;
           }
         } else {
-          setStartMessage("Rodičovská relace vypršela. Přihlas se znovu.");
+          const response = await fetch("/api/parent-alert", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              event: "checkin",
+              parentEmail,
+              profileCode: state.profileCode,
+              childName: state.profile.name,
+              childAge: state.profile.age
+            })
+          }).catch(() => null);
+
+          if (!response?.ok) {
+            const payload = await response?.json().catch(() => null);
+            const reason = typeof payload?.message === "string" ? payload.message : "Neznámá chyba";
+            setStartMessage(`Upozornění rodiči neodešlo: ${reason}`);
+            return;
+          }
         }
       }
 

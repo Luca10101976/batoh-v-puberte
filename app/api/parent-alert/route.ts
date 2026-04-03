@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 type ParentAlertPayload = {
+  parentEmail?: string;
+  profileCode?: string;
   childName?: string;
   childAge?: number;
   event?: "registration" | "checkin";
@@ -17,24 +19,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Supabase auth není nastavené." }, { status: 500 });
   }
 
+  const body = (await request.json()) as ParentAlertPayload;
   const authHeader = request.headers.get("authorization") ?? "";
   const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!accessToken) {
-    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
-  }
-
   const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-  const {
-    data: { user },
-    error: authError
-  } = await authClient.auth.getUser(accessToken);
 
-  if (authError || !user?.email) {
-    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
+  let parentEmail = "";
+  if (accessToken) {
+    const {
+      data: { user },
+      error: authError
+    } = await authClient.auth.getUser(accessToken);
+
+    if (!authError && user?.email) {
+      parentEmail = user.email.trim();
+    }
   }
 
-  const body = (await request.json()) as ParentAlertPayload;
-  const parentEmail = user.email.trim();
+  if (!parentEmail) {
+    const fallbackEmail = body.parentEmail?.trim() ?? "";
+    const profileCode = body.profileCode?.trim() ?? "";
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceRoleKey || !fallbackEmail || !profileCode) {
+      return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
+    }
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    const { data: profileRow, error: profileError } = await adminClient
+      .from("child_profiles")
+      .select("parent_user_id")
+      .eq("profile_code", profileCode)
+      .limit(1)
+      .maybeSingle<{ parent_user_id: string }>();
+
+    if (profileError || !profileRow?.parent_user_id) {
+      return NextResponse.json({ ok: false, message: "Nelze ověřit profil dítěte." }, { status: 403 });
+    }
+
+    const { data: parentUser, error: parentUserError } = await adminClient.auth.admin.getUserById(
+      profileRow.parent_user_id
+    );
+
+    const parentUserEmail = parentUser?.user?.email?.trim().toLowerCase() ?? "";
+    if (parentUserError || !parentUserEmail || parentUserEmail !== fallbackEmail.toLowerCase()) {
+      return NextResponse.json({ ok: false, message: "E-mail neodpovídá registrovanému rodiči." }, { status: 403 });
+    }
+
+    parentEmail = fallbackEmail;
+  }
+
   const childName = body.childName?.trim();
   const childAge = body.childAge;
   const event = body.event ?? "registration";

@@ -36,6 +36,11 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   const [status, setStatus] = useState<TaskStatus>("idle");
   const [message, setMessage] = useState("");
   const [finished, setFinished] = useState(false);
+  const [pendingEpisodeTransition, setPendingEpisodeTransition] = useState<{
+    fromName: string;
+    toName: string;
+    nextEpisodeIndex: number;
+  } | null>(null);
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
   const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
   const [partySnapshotIds, setPartySnapshotIds] = useState<string[]>([]);
@@ -89,7 +94,6 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   }, [state.activeMode, state.squadMembers]);
 
   const activeEpisode = location.episodes[episodeIndex];
-  const previousEpisode = episodeIndex > 0 ? location.episodes[episodeIndex - 1] : null;
   const activeTask = activeEpisode.tasks[taskIndex];
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
@@ -164,8 +168,11 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     }
 
     if (!isLastEpisode) {
-      setEpisodeIndex((current) => current + 1);
-      setTaskIndex(0);
+      setPendingEpisodeTransition({
+        fromName: activeEpisode.name,
+        toName: location.episodes[episodeIndex + 1]?.name ?? "Další zastavení",
+        nextEpisodeIndex: episodeIndex + 1
+      });
       return;
     }
 
@@ -234,6 +241,19 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     advance();
   }
 
+  function continueToNextEpisode() {
+    if (!pendingEpisodeTransition) {
+      return;
+    }
+
+    setEpisodeIndex(pendingEpisodeTransition.nextEpisodeIndex);
+    setTaskIndex(0);
+    setPendingEpisodeTransition(null);
+    setStatus("idle");
+    setMessage("");
+    setInput("");
+  }
+
   if (finished) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -278,6 +298,34 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     );
   }
 
+  if (pendingEpisodeTransition) {
+    return (
+      <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
+        <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
+          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Blok splněn</p>
+          <div className="mt-5 rounded-2xl bg-night/45 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
+            <p className="mt-1 text-xl font-bold text-white">{pendingEpisodeTransition.fromName}</p>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-lime text-2xl font-bold text-night">→</div>
+            <p className="text-base font-semibold text-white">Přechod na další zastavení</p>
+          </div>
+          <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-lime">Pokračuješ na</p>
+            <p className="mt-1 text-3xl font-bold text-white">{pendingEpisodeTransition.toName}</p>
+          </div>
+          <button
+            onClick={continueToNextEpisode}
+            className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-base font-bold text-night"
+          >
+            Pokračovat na další zastavení
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card p-5">
@@ -310,24 +358,6 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           </p>
         </div>
       </section>
-
-      {taskIndex === 0 && previousEpisode ? (
-        <section className="rounded-[28px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_32px_rgba(178,247,93,0.18)]">
-          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Blok splněn</p>
-          <div className="mt-4 rounded-2xl bg-night/45 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
-            <p className="mt-1 text-lg font-semibold text-white">{previousEpisode.name}</p>
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-lime text-xl font-bold text-night">→</div>
-            <p className="text-sm font-semibold text-white">Pokračuj na další zastavení</p>
-          </div>
-          <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-lime">Teď hraješ</p>
-            <p className="mt-1 text-2xl font-bold text-white">{activeEpisode.name}</p>
-          </div>
-        </section>
-      ) : null}
 
       {state.activeMode === "group" ? (
         <section className="glass-card p-5">

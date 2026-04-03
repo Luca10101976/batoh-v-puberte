@@ -23,15 +23,27 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
 
   async function runCheckinAndStart(mode: "solo" | "group") {
     setStartMessage("");
-    const parentEmail = state.parentEmail.trim();
-    if (!parentEmail.includes("@")) {
-      setStartMessage("Nejdřív dokonči přihlášení rodiče.");
-      return;
-    }
 
     try {
+      let parentEmail = state.parentEmail.trim();
+      let accessToken = "";
+
       if (supabase) {
-        const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = sessionData.session?.user;
+        accessToken = sessionData.session?.access_token ?? "";
+
+        if (!parentEmail.includes("@") && sessionUser?.email) {
+          parentEmail = sessionUser.email.trim();
+        }
+      }
+
+      if (!parentEmail.includes("@")) {
+        setStartMessage("Nejdřív dokonči přihlášení rodiče.");
+        return;
+      }
+
+      if (supabase) {
         if (accessToken) {
           const response = await fetch("/api/parent-alert", {
             method: "POST",

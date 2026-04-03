@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Pan Batoh",
-    short_name: "Batoh",
+    name: "Pan Batoh v pubertě",
+    short_name: "Pan Batoh",
     description: "Městská hra pro děti 10+ s fyzickými úkoly po městě.",
     start_url: "/",
     display: "standalone",

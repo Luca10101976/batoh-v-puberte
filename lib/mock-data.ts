@@ -102,7 +102,7 @@ export const locations: MapLocation[] = [
     endingStory:
       "Neposkládala jsi jen jednu hádanku. Posbírala jsi kusy minulosti, které tu byly rozházené po celém parku. Klamovka není rozbitá, jen je složená z víc časů najednou.",
     playerMessage:
-      "Skvělá práce. Klamovka není jen park. Je to místo, kde důležité věci často najdeš v malých detailech.",
+      "Skvělá práce, našli jste zadek. A ne, bohužel nevím, co je rýžový špaček, ale když budeš googlit a zjistíš to, dej mi vědět. A víš, že je v Praze kašna, kde bydlí úhoř Pepa? Ne? Tak třeba příště. A teď už je čas jít domů, čert ví, kolik je vlastně hodin.",
     interludes: [
       "Tohle nevypadá jako náhoda. Spíš jako park, který si něco pamatuje.",
       "Když něco chybí, bývá to většinou důležité.",
@@ -168,7 +168,7 @@ export const locations: MapLocation[] = [
         name: "Cassel",
         intro: "Někdo ztratí hlavu, někdo tělo.",
         background:
-          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Jenže je tu háček. Pomník nejspíš vznikl roku 1808, to byly Edovi teprve 3 roky. To už měl válečného koně? Je tedy možné, že vznikl až roku 1838, historici sami neví.",
+          "Cassel byl vojenský kůň generála Eduarda Clam-Gallase. Jenže je tu háček. Pomník nejspíš vznikl roku 1808, to byly Edovi teprve 3 roky. To už měl válečného koně? Je ale možné, že vznikl až roku 1838, historici sami neví.",
         tasks: [
           {
             id: "klamovka-cassel-1",

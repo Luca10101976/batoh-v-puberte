@@ -194,7 +194,7 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
           onClick={() => router.push("/profile#add-friend")}
           className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
         >
-          Přidat kamaráda k výpravě
+          Pozvat
         </button>
       </section>
 

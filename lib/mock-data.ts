@@ -144,7 +144,9 @@ export const locations: MapLocation[] = [
             typeLabel: "Výběr",
             title: "Dvě poloviny",
             content: "Jak se jmenují dvě části chrámku?",
-            options: ["Nebe a peklo", "Den a noc", "Sláva a pád"]
+            options: ["Nebe a peklo", "Den a noc", "Sláva a pád"],
+            illustrationImage: "/images/klamovka-nebe-peklo.png",
+            illustrationImageAlt: "Chrámek Klamovka - nebe a peklo"
           },
           {
             id: "klamovka-chramek-5",
@@ -224,7 +226,9 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Co je uvnitř",
-            content: "Co je dnes uvnitř altánu?"
+            content: "Co je dnes uvnitř altánu?",
+            illustrationImage: "/images/klamovka-altan.png",
+            illustrationImageAlt: "Altánek v Klamovce"
           },
           {
             id: "klamovka-altan-3",

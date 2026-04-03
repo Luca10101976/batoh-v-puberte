@@ -961,7 +961,7 @@ export function ProfileScreen() {
         </div>
       </section>
 
-      <section className="glass-card p-5">
+      <section id="add-friend" className="glass-card p-5">
         <h2 className="section-title">Přidat kamaráda</h2>
         {cloudReady === false ? (
           <div className="mt-3 rounded-2xl border border-coral/40 bg-coral/10 p-3">

@@ -190,6 +190,12 @@ export function LocationDetailScreen({ location }: { location: MapLocation }) {
         <p className="mt-3 text-sm leading-6 text-mist">
           Body se připíšou všem potvrzeným členům skupiny, kteří byli ve výpravě před startem.
         </p>
+        <button
+          onClick={() => router.push("/profile#add-friend")}
+          className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+        >
+          Přidat kamaráda k výpravě
+        </button>
       </section>
 
       <div className="grid grid-cols-2 gap-3">

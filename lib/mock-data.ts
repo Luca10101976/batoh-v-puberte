@@ -118,7 +118,7 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Hadí hlavy",
-            content: "Kolik hadích hlav najdeš na sloupech?"
+            content: "Kolik hadích hlav najdeš pod střechou?"
           },
           {
             id: "klamovka-chramek-2",
@@ -199,7 +199,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Otázka",
             title: "Hlídka sokolů",
             content:
-              "Možná Casselovi tělo ukradli sokolové. Vydej se doprava, najdi, kde hlídkují dva kamenní sokolové, a spočítej schody které k nim vedou."
+              "Možná Casselovi tělo ukradli sokolové. Vydej se doprava od koně, najdi, kde hlídkují dva kamenní sokolové. Spočítej schody které k nim vedou."
           }
         ],
         clue: [
@@ -211,8 +211,7 @@ export const locations: MapLocation[] = [
       {
         id: "altan",
         name: "Novogotický altán",
-        intro:
-          "Altán vypadá tajemně už na první pohled. A ještě víc, když zjistíš, že ho někdo zkusil nechat úplně zmizet.",
+        intro: "Sklad na nářadí nebo galerie?",
         background:
           "Altán byl postaven kolem roku 1820 a sloužil jako zahradní, provozní budova. Třeba jako sklad",
         tasks: [
@@ -242,7 +241,7 @@ export const locations: MapLocation[] = [
         id: "hodiny",
         name: "Přijdu včas",
         intro:
-          "Přijít domů v 5? To může být náročný úkol. Najdi věž na které jsou hodiny",
+          "Přijít domů v 5? To může být náročný úkol                          Najdi věž na které jsou hodiny",
         background: "",
         tasks: [
           {
@@ -278,8 +277,7 @@ export const locations: MapLocation[] = [
       {
         id: "rodina",
         name: "Socha Rodiny",
-        intro:
-          "Na posledním místě tě čeká sousoší rodiny a detail, který už pak nepřehlédneš.",
+        intro: "Na posledním místě tě čeká sousoší rodiny",
         background:
           "Autorem sousoší je sochař Karel Velický. Je z pískovce a jsou na něm žena, muž a děti.",
         tasks: [

@@ -184,7 +184,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Otázka",
             title: "Vědro",
             content: "Snad v tom vědru nemá žádlo, to by se moc nenajedl. Kde má vědro?",
-            options: ["Na hlavě", "Za zadkem co mu utekl"]
+            options: ["Na hlavě", "Na zadku co mu utekl"]
           },
           {
             id: "klamovka-cassel-5",

@@ -25,8 +25,8 @@ export function RegistrationGate() {
       return;
     }
 
-    if (!Number.isInteger(numericAge) || numericAge < 8 || numericAge > 16) {
-      setError("Věk musí být číslo mezi 8 a 16.");
+    if (!Number.isInteger(numericAge) || numericAge < 8) {
+      setError("Věk musí být číslo od 8 výš.");
       return;
     }
 
@@ -69,7 +69,6 @@ export function RegistrationGate() {
               value={age}
               onChange={(event) => setAge(event.target.value)}
               min={8}
-              max={16}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-lime/60 focus:bg-white/10"
             />
           </label>

@@ -423,7 +423,7 @@ export function ProfileScreen() {
       return null;
     }
 
-    const safeAge = Math.min(16, Math.max(8, Number(state.profile.age) || 11));
+    const safeAge = Math.max(8, Number(state.profile.age) || 11);
     const safeName = state.profile.name.trim() || "Hráč";
 
     const { error } = await supabase.from("child_profiles").upsert(

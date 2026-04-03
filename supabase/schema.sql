@@ -57,7 +57,7 @@ create table public.child_profiles (
   id uuid primary key default gen_random_uuid(),
   parent_user_id uuid not null references auth.users(id) on delete cascade,
   child_name text not null,
-  child_age integer not null check (child_age between 8 and 16),
+  child_age integer not null check (child_age >= 8),
   pin_hash text,
   profile_code text not null unique,
   created_at timestamptz not null default now(),

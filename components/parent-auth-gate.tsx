@@ -238,8 +238,8 @@ export function ParentAuthGate() {
       return;
     }
 
-    if (!Number.isInteger(numericAge) || numericAge < 8 || numericAge > 16) {
-      setError("Věk musí být číslo mezi 8 a 16.");
+    if (!Number.isInteger(numericAge) || numericAge < 8) {
+      setError("Věk musí být číslo od 8 výš.");
       return;
     }
 

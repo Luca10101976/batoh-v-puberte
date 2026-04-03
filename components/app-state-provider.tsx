@@ -222,31 +222,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { data: childProfile } = await supabase
+      const { data: childProfiles } = await supabase
         .from("child_profiles")
-        .select("child_name, child_age")
-        .eq("profile_code", state.profileCode)
+        .select("child_name, child_age, profile_code, pin_hash, created_at")
         .eq("parent_user_id", session.user.id)
-        .limit(1)
-        .maybeSingle<{ child_name: string; child_age: number }>();
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const childProfile = (childProfiles?.[0] as {
+        child_name: string;
+        child_age: number;
+        profile_code: string;
+        pin_hash: string | null;
+      } | undefined) ?? null;
 
       if (!childProfile) {
         cloudHydratedRef.current = true;
         return;
       }
 
-      const { data: pinRow } = await supabase
-        .from("child_profiles")
-        .select("pin_hash")
-        .eq("profile_code", state.profileCode)
-        .eq("parent_user_id", session.user.id)
-        .limit(1)
-        .maybeSingle<{ pin_hash: string | null }>();
+      const canonicalProfileCode = childProfile.profile_code || state.profileCode;
 
       const { data: progressRows } = await supabase
         .from("child_location_progress")
         .select("location_id, completed_at")
-        .eq("profile_code", state.profileCode);
+        .eq("profile_code", canonicalProfileCode);
 
       const remoteRows = (progressRows as Array<{ location_id: string; completed_at: string }> | null) ?? [];
 
@@ -265,7 +265,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
         return {
           ...current,
-          childPinHash: pinRow?.pin_hash || current.childPinHash,
+          profileCode: canonicalProfileCode,
+          childPinHash: childProfile.pin_hash || current.childPinHash,
           profile: {
             ...current.profile,
             name: childProfile.child_name || current.profile.name,

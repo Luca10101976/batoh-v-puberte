@@ -253,22 +253,46 @@ export function ParentAuthGate() {
       return;
     }
 
-    const profileCode = generateProfileCode();
+    const { data: existingRows } = await supabase
+      .from("child_profiles")
+      .select("id, profile_code")
+      .eq("parent_user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    const { error: insertError } = await supabase.from("child_profiles").insert({
-      parent_user_id: session.user.id,
-      child_name: trimmedName,
-      child_age: numericAge,
-      profile_code: profileCode
-    });
+    const existing = existingRows?.[0] as { id: string; profile_code: string } | undefined;
+    const profileCode = existing?.profile_code || generateProfileCode();
 
-    if (insertError) {
-      setSaving(false);
-      setError("Uložení profilu dítěte se nepodařilo.");
-      return;
+    if (existing?.id) {
+      const { error: updateError } = await supabase
+        .from("child_profiles")
+        .update({
+          child_name: trimmedName,
+          child_age: numericAge,
+          pin_hash: hashPin(normalizedPin)
+        })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        setSaving(false);
+        setError("Uložení profilu dítěte se nepodařilo.");
+        return;
+      }
+    } else {
+      const { error: insertError } = await supabase.from("child_profiles").insert({
+        parent_user_id: session.user.id,
+        child_name: trimmedName,
+        child_age: numericAge,
+        pin_hash: hashPin(normalizedPin),
+        profile_code: profileCode
+      });
+
+      if (insertError) {
+        setSaving(false);
+        setError("Uložení profilu dítěte se nepodařilo.");
+        return;
+      }
     }
-
-    await supabase.from("child_profiles").update({ pin_hash: hashPin(normalizedPin) }).eq("profile_code", profileCode);
 
     const accessToken = session.access_token ?? "";
     const parentAlertResponse = await fetch("/api/parent-alert", {

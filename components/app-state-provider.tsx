@@ -83,6 +83,8 @@ type AppStateContextValue = {
 };
 
 const STORAGE_KEY = "pan-batoh-state";
+const PIN_UNLOCKED_AT_KEY = "pan-batoh-pin-unlocked-at";
+const PIN_UNLOCK_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const SELF_MEMBER_ID = "self";
 
 function generateProfileCode() {
@@ -183,7 +185,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setPinUnlocked(!state.childPinHash);
+    if (!state.childPinHash) {
+      setPinUnlocked(true);
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(PIN_UNLOCKED_AT_KEY);
+      const unlockedAt = raw ? Number(raw) : 0;
+      const stillValid = Number.isFinite(unlockedAt) && unlockedAt > 0 && Date.now() - unlockedAt < PIN_UNLOCK_TTL_MS;
+      setPinUnlocked(stillValid);
+    } catch {
+      setPinUnlocked(false);
+    }
   }, [hydrated, state.childPinHash]);
 
   useEffect(() => {
@@ -361,6 +375,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         )
       }));
       setPinUnlocked(true);
+      try {
+        window.localStorage.setItem(PIN_UNLOCKED_AT_KEY, String(Date.now()));
+      } catch {
+        // ignore local storage write errors
+      }
     },
     []
   );
@@ -382,6 +401,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       if (ok) {
         setPinUnlocked(true);
+        try {
+          window.localStorage.setItem(PIN_UNLOCKED_AT_KEY, String(Date.now()));
+        } catch {
+          // ignore local storage write errors
+        }
       }
 
       return ok;
@@ -569,6 +593,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       registrationCompleted: false
     }));
     setPinUnlocked(false);
+    try {
+      window.localStorage.removeItem(PIN_UNLOCKED_AT_KEY);
+    } catch {
+      // ignore local storage write errors
+    }
   }, []);
 
   const isLocationUnlocked = useCallback(

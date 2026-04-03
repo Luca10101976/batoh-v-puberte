@@ -9,7 +9,7 @@ import { type MapLocation, type Task } from "@/lib/mock-data";
 import { taskAnswers } from "@/lib/task-answers";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-type TaskStatus = "idle" | "correct" | "manual" | "unknown";
+type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
 const UNKNOWN_PENALTY_POINTS = 15;
 const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
@@ -207,7 +207,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     }
 
     const attemptsLeft = MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN + 1 - nextWrongAttempts;
-    setStatus("idle");
+    setStatus("wrong");
     setMessage(`Tohle nesedí. Zkus to znovu. Zbývá ${attemptsLeft} pokus.`);
   }
 
@@ -296,6 +296,15 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         </div>
         <div className="mt-3 h-2 rounded-full bg-white/10">
           <div className="h-2 rounded-full bg-lime" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="mt-4 rounded-2xl border border-sky/20 bg-sky/10 px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-sky">Aktuální zastavení</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {activeEpisode.name}
+          </p>
+          <p className="mt-1 text-xs text-mist">
+            {isLastTask && !isLastEpisode ? "Po tomhle úkolu se přesuneš na další zastavení." : "Jsi ve správném bodě mise."}
+          </p>
         </div>
       </section>
 
@@ -411,6 +420,8 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             className={`mt-4 text-sm ${
               status === "correct"
                 ? "text-lime"
+                : status === "wrong"
+                  ? "text-coral"
                 : status === "unknown"
                   ? "text-mist"
                   : status === "manual"
@@ -438,7 +449,11 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               onClick={handlePhotoConfirmAndAdvance}
               className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night"
             >
-              {isLastTask && isLastEpisode ? "Potvrdit a dokončit misi" : "Potvrdit a pokračovat"}
+              {isLastTask && isLastEpisode
+                ? "Potvrdit a dokončit misi"
+                : isLastTask && !isLastEpisode
+                  ? "Potvrdit a přejít na další zastavení"
+                  : "Potvrdit a pokračovat"}
             </button>
           </div>
         ) : (
@@ -461,7 +476,11 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               disabled={status === "idle"}
               className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-mist"
             >
-              {isLastTask && isLastEpisode ? "Dokončit misi" : "Další stopa"}
+              {isLastTask && isLastEpisode
+                ? "Dokončit misi"
+                : isLastTask && !isLastEpisode
+                  ? "Další zastavení"
+                  : "Další stopa"}
             </button>
           </div>
         )}

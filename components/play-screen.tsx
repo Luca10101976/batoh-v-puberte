@@ -342,7 +342,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
               width={1000}
               height={560}
-              className="h-48 w-full object-cover"
+              className="h-48 w-full object-cover object-top"
             />
           </figure>
         ) : null}

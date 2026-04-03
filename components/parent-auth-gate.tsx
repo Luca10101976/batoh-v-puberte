@@ -364,9 +364,9 @@ export function ParentAuthGate() {
       <main className="flex min-h-screen items-center justify-center px-4 py-6">
         <section className="glass-card w-full max-w-md p-6">
           <p className="text-xs uppercase tracking-[0.24em] text-coral">Profil dítěte</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight">Ještě jeden krok</h1>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight">Jednorázové nastavení dítěte</h1>
           <p className="mt-3 text-sm leading-6 text-mist">
-            Rodič je přihlášený. Teď nastav profil dítěte, který se bude načítat i na dalších zařízeních.
+            Rodič je přihlášený. Tohle není další přihlášení. Jen jednou nastav profil dítěte pro všechna zařízení.
           </p>
 
           <form onSubmit={handleChildProfile} className="mt-6 space-y-4">
@@ -443,7 +443,7 @@ export function ParentAuthGate() {
             onClick={() => setMode("login")}
             className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold ${mode === "login" ? "bg-white text-night" : "text-mist"}`}
           >
-            Přihlášení dítěte
+            Přihlášení rodiče
           </button>
           <button
             onClick={() => setMode("signup")}
@@ -454,11 +454,11 @@ export function ParentAuthGate() {
         </div>
 
         <h1 className="mt-5 text-2xl font-bold">
-          {mode === "login" ? "Přihlášení dítěte" : "Požádej rodiče o autorizaci"}
+          {mode === "login" ? "Přihlášení rodiče" : "Požádej rodiče o autorizaci"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-mist">
           {mode === "login"
-            ? "Přihlas se rodičovským e-mailem a heslem. Profil se pak obnoví i po změně zařízení."
+            ? "Rodič se přihlásí e-mailem a heslem. Dítě pak pokračuje svým PINem."
             : "Pro první spuštění: zadej e-mail rodiče a heslo. Rodiči přijde potvrzovací e-mail."}
         </p>
 
@@ -495,7 +495,7 @@ export function ParentAuthGate() {
             {saving
               ? "Ověřuju účet..."
               : mode === "login"
-                ? "Přihlásit dítě"
+                ? "Přihlásit rodiče"
                 : "Požádat rodiče"}
           </button>
         </form>

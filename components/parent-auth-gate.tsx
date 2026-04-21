@@ -68,11 +68,12 @@ export function ParentAuthGate() {
       }
 
       if (!data) {
+        // Fallback: canonical = oldest row (ascending: true)
         const { data: profileRows, error: profileError } = await supabase
           .from("child_profiles")
           .select("child_name, child_age, profile_code, pin_hash")
           .eq("parent_user_id", parentUserId)
-          .order("created_at", { ascending: false })
+          .order("created_at", { ascending: true })
           .limit(1);
 
         if (profileError) {
@@ -266,11 +267,12 @@ export function ParentAuthGate() {
       return;
     }
 
+    // Canonical row = oldest — consistent with read path
     const { data: existingRows } = await supabase
       .from("child_profiles")
       .select("id, profile_code")
       .eq("parent_user_id", session.user.id)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: true })
       .limit(1);
 
     const existing = existingRows?.[0] as { id: string; profile_code: string } | undefined;

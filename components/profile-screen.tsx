@@ -421,6 +421,24 @@ export function ProfileScreen() {
     };
   }, [setFriendsFromCloud, state.profileCode, supabase]);
 
+  async function saveProfileToCloud(name: string, avatarConfig: AvatarConfig) {
+    if (!supabase || !state.profileCode) {
+      return;
+    }
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return;
+    }
+    // Always write by profile_code (UNIQUE) — guarantees we hit the canonical row
+    await supabase
+      .from("child_profiles")
+      .update({ child_name: name, avatar_config: avatarConfig })
+      .eq("profile_code", state.profileCode)
+      .eq("parent_user_id", session.user.id);
+  }
+
   async function ensureOwnCloudProfile() {
     if (!supabase) {
       return null;
@@ -757,6 +775,12 @@ export function ProfileScreen() {
             <input
               value={state.profile.name}
               onChange={(event) => updateProfile({ name: event.target.value })}
+              onBlur={(event) => {
+                const name = event.target.value.trim();
+                if (name) {
+                  void saveProfileToCloud(name, state.profile.avatarConfig);
+                }
+              }}
               className="mt-1 w-full bg-transparent text-2xl font-bold outline-none"
             />
             <p className="mt-1 text-sm text-mist">
@@ -952,6 +976,7 @@ export function ProfileScreen() {
               <button
                 onClick={() => {
                   updateProfile({ avatarConfig: avatarDraft });
+                  void saveProfileToCloud(state.profile.name, avatarDraft);
                   setAvatarStudioOpen(false);
                 }}
                 className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"

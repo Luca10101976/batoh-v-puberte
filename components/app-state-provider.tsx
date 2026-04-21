@@ -242,6 +242,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         child_age: number;
         profile_code: string;
         pin_hash: string | null;
+        avatar_config: Record<string, unknown> | null;
       } | null = null;
       let remoteRows: Array<{ location_id: string; completed_at: string; penalty_points?: number | null }> = [];
 
@@ -258,6 +259,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   child_age: number;
                   profile_code: string;
                   pin_hash: string | null;
+                  avatar_config: Record<string, unknown> | null;
                 } | null;
                 progress?: Array<{ location_id: string; completed_at: string; penalty_points?: number | null }>;
               }
@@ -269,11 +271,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
 
       if (!childProfile) {
+        // Fallback direct read (if API unavailable): canonical = oldest row
         const { data: childProfiles } = await supabase
           .from("child_profiles")
-          .select("child_name, child_age, profile_code, pin_hash, created_at")
+          .select("child_name, child_age, profile_code, pin_hash, avatar_config, created_at")
           .eq("parent_user_id", session.user.id)
-          .order("created_at", { ascending: false })
+          .order("created_at", { ascending: true })
           .limit(1);
 
         childProfile = (childProfiles?.[0] as {
@@ -281,6 +284,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           child_age: number;
           profile_code: string;
           pin_hash: string | null;
+          avatar_config: Record<string, unknown> | null;
         } | undefined) ?? null;
       }
 
@@ -339,6 +343,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }
         });
 
+        // Merge avatar_config from DB if present (cross-device sync).
+        // Falls back to current localStorage value if DB has no avatar_config yet.
+        const dbAvatarConfig = childProfile.avatar_config as AvatarConfig | null | undefined;
         return {
           ...current,
           profileCode: canonicalProfileCode,
@@ -346,7 +353,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           profile: {
             ...current.profile,
             name: childProfile.child_name || current.profile.name,
-            age: childProfile.child_age || current.profile.age
+            age: childProfile.child_age || current.profile.age,
+            ...(dbAvatarConfig ? { avatarConfig: dbAvatarConfig } : {})
           },
           completedLocationIds,
           lastCompletedAt,

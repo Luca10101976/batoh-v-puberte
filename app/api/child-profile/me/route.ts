@@ -6,6 +6,7 @@ type ChildProfileDto = {
   child_age: number;
   profile_code: string;
   pin_hash: string | null;
+  avatar_config: Record<string, unknown> | null;
 };
 
 export async function GET(request: Request) {
@@ -35,15 +36,22 @@ export async function GET(request: Request) {
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+  // Canonical row = oldest by created_at (first-ever created for this parent).
+  // Removing .limit(1) to detect legacy duplicate rows and log a warning.
   const { data: profileRows, error: profileError } = await adminClient
     .from("child_profiles")
-    .select("child_name, child_age, profile_code, pin_hash, created_at")
+    .select("child_name, child_age, profile_code, pin_hash, avatar_config, created_at")
     .eq("parent_user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .order("created_at", { ascending: true });
 
   if (profileError) {
     return NextResponse.json({ ok: false, message: "Nepodařilo se načíst profil dítěte." }, { status: 500 });
+  }
+
+  if (profileRows && profileRows.length > 1) {
+    console.warn(
+      `[child-profile/me] Legacy: ${profileRows.length} profiles for parent ${user.id}, using oldest (${profileRows[0]?.created_at})`
+    );
   }
 
   const profile = (profileRows?.[0] as ChildProfileDto | undefined) ?? null;

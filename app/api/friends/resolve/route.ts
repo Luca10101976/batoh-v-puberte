@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 
 type ChildProfileRow = {
   id: string;
   child_name: string;
   profile_code: string;
+  player_code?: string | null;
 };
 
 function normalizeCode(value: string) {
@@ -37,8 +39,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { profileCode?: string };
-  const requestedCode = normalizeCode(body.profileCode ?? "");
+  const rateLimitResult = await checkRateLimit({
+    action: "friends_resolve",
+    ip: getRequestIpAddress(request),
+    userId: user.id,
+    limit: 60,
+    windowMinutes: 60,
+    blockMinutes: 10
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "rate_limited",
+        retry_after: rateLimitResult.retryAfterSeconds ?? 60
+      },
+      { status: 429 }
+    );
+  }
+
+  const body = (await request.json()) as { playerCode?: string; profileCode?: string };
+  const requestedCode = normalizeCode(body.playerCode ?? body.profileCode ?? "");
 
   if (!requestedCode || requestedCode.length < 4) {
     return NextResponse.json({ ok: false, error: "invalid_code" }, { status: 400 });
@@ -48,25 +70,37 @@ export async function POST(request: NextRequest) {
 
   const { data: ownChildProfile } = await admin
     .from("child_profiles")
-    .select("id, profile_code")
+    .select("id, profile_code, player_code")
     .eq("parent_user_id", user.id)
     .limit(1)
-    .maybeSingle<{ id: string; profile_code: string }>();
+    .maybeSingle<{ id: string; profile_code: string; player_code?: string | null }>();
 
   if (!ownChildProfile?.id) {
     return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
 
-  if (normalizeCode(ownChildProfile.profile_code) === requestedCode) {
+  const ownPublicCode = normalizeCode(ownChildProfile.player_code || ownChildProfile.profile_code);
+
+  if (ownPublicCode === requestedCode) {
     return NextResponse.json({ ok: false, error: "own_code" }, { status: 400 });
   }
 
-  const { data: targetProfile } = await admin
+  const { data: targetByPlayerCode } = await admin
     .from("child_profiles")
-    .select("id, child_name, profile_code")
-    .eq("profile_code", requestedCode)
+    .select("id, child_name, profile_code, player_code")
+    .eq("player_code", requestedCode)
     .limit(1)
     .maybeSingle<ChildProfileRow>();
+
+  // Legacy compatibility path (A2): keep old profile_code lookup until A3 cleanup.
+  const { data: targetProfile } = targetByPlayerCode?.id
+    ? { data: targetByPlayerCode }
+    : await admin
+        .from("child_profiles")
+        .select("id, child_name, profile_code, player_code")
+        .eq("profile_code", requestedCode)
+        .limit(1)
+        .maybeSingle<ChildProfileRow>();
 
   if (!targetProfile?.id) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
@@ -77,7 +111,7 @@ export async function POST(request: NextRequest) {
     profile: {
       id: targetProfile.id,
       name: targetProfile.child_name,
-      code: targetProfile.profile_code
+      code: targetProfile.player_code || targetProfile.profile_code
     }
   });
 }

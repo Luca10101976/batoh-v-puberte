@@ -4,8 +4,12 @@ import { locations } from "@/lib/mock-data";
 
 type ChildProfileRow = {
   id: string;
+  parent_user_id?: string | null;
   child_name: string;
   profile_code: string;
+  player_code?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 type ChildFriendshipRow = {
@@ -50,11 +54,74 @@ function scoreRowsByProfile(rows: ChildProgressRow[]) {
   return map;
 }
 
-function publicAlias(name: string, profileCode: string) {
+function publicAlias(name: string) {
   const cleanName = (name || "Hráč").trim();
   const firstWord = cleanName.split(/\s+/)[0] || "Hráč";
-  const suffix = normalizeCode(profileCode).slice(-2) || "XX";
-  return `${firstWord} #${suffix}`;
+  return firstWord;
+}
+
+function toTimestamp(value?: string | null) {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function canonicalizeProfiles(rows: ChildProfileRow[]) {
+  const byParent = new Map<string, ChildProfileRow>();
+  const withoutParent: ChildProfileRow[] = [];
+
+  rows.forEach((row) => {
+    const parentId = row.parent_user_id?.trim();
+    if (!parentId) {
+      withoutParent.push(row);
+      return;
+    }
+
+    const existing = byParent.get(parentId);
+    if (!existing) {
+      byParent.set(parentId, row);
+      return;
+    }
+
+    const existingTs = Math.max(toTimestamp(existing.updated_at), toTimestamp(existing.created_at));
+    const rowTs = Math.max(toTimestamp(row.updated_at), toTimestamp(row.created_at));
+    if (rowTs >= existingTs) {
+      byParent.set(parentId, row);
+    }
+  });
+
+  return [...byParent.values(), ...withoutParent];
+}
+
+function findOwnCanonicalProfile(
+  rows: ChildProfileRow[],
+  requestedCode: string
+): ChildProfileRow | null {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const canonicalRows = canonicalizeProfiles(rows);
+  const req = normalizeCode(requestedCode);
+
+  const byPlayerCode = canonicalRows.find(
+    (row) => normalizeCode(row.player_code ?? "") === req
+  );
+  if (byPlayerCode) {
+    return byPlayerCode;
+  }
+
+  // Legacy compatibility path (A2): fallback to old profile_code until A3 cleanup.
+  const byProfileCode = canonicalRows.find(
+    (row) => normalizeCode(row.profile_code) === req
+  );
+  if (byProfileCode) {
+    return byProfileCode;
+  }
+
+  return canonicalRows[0] ?? null;
 }
 
 export async function POST(request: NextRequest) {
@@ -85,12 +152,13 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as {
     scope?: LeaderboardScope;
+    playerCode?: string;
     profileCode?: string;
     limit?: number;
   };
   const scope = body.scope;
-  const requestedCode = normalizeCode(body.profileCode ?? "");
-  const limit = Math.min(50, Math.max(5, Number(body.limit) || 20));
+  const requestedCode = normalizeCode(body.playerCode ?? body.profileCode ?? "");
+  const limit = Math.min(20, Math.max(5, Number(body.limit) || 20));
 
   if (!scope || (scope !== "friends" && scope !== "global")) {
     return NextResponse.json({ ok: false, error: "invalid_scope" }, { status: 400 });
@@ -102,28 +170,33 @@ export async function POST(request: NextRequest) {
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
-  const { data: ownChildProfile } = await admin
+  const { data: ownProfileRows } = await admin
     .from("child_profiles")
-    .select("id, child_name, profile_code")
-    .eq("parent_user_id", user.id)
-    .eq("profile_code", requestedCode)
-    .limit(1)
-    .maybeSingle<ChildProfileRow>();
+    .select("id, parent_user_id, child_name, profile_code, player_code, created_at, updated_at")
+    .eq("parent_user_id", user.id);
+
+  const ownChildProfile = findOwnCanonicalProfile(
+    (ownProfileRows as ChildProfileRow[] | null) ?? [],
+    requestedCode
+  );
+  const ownProfilesAll = canonicalizeProfiles((ownProfileRows as ChildProfileRow[] | null) ?? []);
+  const ownProfileIds = new Set(ownProfilesAll.map((profile) => profile.id));
 
   if (!ownChildProfile?.id) {
     return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
+  const ownParentUserId = ownChildProfile.parent_user_id ?? null;
 
   if (scope === "friends") {
     const [{ data: outgoing }, { data: incoming }] = await Promise.all([
       admin
         .from("child_friendships")
         .select("child_profile_id, friend_child_profile_id")
-        .eq("child_profile_id", ownChildProfile.id),
+        .in("child_profile_id", Array.from(ownProfileIds)),
       admin
         .from("child_friendships")
         .select("child_profile_id, friend_child_profile_id")
-        .eq("friend_child_profile_id", ownChildProfile.id)
+        .in("friend_child_profile_id", Array.from(ownProfileIds))
     ]);
 
     const links = [
@@ -141,10 +214,10 @@ export async function POST(request: NextRequest) {
 
     const { data: profiles } = await admin
       .from("child_profiles")
-      .select("id, child_name, profile_code")
+      .select("id, parent_user_id, child_name, profile_code, player_code, created_at, updated_at")
       .in("id", memberIdList);
 
-    const typedProfiles = (profiles as ChildProfileRow[] | null) ?? [];
+    const typedProfiles = canonicalizeProfiles((profiles as ChildProfileRow[] | null) ?? []);
     const profileCodes = typedProfiles.map((profile) => profile.profile_code);
 
     let progressRows: ChildProgressRow[] = [];
@@ -168,13 +241,17 @@ export async function POST(request: NextRequest) {
       .map((profile) => {
         const stats = scoreMap.get(normalizeCode(profile.profile_code));
         const completed = stats?.locations.size ?? 0;
+        const isYou =
+          ownProfileIds.has(profile.id) ||
+          (ownParentUserId && profile.parent_user_id && profile.parent_user_id === ownParentUserId);
         return {
           name: profile.child_name,
           score: stats?.score ?? 0,
           completed,
-          isYou: profile.id === ownChildProfile.id
+          isYou
         };
       })
+      .filter((entry) => !entry.isYou)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
@@ -182,6 +259,15 @@ export async function POST(request: NextRequest) {
   }
 
   const allLocationIds = locations.map((location) => location.id);
+
+  const { data: allProfiles } = await admin
+    .from("child_profiles")
+    .select("id, parent_user_id, child_name, profile_code, player_code, created_at, updated_at");
+  const typedAllProfiles = canonicalizeProfiles((allProfiles as ChildProfileRow[] | null) ?? []);
+
+  if (typedAllProfiles.length === 0) {
+    return NextResponse.json({ ok: true, entries: [] });
+  }
 
   let progressRows: ChildProgressRow[] = [];
   const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await admin
@@ -200,44 +286,18 @@ export async function POST(request: NextRequest) {
 
   const scoredByProfile = scoreRowsByProfile(progressRows);
 
-  const topCodes = Array.from(scoredByProfile.entries())
-    .map(([profileCode, stats]) => ({
-      profileCode,
-      completed: stats.locations.size,
-      score: stats.score
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-
-  if (topCodes.length === 0) {
-    return NextResponse.json({ ok: true, entries: [] });
-  }
-
-  const topCodeList = topCodes.map((entry) => entry.profileCode);
-  const { data: profiles } = await admin
-    .from("child_profiles")
-    .select("id, child_name, profile_code")
-    .in("profile_code", topCodeList);
-
-  const profileByCode = new Map<string, ChildProfileRow>();
-  ((profiles as ChildProfileRow[] | null) ?? []).forEach((profile) => {
-    profileByCode.set(normalizeCode(profile.profile_code), profile);
-  });
-
-  const entries = topCodes
-    .map((entry) => {
-      const profile = profileByCode.get(normalizeCode(entry.profileCode));
-      if (!profile) {
-        return null;
-      }
+  const entries = typedAllProfiles
+    .map((profile) => {
+      const stats = scoredByProfile.get(normalizeCode(profile.profile_code));
       return {
-        name: publicAlias(profile.child_name, profile.profile_code),
-        score: entry.score,
-        completed: entry.completed,
+        name: publicAlias(profile.child_name),
+        score: stats?.score ?? 0,
+        completed: stats?.locations.size ?? 0,
         isYou: normalizeCode(profile.profile_code) === normalizeCode(ownChildProfile.profile_code)
       };
     })
-    .filter((entry): entry is { name: string; score: number; completed: number; isYou: boolean } => !!entry);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 
   return NextResponse.json({ ok: true, entries });
 }

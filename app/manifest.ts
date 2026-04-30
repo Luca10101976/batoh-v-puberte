@@ -15,10 +15,10 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["games", "education", "travel"],
     icons: [
       {
-        src: "/icons/icon.svg",
+        src: "/icons/mozek-favicon.svg",
         sizes: "any",
         type: "image/svg+xml",
-        purpose: "maskable"
+        purpose: "any"
       }
     ]
   };

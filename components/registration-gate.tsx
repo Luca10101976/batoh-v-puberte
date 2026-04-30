@@ -31,7 +31,7 @@ export function RegistrationGate() {
     }
 
     if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
-      setError("Zadej prosím platný e-mail na rodiče.");
+      setError("Zadej prosím platný e-mail účtu.");
       return;
     }
 
@@ -47,7 +47,7 @@ export function RegistrationGate() {
         <p className="text-xs uppercase tracking-[0.24em] text-coral">První spuštění</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Nejdřív krátká registrace</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Vyplň základní údaje a můžeme jít hrát. E-mail rodiče slouží pro bezpečnostní upozornění.
+          Vyplň základní údaje a můžeme jít hrát. E-mail účtu slouží pro bezpečnostní upozornění.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -74,12 +74,12 @@ export function RegistrationGate() {
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm text-mist">E-mail rodiče</span>
+            <span className="text-sm text-mist">E-mail účtu</span>
             <input
               type="email"
               value={parentEmail}
               onChange={(event) => setParentEmail(event.target.value)}
-              placeholder="rodic@email.cz"
+              placeholder="postope@panbatoh.cz"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-lime/60 focus:bg-white/10"
             />
           </label>

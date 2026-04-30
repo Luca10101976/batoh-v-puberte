@@ -29,7 +29,7 @@ Mobile-first PWA pro mestskou hru pro deti 10+, postavena na Next.js 14, Tailwin
 Pro realne odesilani e-mailu je potreba nastavit ve Vercel environment variables:
 
 - `RESEND_API_KEY` - API klic z Resend
-- `PARENT_ALERT_FROM_EMAIL` - overena odesilaci adresa (napr. `noreply@tvoje-domena.cz`)
+- `PARENT_ALERT_FROM_EMAIL` - overena odesilaci adresa (napr. `postope@panbatoh.cz`)
 
 Po nastaveni promennych redeployni aplikaci. Bez toho registrace skonci chybou odeslani e-mailu.
 

@@ -4,3 +4,16 @@ node_modules
 .env
 .env.local
 *.log
+.DS_Store
+**/.DS_Store
+supabase/.temp
+*.tmp
+XXnrRzTG
+lucie-lejnarova-2c4fec1e/
+archiv_dobre_nalady_hracsky_sesit*.md
+archiv_dobre_nalady_hracsky_sesit*.zip
+batuzek-budejky-korekce.xlsx
+hedvika-multiplex-sešit.html
+hedvika-multiplex-sešit.md
+kdo_ukradl_hedvicin_recept_tisk.html
+kdo_ukradl_hedvicin_recept_tisk.md

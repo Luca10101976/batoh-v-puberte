@@ -77,7 +77,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        setMessage("Potvrzení proběhlo. Přihlas se prosím rodičovským e-mailem a heslem.");
+        setMessage("Potvrzení proběhlo. Přihlas se prosím stejným e-mailem a heslem.");
         router.replace("/?auth=confirmed");
       } catch (error: any) {
         const msg = String(error?.message || "").toLowerCase();

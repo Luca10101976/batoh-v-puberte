@@ -36,12 +36,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json()) as {
+    playerCode?: string;
     profileCode?: string;
     subscription?: PushSubscriptionPayload;
     userAgent?: string;
   };
 
-  const profileCode = body.profileCode?.trim().toUpperCase();
+  const profileCode = (body.playerCode ?? body.profileCode)?.trim().toUpperCase();
   const endpoint = body.subscription?.endpoint?.trim();
   const p256dh = body.subscription?.keys?.p256dh?.trim();
   const auth = body.subscription?.keys?.auth?.trim();
@@ -51,21 +52,36 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-  const { data: ownChildProfile } = await admin
+  const { data: ownByPlayerCode } = await admin
     .from("child_profiles")
-    .select("id")
-    .eq("profile_code", profileCode)
+    .select("id, profile_code, player_code")
+    .eq("player_code", profileCode)
     .eq("parent_user_id", user.id)
     .limit(1)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; profile_code: string; player_code?: string | null }>();
+
+  // Legacy compatibility path (A2): fallback to old profile_code until A3 cleanup.
+  const ownChildProfile = ownByPlayerCode?.id
+    ? ownByPlayerCode
+    : (
+        await admin
+          .from("child_profiles")
+          .select("id, profile_code, player_code")
+          .eq("profile_code", profileCode)
+          .eq("parent_user_id", user.id)
+          .limit(1)
+          .maybeSingle<{ id: string; profile_code: string; player_code?: string | null }>()
+      ).data;
 
   if (!ownChildProfile?.id) {
     return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
   }
 
+  const publicPlayerCode = ownChildProfile.player_code || ownChildProfile.profile_code;
+
   const { error } = await admin.from("child_push_subscriptions").upsert(
     {
-      profile_code: profileCode,
+      profile_code: publicPlayerCode,
       endpoint,
       p256dh,
       auth,

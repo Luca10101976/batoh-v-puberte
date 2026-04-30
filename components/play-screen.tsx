@@ -5,31 +5,39 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
-import { type MapLocation, type Task } from "@/lib/mock-data";
-import { taskAnswers } from "@/lib/task-answers";
+import { locations, type MapLocation } from "@/lib/mock-data";
+import { getUnlockRequirement } from "@/lib/location-unlock";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
 const UNKNOWN_PENALTY_POINTS = 15;
 const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
-function normalize(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
+
+function isManualTask(task: GameplayTask) {
+  return task.type === "photo";
 }
 
-function isManualTask(task: Task) {
-  return task.type === "photo" || !taskAnswers[task.id];
-}
-
-export function PlayScreen({ location }: { location: MapLocation }) {
+export function PlayScreen({ location }: { location: PlayLocation }) {
   const { state, setActiveMode, completeLocation, isLocationUnlocked } = useAppState();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const requestedEpisodeIndex = useMemo(() => {
+    const episodeParam = searchParams.get("episode");
+    if (!episodeParam) {
+      return null;
+    }
+
+    const episodeNumber = Number(episodeParam);
+    if (!Number.isInteger(episodeNumber) || episodeNumber < 1 || episodeNumber > location.episodes.length) {
+      return null;
+    }
+
+    return episodeNumber - 1;
+  }, [location.episodes.length, searchParams]);
   const [episodeIndex, setEpisodeIndex] = useState(0);
   const [taskIndex, setTaskIndex] = useState(0);
   const [input, setInput] = useState("");
@@ -43,7 +51,8 @@ export function PlayScreen({ location }: { location: MapLocation }) {
   } | null>(null);
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
   const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
-  const [partySnapshotIds, setPartySnapshotIds] = useState<string[]>([]);
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [resuming, setResuming] = useState(true);
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -54,75 +63,188 @@ export function PlayScreen({ location }: { location: MapLocation }) {
 
   useEffect(() => {
     const mode = searchParams.get("mode");
-    const episodeParam = searchParams.get("episode");
 
-    if (mode === "solo" || mode === "group") {
-      setActiveMode(mode);
+    setActiveMode("solo");
+
+    if (requestedEpisodeIndex !== null) {
+      setEpisodeIndex(requestedEpisodeIndex);
+      setTaskIndex(0);
     }
+  }, [requestedEpisodeIndex, searchParams, setActiveMode]);
 
-    if (episodeParam) {
-      const episodeNumber = Number(episodeParam);
-
-      if (Number.isInteger(episodeNumber) && episodeNumber >= 1 && episodeNumber <= location.episodes.length) {
-        setEpisodeIndex(episodeNumber - 1);
-        setTaskIndex(0);
-      }
-    }
-  }, [location.episodes.length, searchParams, setActiveMode]);
-
-  useEffect(() => {
-    setPartySnapshotIds([]);
-  }, [location.id, state.activeMode]);
-
-  useEffect(() => {
-    if (state.activeMode !== "group") {
-      setPartySnapshotIds([]);
-      return;
-    }
-
-    setPartySnapshotIds((current) => {
-      if (current.length > 0) {
-        return current;
-      }
-
-      const joinedIds = state.squadMembers
-        .filter((member) => member.joined || member.id === SELF_MEMBER_ID)
-        .map((member) => member.id);
-
-      return joinedIds.length > 0 ? joinedIds : [SELF_MEMBER_ID];
+  const locationUnlocked = isLocationUnlocked(location.id, location.unlocked);
+  const unlockRequirement = getUnlockRequirement(location, locations);
+  const taskPositionById = useMemo(() => {
+    const map = new Map<string, { episodeIndex: number; taskIndex: number }>();
+    location.episodes.forEach((episode, epIndex) => {
+      episode.tasks.forEach((task, tIndex) => {
+        map.set(task.id, { episodeIndex: epIndex, taskIndex: tIndex });
+      });
     });
-  }, [state.activeMode, state.squadMembers]);
+    return map;
+  }, [location.episodes]);
 
   const activeEpisode = location.episodes[episodeIndex];
   const activeTask = activeEpisode.tasks[taskIndex];
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
-  const joinedCount =
-    state.activeMode === "group"
-      ? Math.max(1, partySnapshotIds.length)
-      : 1;
   const totalTasks = location.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
   const completedTasksBeforeCurrent = location.episodes
     .slice(0, episodeIndex)
     .reduce((sum, episode) => sum + episode.tasks.length, 0);
   const progress = Math.round(((completedTasksBeforeCurrent + taskIndex + 1) / totalTasks) * 100);
-  const alreadyUnlocked = isLocationUnlocked(location.id, location.unlocked);
+  const alreadyUnlocked = state.completedLocationIds.includes(location.id);
   const knownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "known").length;
   const unknownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "unknown").length;
+  const canAdvance =
+    status === "correct" ||
+    status === "unknown" ||
+    status === "manual";
 
-  const completionLabel = useMemo(() => {
-    if (state.activeMode === "solo") {
-      return `Body se připíšou hráči ${state.profile.name}.`;
+  const completionLabel = useMemo(() => `Body se připíšou hráči ${state.profile.name}.`, [state.profile.name]);
+  const hasAnyTasks = totalTasks > 0;
+
+  useEffect(() => {
+    async function hydrateInProgressMission() {
+      setTaskOutcomes({});
+      setWrongAttemptsByTask({});
+      setStatus("idle");
+      setMessage("");
+      setInput("");
+      setFinished(false);
+      setPendingEpisodeTransition(null);
+
+      if (!supabase || !state.profileCode) {
+        setResuming(false);
+        return;
+      }
+
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (!accessToken) {
+        setResuming(false);
+        return;
+      }
+
+      if (alreadyUnlocked) {
+        await fetch("/api/game/reset-location-replay", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            profileCode: state.profileCode,
+            locationId: location.id
+          })
+        }).catch(() => null);
+
+        if (requestedEpisodeIndex !== null) {
+          setEpisodeIndex(requestedEpisodeIndex);
+          setTaskIndex(0);
+        }
+
+        setMessage("Tohle je opakované hraní. Začínáš znovu na čisto.");
+        setResuming(false);
+        return;
+      }
+
+      const response = await fetch("/api/game/location-progress", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          profileCode: state.profileCode,
+          locationId: location.id
+        })
+      }).catch(() => null);
+
+      if (!response?.ok) {
+        setResuming(false);
+        return;
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            task_progress?: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
+            location?: { status?: "in_progress" | "completed" | null };
+          }
+        | null;
+
+      const rows = payload?.task_progress ?? [];
+      if (rows.length === 0) {
+        if (payload?.location?.status === "completed") {
+          setMessage("Tohle je opakované hraní. Začínáš znovu na čisto.");
+        }
+        setResuming(false);
+        return;
+      }
+
+      const outcomes: Record<string, "known" | "unknown"> = {};
+      const attempts: Record<string, number> = {};
+      const lockedTasks = new Set<string>();
+
+      rows.forEach((row) => {
+        attempts[row.task_id] = Math.max(0, row.attempts ?? 0);
+        if (row.status === "correct") {
+          outcomes[row.task_id] = "known";
+          lockedTasks.add(row.task_id);
+        }
+        if (row.status === "unknown") {
+          outcomes[row.task_id] = "unknown";
+          lockedTasks.add(row.task_id);
+        }
+      });
+
+      setTaskOutcomes((current) => ({ ...current, ...outcomes }));
+      setWrongAttemptsByTask((current) => ({ ...current, ...attempts }));
+
+      const firstOpenTask = location.episodes
+        .flatMap((episode) => episode.tasks)
+        .find((task) => !lockedTasks.has(task.id));
+
+      if (requestedEpisodeIndex !== null) {
+        setEpisodeIndex(requestedEpisodeIndex);
+        setTaskIndex(0);
+        setResuming(false);
+        return;
+      }
+
+      if (firstOpenTask) {
+        const target = taskPositionById.get(firstOpenTask.id);
+        if (target) {
+          setEpisodeIndex(target.episodeIndex);
+          setTaskIndex(target.taskIndex);
+          setMessage("Navázali jsme na tvoji rozehranou hru.");
+          setStatus("idle");
+        }
+      } else if (payload?.location?.status === "in_progress") {
+        setMessage("Máš vyřešené všechny úkoly. Dokonči misi tlačítkem v posledním kroku.");
+        setStatus("idle");
+        const lastEpisodeIndex = location.episodes.length - 1;
+        const lastTaskIndex = Math.max(0, location.episodes[lastEpisodeIndex]?.tasks.length - 1);
+        setEpisodeIndex(lastEpisodeIndex);
+        setTaskIndex(lastTaskIndex);
+      }
+
+      setResuming(false);
     }
 
-    return `Body se připíšou ${joinedCount} potvrzeným členům skupiny ${state.squadName}.`;
-  }, [joinedCount, state.activeMode, state.profile.name, state.squadName]);
+    void hydrateInProgressMission();
+  }, [alreadyUnlocked, location.episodes, location.id, requestedEpisodeIndex, state.profileCode, supabase, taskPositionById]);
 
   async function finishLocation() {
-    const participants =
-      state.activeMode === "group" ? (partySnapshotIds.length > 0 ? partySnapshotIds : [SELF_MEMBER_ID]) : [SELF_MEMBER_ID];
+    const participants = [SELF_MEMBER_ID];
+    const unknownTaskIds = Object.entries(taskOutcomes)
+      .filter(([, outcome]) => outcome === "unknown")
+      .map(([taskId]) => taskId);
     const penaltyPoints = unknownCount * UNKNOWN_PENALTY_POINTS;
-    completeLocation(location.id, { participantIds: participants, penaltyPoints });
+    completeLocation(location.id, {
+      participantIds: participants,
+      penaltyPoints,
+      source: "gameplay"
+    });
 
     if (supabase && state.profileCode) {
       const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
@@ -137,10 +259,12 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           body: JSON.stringify({
             profileCode: state.profileCode,
             locationId: location.id,
-            expeditionId: state.currentExpeditionId,
-            mode: state.activeMode,
+            expeditionId: null,
+            mode: "solo",
             completedAt: new Date().toISOString(),
-            penaltyPoints,
+            unknownTaskIds,
+            unknownCount,
+            source: "gameplay",
             childName: state.profile.name,
             childAge: state.profile.age
           })
@@ -150,11 +274,57 @@ export function PlayScreen({ location }: { location: MapLocation }) {
           const payload = (await response.json()) as { participantCodes?: string[] };
           const participantIds = (payload.participantCodes ?? []).map((code) => code.trim().toUpperCase());
           if (participantIds.length > 0) {
-            completeLocation(location.id, { participantIds, penaltyPoints });
+            completeLocation(location.id, { participantIds, penaltyPoints, source: "gameplay" });
           }
         }
       }
     }
+  }
+
+  async function submitTaskAnswer(action: "answer" | "mark_unknown" | "confirm_manual", answerValue?: string) {
+    if (!supabase || !state.profileCode) {
+      setStatus("wrong");
+      setMessage("Nejdřív se prosím přihlas.");
+      return null;
+    }
+
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    if (!accessToken) {
+      setStatus("wrong");
+      setMessage("Nejdřív se prosím přihlas.");
+      return null;
+    }
+
+    const response = await fetch("/api/game/submit-task-answer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        profileCode: state.profileCode,
+        locationId: location.id,
+        taskId: activeTask.id,
+        action,
+        answer: answerValue ?? "",
+        replayAttempts: wrongAttemptsByTask[activeTask.id] ?? 0
+      })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setStatus("wrong");
+      setMessage("Ověření odpovědi se nepodařilo. Zkus to znovu.");
+      return null;
+    }
+
+    return (await response.json()) as {
+      ok: boolean;
+      status: "correct" | "wrong" | "unknown";
+      attempts: number;
+      remainingAttempts: number;
+      penaltyPointsForTask: number;
+      locked: boolean;
+    };
   }
 
   function advance() {
@@ -182,7 +352,10 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     })();
   }
 
-  function handleValidate() {
+  async function handleValidate() {
+    if (submittingAnswer) {
+      return;
+    }
     if (taskOutcomes[activeTask.id] === "unknown") {
       setStatus("unknown");
       setMessage("Tento úkol už je označený jako Nevím. Pokračuj na další stopu.");
@@ -196,45 +369,74 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       return;
     }
 
-    const acceptedAnswers = taskAnswers[activeTask.id] ?? [];
-    const valid = acceptedAnswers.some((answer) => normalize(answer) === normalize(input));
+    setSubmittingAnswer(true);
+    const result = await submitTaskAnswer("answer", input);
+    setSubmittingAnswer(false);
+    if (!result) {
+      return;
+    }
 
-    if (valid) {
+    setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: result.attempts }));
+    if (result.status === "correct") {
       setStatus("correct");
       setMessage("Správně.");
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
       return;
     }
 
-    const nextWrongAttempts = (wrongAttemptsByTask[activeTask.id] ?? 0) + 1;
-    setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: nextWrongAttempts }));
-
-    if (nextWrongAttempts > MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN) {
+    if (result.status === "unknown") {
       setStatus("unknown");
       setMessage(`Třetí pokus nevyšel, bereme to jako Nevím (-${UNKNOWN_PENALTY_POINTS} bodů).`);
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
       return;
     }
 
-    const attemptsLeft = MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN + 1 - nextWrongAttempts;
+    const attemptsLeft = Math.max(0, result.remainingAttempts);
     setStatus("wrong");
     setMessage(`Tohle nesedí. Zkus to znovu. Zbývá ${attemptsLeft} pokus.`);
   }
 
-  function handleUnknown() {
+  async function handleUnknown() {
+    if (submittingAnswer) {
+      return;
+    }
+    setSubmittingAnswer(true);
+    const result = await submitTaskAnswer("mark_unknown");
+    setSubmittingAnswer(false);
+    if (!result) {
+      return;
+    }
     setStatus("unknown");
     setMessage(`Nevadí, jdeme dál. Odečítáme ${UNKNOWN_PENALTY_POINTS} bodů.`);
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
   }
 
-  function handlePhotoConfirmAndAdvance() {
+  async function handlePhotoConfirmAndAdvance() {
+    if (submittingAnswer) {
+      return;
+    }
+    setSubmittingAnswer(true);
+    const result = await submitTaskAnswer("confirm_manual");
+    setSubmittingAnswer(false);
+    if (!result) {
+      return;
+    }
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
     setStatus("manual");
     setMessage("");
     advance();
   }
 
-  function handlePhotoUnknownAndAdvance() {
+  async function handlePhotoUnknownAndAdvance() {
+    if (submittingAnswer) {
+      return;
+    }
+    setSubmittingAnswer(true);
+    const result = await submitTaskAnswer("mark_unknown");
+    setSubmittingAnswer(false);
+    if (!result) {
+      return;
+    }
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
     setStatus("unknown");
     setMessage("");
@@ -252,6 +454,53 @@ export function PlayScreen({ location }: { location: MapLocation }) {
     setStatus("idle");
     setMessage("");
     setInput("");
+  }
+
+  if (!locationUnlocked) {
+    return (
+      <main className="flex flex-1 flex-col gap-5 pb-24">
+        <section className="glass-card p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Místo je zamčené</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
+          <p className="mt-3 text-sm leading-6 text-mist">{location.shortDescription ?? location.teaser}</p>
+          <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/90">
+            Odemkneš po dokončení: <span className="font-semibold">{unlockRequirement?.name ?? "předchozího místa"}</span>
+          </p>
+        </section>
+        <Link href={`/locations/${location.id}`} className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">
+          Zpět na detail místa
+        </Link>
+      </main>
+    );
+  }
+
+  if (resuming) {
+    return (
+      <main className="flex flex-1 flex-col gap-5 pb-24">
+        <section className="glass-card p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-sky">Načítám rozehranou misi</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
+          <p className="mt-3 text-sm text-mist">Obnovuju poslední uložený krok hry.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!hasAnyTasks) {
+    return (
+      <main className="flex flex-1 flex-col gap-5 pb-24">
+        <section className="glass-card p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Mise ještě není připravená</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
+          <p className="mt-3 text-sm leading-6 text-mist">
+            Tahle mise zatím nemá žádné aktivní úkoly. Otevřete ji v Mozku a doplňte zastavení nebo úkoly.
+          </p>
+        </section>
+        <Link href={`/locations/${location.id}`} className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">
+          Zpět na detail místa
+        </Link>
+      </main>
+    );
   }
 
   if (finished) {
@@ -303,6 +552,9 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
         <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
           <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Blok splněn</p>
+          <div className="mt-2 inline-flex rounded-full border border-lime/40 bg-night/35 px-3 py-1 text-xs font-semibold text-lime">
+            Zastavení {pendingEpisodeTransition.nextEpisodeIndex}/{location.episodes.length} dokončeno
+          </div>
           <div className="mt-5 rounded-2xl bg-night/45 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
             <p className="mt-1 text-xl font-bold text-white">{pendingEpisodeTransition.fromName}</p>
@@ -336,7 +588,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
             <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
           </div>
           <div className="rounded-full bg-lime/15 px-3 py-2 text-xs font-semibold text-lime">
-            {state.activeMode === "group" ? "Skupinový režim" : "Sólo režim"}
+            Sólový režim
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between">
@@ -359,51 +611,18 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         </div>
       </section>
 
-      {state.activeMode === "group" ? (
-        <section className="glass-card p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-coral">Výprava</p>
-              <h2 className="mt-2 text-xl font-semibold">{state.squadName}</h2>
-            </div>
-            <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{joinedCount} hráči</div>
-          </div>
-          <div className="mt-4 space-y-3">
-            {state.squadMembers.map((member) => (
-              <div
-                key={member.id}
-                className="flex w-full items-center justify-between rounded-2xl bg-white/5 p-4 text-left"
-              >
-                <div className="font-medium">
-                  {member.name}
-                  {member.id === "self" ? " (ty)" : ""}
-                </div>
-                <div
-                  className={`rounded-full px-3 py-2 text-xs ${
-                    partySnapshotIds.includes(member.id) ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
-                  }`}
-                >
-                  {partySnapshotIds.includes(member.id) ? "Ve výpravě" : "Mimo výpravu"}
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-mist">Sestava je uzamčená od startu mise.</p>
-        </section>
-      ) : null}
-
       <section className="glass-card p-5">
         <span className="rounded-full bg-sky/12 px-3 py-1 text-xs uppercase tracking-[0.2em] text-sky">
           {activeEpisode.name}
         </span>
         {activeEpisode.illustrationImage ? (
-          <figure className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+          <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
             <Image
               src={activeEpisode.illustrationImage}
               alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
-              width={1000}
-              height={560}
-              className="h-48 w-full object-cover object-top"
+              width={720}
+              height={720}
+              className="aspect-square w-full object-cover object-center"
             />
           </figure>
         ) : null}
@@ -425,15 +644,15 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         <h2 className="mt-4 text-2xl font-semibold">{activeTask.title}</h2>
         <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>
         {activeTask.illustrationImage ? (
-          <figure className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+          <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
             <Image
               src={activeTask.illustrationImage}
               alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
-              width={1000}
-              height={560}
-              className="h-48 w-full object-cover"
+              width={720}
+              height={720}
+              className="aspect-square w-full object-cover object-center"
             />
-            <figcaption className="px-3 py-2 text-xs text-mist">Ilustrační foto k úkolu</figcaption>
+            <figcaption className="px-3 py-2 text-center text-xs text-mist">Ilustrační foto k úkolu</figcaption>
           </figure>
         ) : null}
 
@@ -457,12 +676,21 @@ export function PlayScreen({ location }: { location: MapLocation }) {
               Tohle je úkol na místě. Splň ho a klikni na potvrzení.
             </div>
           ) : (
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Sem napiš odpověď"
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white outline-none placeholder:text-mist"
-            />
+            <div className="space-y-2">
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Sem napiš odpověď"
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white outline-none placeholder:text-mist"
+              />
+              {activeTask.id === "klamovka-cassel-5" ? (
+                <p className="text-xs text-mist">
+                  Napiš aspoň 3 slova a odděluj je mezerou nebo čárkou, například{" "}
+                  <span className="text-white/90">les, las, esa</span> nebo{" "}
+                  <span className="text-white/90">les las esa</span>.
+                </p>
+              ) : null}
+            </div>
           )}
         </div>
 
@@ -491,13 +719,15 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         {activeTask.type === "photo" ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button
-              onClick={handlePhotoUnknownAndAdvance}
+              onClick={() => void handlePhotoUnknownAndAdvance()}
+              disabled={submittingAnswer}
               className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
             >
               Nevím
             </button>
             <button
-              onClick={handlePhotoConfirmAndAdvance}
+              onClick={() => void handlePhotoConfirmAndAdvance()}
+              disabled={submittingAnswer}
               className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night"
             >
               {isLastTask && isLastEpisode
@@ -510,21 +740,22 @@ export function PlayScreen({ location }: { location: MapLocation }) {
         ) : (
           <div className="mt-5 grid grid-cols-3 gap-3">
             <button
-              onClick={handleValidate}
-              disabled={taskOutcomes[activeTask.id] === "unknown"}
+              onClick={() => void handleValidate()}
+              disabled={taskOutcomes[activeTask.id] === "unknown" || submittingAnswer}
               className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold"
             >
               Ověřit úkol
             </button>
             <button
-              onClick={handleUnknown}
+              onClick={() => void handleUnknown()}
+              disabled={submittingAnswer}
               className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
             >
               Nevím
             </button>
             <button
               onClick={advance}
-              disabled={status === "idle"}
+              disabled={!canAdvance}
               className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-mist"
             >
               {isLastTask && isLastEpisode
@@ -544,7 +775,7 @@ export function PlayScreen({ location }: { location: MapLocation }) {
       ) : null}
 
       <p className="px-1 text-[11px] text-mist/80">
-        Bezpečnostní upozornění: {location.areaHint} Při startu hry běží check-in.
+        Bezpečnostní upozornění: {location.areaHint}
       </p>
     </main>
   );

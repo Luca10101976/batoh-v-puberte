@@ -27,6 +27,8 @@ export type MapLocation = {
   city: string;
   name: string;
   teaser: string;
+  shortDescription?: string;
+  unlockedByPlaceId?: string | null;
   subtitle: string;
   story: string;
   image: string;
@@ -56,9 +58,9 @@ export const nearbyMissions = [
     name: "Ztracený příběh Klamovky",
     locationId: "klamovka",
     city: "Praha",
-    distance: "11 min",
+    distance: "Praha 5",
     boost: "+120 bodů",
-    status: "Blízko tebe"
+    status: "Městská mise"
   },
   {
     name: "Budějovický kód: Operace Žába",
@@ -81,6 +83,7 @@ export const locations: MapLocation[] = [
     id: "klamovka",
     city: "Praha",
     name: "Park Klamovka",
+    unlockedByPlaceId: null,
     subtitle: "Posbírej ztracený příběh",
     teaser: "Park, kde najdeš hlavu koně i peklo :)",
     story:
@@ -88,7 +91,7 @@ export const locations: MapLocation[] = [
     image: "/images/klamovka-chramek.jpeg",
     unlocked: false,
     difficulty: "Střední",
-    distance: "11 min od tebe",
+    distance: "Praha 5",
     duration: "35-50 min",
     areaHint: "Drž se v místě hry.",
     vibe: ["Městská záhada", "Detaily, které unikají", "Ideální pro partu"],
@@ -219,7 +222,7 @@ export const locations: MapLocation[] = [
         name: "Novogotický altán",
         intro: "Sklad na nářadí nebo galerie?",
         background:
-          "Altán byl postaven kolem roku 1820 a sloužil jako zahradní, provozní budova. Třeba jako sklad",
+          "Altán vznikl kolem roku 1820 a původně sloužil jako zahradní provozní budova, třeba i jako sklad. Dnes si v něm můžete prohlédnout umění.",
         tasks: [
           {
             id: "klamovka-altan-2",
@@ -319,6 +322,7 @@ export const locations: MapLocation[] = [
     id: "budejovice-zaba",
     city: "České Budějovice",
     name: "Budějovický kód: Operace Žába",
+    unlockedByPlaceId: "klamovka",
     subtitle: "Městská mise pro starší",
     teaser: "Pátrání po ztracené žábě přes věž, náměstí a Solnici.",
     story:

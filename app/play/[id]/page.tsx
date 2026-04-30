@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { PlayScreen } from "@/components/play-screen";
-import { locations } from "@/lib/mock-data";
+import { getGameplayLocation } from "@/lib/gameplay-server";
 
-export default function PlayPage({
+export default async function PlayPage({
   params
 }: {
   params: { id: string };
 }) {
-  const location = locations.find((item) => item.id === params.id);
+  const location = await getGameplayLocation(params.id);
 
   if (!location) {
     notFound();

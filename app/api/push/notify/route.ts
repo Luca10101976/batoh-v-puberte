@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json()) as {
+    sourcePlayerCode?: string;
+    targetPlayerCode?: string;
     sourceProfileCode?: string;
     targetProfileCode?: string;
     inviteId?: string;
@@ -67,8 +69,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const sourceProfileCode = body.sourceProfileCode?.trim().toUpperCase();
-  const targetProfileCode = body.targetProfileCode?.trim().toUpperCase();
+  const sourceProfileCode = (body.sourcePlayerCode ?? body.sourceProfileCode)?.trim().toUpperCase();
+  const targetProfileCode = (body.targetPlayerCode ?? body.targetProfileCode)?.trim().toUpperCase();
   const inviteId = body.inviteId?.trim();
 
   if (!sourceProfileCode || !targetProfileCode || !inviteId) {
@@ -76,13 +78,26 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-  const { data: ownChildProfile } = await admin
+  const { data: ownChildByPlayerCode } = await admin
     .from("child_profiles")
     .select("id")
-    .eq("profile_code", sourceProfileCode)
+    .eq("player_code", sourceProfileCode)
     .eq("parent_user_id", user.id)
     .limit(1)
     .maybeSingle<{ id: string }>();
+
+  // Legacy compatibility path (A2): fallback to old profile_code until A3 cleanup.
+  const ownChildProfile = ownChildByPlayerCode?.id
+    ? ownChildByPlayerCode
+    : (
+        await admin
+          .from("child_profiles")
+          .select("id")
+          .eq("profile_code", sourceProfileCode)
+          .eq("parent_user_id", user.id)
+          .limit(1)
+          .maybeSingle<{ id: string }>()
+      ).data;
 
   if (!ownChildProfile?.id) {
     return NextResponse.json({ ok: false, error: "forbidden_source_profile" }, { status: 403 });

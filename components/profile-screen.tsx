@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
@@ -10,28 +12,41 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 type ChildProfileRow = {
   id: string;
   child_name: string;
+  child_age?: number;
   profile_code: string;
-};
-
-type ChildFriendshipRow = {
-  friend_profile_code: string;
-  friend_display_name: string;
-};
-
-type IncomingFriendshipRow = {
-  child_profile_id: string;
-};
-
-type SentInviteRow = {
-  id: string;
-  invitee_display_name: string;
-  created_at: string;
+  player_code?: string | null;
+  avatar?: string | null;
+  avatar_config?: AvatarConfig | null;
+  has_pin?: boolean;
 };
 
 type ResolvedFriendProfile = {
   id: string;
   name: string;
   code: string;
+};
+
+type FriendListItem = {
+  code: string;
+  name: string;
+  addedAt?: string;
+};
+
+type ExpeditionPlayerStatus = "invited" | "accepted" | "declined" | "removed";
+type MessageTone = "neutral" | "success" | "error";
+
+type ActiveExpedition = {
+  id: string;
+  status: "waiting" | "active";
+  missionId: string | null;
+  isLeader: boolean;
+  players: Array<{
+    childProfileId: string;
+    name: string;
+    code: string;
+    status: ExpeditionPlayerStatus;
+    joinedAt: string | null;
+  }>;
 };
 
 const HEAD_OPTIONS: Array<{ value: AvatarConfig["head"]; label: string }> = [
@@ -53,9 +68,55 @@ const HAIR_OPTIONS: Array<{ value: AvatarConfig["hair"]; label: string }> = [
 ];
 
 const COLOR_OPTIONS = ["#7EC8FF", "#B6F07A", "#FFC27A", "#FF9FC3", "#D2B6FF", "#FFD95A"];
-type AvatarPanel = "head" | "eyes" | "hair" | "color";
+const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
 
-function AvatarPreview({ config, size = 80 }: { config: AvatarConfig; size?: number }) {
+function isEmojiAvatar(value: string) {
+  if (value.startsWith("batuzek-")) {
+    return true;
+  }
+  return /[\p{Extended_Pictographic}]/u.test(value);
+}
+
+function AvatarPreview({ config, size = 80, emoji }: { config: AvatarConfig; size?: number; emoji?: string }) {
+  if (emoji && isEmojiAvatar(emoji)) {
+    if (emoji.startsWith("batuzek-")) {
+      return (
+        <div
+          className="relative flex items-center justify-center overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
+          style={{ width: size, height: size }}
+        >
+          <div
+            className="absolute inset-0"
+            style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
+          />
+          <div className="relative h-[86%] w-[86%]">
+            <Image
+              src={`/avatars/batuzek/${emoji}.png`}
+              alt="Avatar batůžek"
+              fill
+              sizes={`${size}px`}
+              className="object-contain"
+            />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div
+        className="relative flex items-center justify-center overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
+        style={{ width: size, height: size }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
+        />
+        <span style={{ fontSize: size * 0.56, lineHeight: 1 }} aria-label="Emoji avatar">
+          {emoji}
+        </span>
+      </div>
+    );
+  }
+
   const headShapeClass =
     config.head === "round" ? "rounded-[44%]" : config.head === "oval" ? "rounded-[40%]" : "rounded-[18px]";
   const hairColor = "#243249";
@@ -171,7 +232,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const {
     state,
-    updateProfile,
+    syncCloudProfile,
     isLocationUnlocked,
     addFriendByCode,
     removeFriendByCode,
@@ -183,16 +244,33 @@ export function ProfileScreen() {
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
+  const [friendMessageTone, setFriendMessageTone] = useState<MessageTone>("neutral");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileMessageTone, setProfileMessageTone] = useState<MessageTone>("neutral");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [nameDraft, setNameDraft] = useState(state.profile.name);
   const [savingFriend, setSavingFriend] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
-  const [blockingFriendCode, setBlockingFriendCode] = useState<string | null>(null);
-  const [sentInvites, setSentInvites] = useState<SentInviteRow[]>([]);
-  const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
+  const [, setCloudProfileError] = useState("");
+  const [removingFriendCode, setRemovingFriendCode] = useState<string | null>(null);
+  const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition | null>(null);
+  const [selectedInviteCodes, setSelectedInviteCodes] = useState<string[]>([]);
+  const [cloudFriends, setCloudFriends] = useState<FriendListItem[]>([]);
   const [cloudReady, setCloudReady] = useState<boolean | null>(null);
-  const [invitingFriendCode, setInvitingFriendCode] = useState<string | null>(null);
+  const [invitingFriends, setInvitingFriends] = useState(false);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
+  const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
+    isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]
+  );
+  const [avatarMode, setAvatarMode] = useState<"emoji" | "custom">(
+    isEmojiAvatar(state.profile.avatar) ? "emoji" : "custom"
+  );
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
-  const [openAvatarPanel, setOpenAvatarPanel] = useState<AvatarPanel | null>("head");
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const [avatarMessage, setAvatarMessage] = useState("");
+  const [avatarMessageTone, setAvatarMessageTone] = useState<MessageTone>("neutral");
+  const avatarSaveTimeoutRef = useRef<number | null>(null);
+  const avatarSaveRequestIdRef = useRef(0);
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -208,12 +286,486 @@ export function ProfileScreen() {
     () => locations.filter((location) => state.completedLocationIds.includes(location.id)),
     [state.completedLocationIds]
   );
-  const friends = state.squadMembers.filter((member) => member.id !== "self");
+  const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
   const score = getPlayerScore();
+  const expeditionPlayersByCode = useMemo(() => {
+    const map = new Map<string, ExpeditionPlayerStatus>();
+    (activeExpedition?.players ?? []).forEach((player) => {
+      map.set(player.code.trim().toUpperCase(), player.status);
+    });
+    return map;
+  }, [activeExpedition]);
+  const canManageExpeditionInvites = Boolean(
+    !activeExpedition || (activeExpedition.isLeader && activeExpedition.status === "waiting")
+  );
+  const expeditionRoleLabel = activeExpedition
+    ? activeExpedition.isLeader
+      ? "Jsi vedoucí výpravy"
+      : "Jsi člen výpravy"
+    : "Nemáš aktivní výpravu";
+
+  const ensureOwnCloudProfile = useCallback(async (providedAccessToken?: string) => {
+    if (!supabase) {
+      setCloudProfileError("Cloud klient není dostupný.");
+      return null;
+    }
+
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      setCloudProfileError("Chybí aktivní session účtu.");
+      return null;
+    }
+
+    const accessToken = providedAccessToken ?? session.access_token ?? "";
+    if (!accessToken) {
+      setCloudProfileError("Chybí přístupový token účtu.");
+      return null;
+    }
+
+    const response = await fetch("/api/child-profile/me", {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Cache-Control": "no-store"
+      }
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setCloudProfileError("Načtení cloud profilu selhalo.");
+      return null;
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          profile?: {
+            child_name?: string;
+            child_age?: number;
+            profile_code?: string;
+            player_code?: string;
+            avatar?: string | null;
+            avatar_config?: AvatarConfig | null;
+            has_pin?: boolean;
+          } | null;
+          profile_id?: string | null;
+        }
+      | null;
+
+    const profile = payload?.profile;
+    if (!profile?.profile_code) {
+      // Bootstrap path: PATCH endpoint umí bezpečně vytvořit canonical row,
+      // pokud ještě neexistuje. Tím odstraníme pád "Teď to nejde..." u Přidat kamaráda.
+      const bootstrapResponse = await fetch("/api/child-profile/me", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          child_name: "Hráč"
+        })
+      }).catch(() => null);
+
+      if (!bootstrapResponse?.ok) {
+        setCloudProfileError("Cloud profil zatím neexistuje.");
+        return null;
+      }
+
+      const bootstrapPayload = (await bootstrapResponse.json().catch(() => null)) as
+        | {
+            profile?: {
+              child_name?: string;
+              child_age?: number;
+              profile_code?: string;
+              player_code?: string;
+              avatar?: string | null;
+              avatar_config?: AvatarConfig | null;
+              has_pin?: boolean;
+            } | null;
+            profile_id?: string | null;
+          }
+        | null;
+
+      const bootstrapProfile = bootstrapPayload?.profile;
+      if (!bootstrapProfile?.profile_code) {
+        setCloudProfileError("Cloud profil zatím neexistuje.");
+        return null;
+      }
+
+      const bootstrapped: ChildProfileRow = {
+        id: bootstrapPayload?.profile_id || "",
+        child_name: bootstrapProfile.child_name || "Hráč",
+        child_age: bootstrapProfile.child_age || 11,
+        profile_code: bootstrapProfile.profile_code,
+        player_code: bootstrapProfile.player_code || bootstrapProfile.profile_code
+      };
+
+      setCloudProfileError("");
+      syncCloudProfile({
+        childName: bootstrapped.child_name,
+        childAge: bootstrapped.child_age,
+        profileCode: bootstrapped.profile_code,
+        playerCode: bootstrapped.player_code || bootstrapped.profile_code,
+        profileRowId: bootstrapPayload?.profile_id ?? null,
+        avatar: bootstrapProfile.avatar ?? undefined,
+        avatarConfig: bootstrapProfile.avatar_config ?? undefined,
+        hasPin: bootstrapProfile.has_pin
+      });
+
+      return bootstrapped;
+    }
+
+    const resolved: ChildProfileRow = {
+      id: payload?.profile_id || "",
+      child_name: profile.child_name || "Hráč",
+      child_age: profile.child_age || 11,
+      profile_code: profile.profile_code,
+      player_code: profile.player_code || profile.profile_code
+    };
+
+    setCloudProfileError("");
+    syncCloudProfile({
+      childName: resolved.child_name,
+      childAge: resolved.child_age,
+      profileCode: resolved.profile_code,
+      playerCode: resolved.player_code || resolved.profile_code,
+      profileRowId: payload?.profile_id ?? null,
+      avatar: profile.avatar ?? undefined,
+      avatarConfig: profile.avatar_config ?? undefined,
+      hasPin: profile.has_pin
+    });
+
+    return resolved;
+  }, [supabase, syncCloudProfile]);
+
+  const reloadCanonicalProfile = useCallback(
+    async (providedAccessToken?: string) => {
+      if (!supabase) {
+        return null;
+      }
+
+      const accessToken = providedAccessToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (!accessToken) {
+        return null;
+      }
+
+      const profileResponse = await fetch("/api/child-profile/me", {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Cache-Control": "no-store"
+        }
+      }).catch(() => null);
+
+      if (!profileResponse?.ok) {
+        return null;
+      }
+
+      const payload = (await profileResponse.json().catch(() => null)) as
+        | {
+            profile?: {
+              child_name?: string;
+              child_age?: number;
+              player_code?: string;
+              profile_code?: string;
+              has_pin?: boolean;
+              avatar?: string;
+              avatar_config?: AvatarConfig;
+            } | null;
+            profile_id?: string | null;
+          }
+        | null;
+
+      const profile = payload?.profile;
+      if (!profile?.profile_code) {
+        return null;
+      }
+
+      syncCloudProfile({
+        childName: profile.child_name,
+        childAge: profile.child_age,
+        playerCode: profile.player_code,
+        profileCode: profile.profile_code,
+        profileRowId: payload?.profile_id ?? null,
+        hasPin: profile.has_pin,
+        avatar: profile.avatar,
+        avatarConfig: profile.avatar_config
+      });
+      setNameDraft(profile.child_name?.trim() || "Hráč");
+      return profile;
+    },
+    [supabase, syncCloudProfile]
+  );
+
+  const persistProfileName = useCallback(async () => {
+    const safeName = nameDraft.trim();
+    if (safeName.length < 2) {
+      setProfileMessageTone("error");
+      setProfileMessage("Jméno musí mít aspoň 2 znaky.");
+      return;
+    }
+
+    if (!supabase) {
+      setProfileMessageTone("error");
+      setProfileMessage("Cloud není dostupný.");
+      return;
+    }
+
+    setSavingProfile(true);
+    setProfileMessageTone("neutral");
+    setProfileMessage("");
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    if (!accessToken) {
+      setSavingProfile(false);
+      setProfileMessageTone("error");
+      setProfileMessage("Nejdřív se přihlas do účtu.");
+      return;
+    }
+
+    const sendPatch = async (token: string) =>
+      fetch("/api/child-profile/me", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          child_name: safeName,
+          profile_code: state.profileCode
+        })
+      }).catch(() => null);
+
+    let response = await sendPatch(accessToken);
+
+    let effectiveAccessToken = accessToken;
+    if (response?.status === 401) {
+      await supabase.auth.refreshSession().catch(() => null);
+      const refreshedToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (refreshedToken) {
+        effectiveAccessToken = refreshedToken;
+        response = await sendPatch(refreshedToken);
+      }
+    }
+
+    if (!response?.ok) {
+      setSavingProfile(false);
+      setProfileMessageTone("error");
+      setProfileMessage("Uložení jména se nepodařilo.");
+      return;
+    }
+
+    await reloadCanonicalProfile(effectiveAccessToken);
+    setSavingProfile(false);
+    setProfileMessageTone("success");
+    setProfileMessage("Jméno je uložené do cloudu.");
+  }, [nameDraft, state.profileCode, supabase, reloadCanonicalProfile]);
+
+  const persistAvatar = useCallback(
+    async (next: { avatar: string; avatarConfig: AvatarConfig }) => {
+      const requestId = avatarSaveRequestIdRef.current + 1;
+      avatarSaveRequestIdRef.current = requestId;
+
+      if (!supabase) {
+        if (requestId === avatarSaveRequestIdRef.current) {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Cloud není dostupný.");
+        }
+        return false;
+      }
+
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (!accessToken) {
+        if (requestId === avatarSaveRequestIdRef.current) {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Nejdřív se přihlas do účtu.");
+        }
+        return false;
+      }
+
+      if (requestId === avatarSaveRequestIdRef.current) {
+        setSavingAvatar(true);
+        setAvatarMessageTone("neutral");
+        setAvatarMessage("");
+      }
+
+      const sendPatch = async (token: string) =>
+        fetch("/api/child-profile/me", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            avatar: next.avatar,
+            avatar_config: next.avatarConfig,
+            profile_code: state.profileCode
+          })
+        }).catch(() => null);
+
+      let response = await sendPatch(accessToken);
+      let effectiveAccessToken = accessToken;
+
+      if (response?.status === 401) {
+        await supabase.auth.refreshSession().catch(() => null);
+        const refreshedToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+        if (refreshedToken) {
+          effectiveAccessToken = refreshedToken;
+          response = await sendPatch(refreshedToken);
+        }
+      }
+
+      if (requestId !== avatarSaveRequestIdRef.current) {
+        return false;
+      }
+
+      if (!response?.ok) {
+        const errorPayload = (await response?.json().catch(() => null)) as
+          | { code?: string; message?: string }
+          | null;
+        setSavingAvatar(false);
+        if (errorPayload?.code === "avatar_schema_missing") {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Avatar zatím nejde uložit: v databázi chybí nová pole.");
+        } else if (errorPayload?.code === "profile_not_found") {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Nenašel se tvůj cloud profil. Zkus se odhlásit a přihlásit.");
+        } else if (response?.status === 401) {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Přihlášení vypršelo. Odhlas se a přihlas znovu.");
+        } else if (errorPayload?.code === "invalid_avatar" || errorPayload?.code === "invalid_avatar_config") {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Tenhle avatar nejde uložit. Zkus jiný.");
+        } else if (errorPayload?.message) {
+          setAvatarMessageTone("error");
+          setAvatarMessage(errorPayload.message);
+        } else {
+          setAvatarMessageTone("error");
+          setAvatarMessage("Uložení avatara se nepodařilo. Zkus to znovu.");
+        }
+        return false;
+      }
+
+      await reloadCanonicalProfile(effectiveAccessToken);
+      setSavingAvatar(false);
+      setAvatarMessageTone("success");
+      setAvatarMessage("Avatar je uložený.");
+      return true;
+    },
+    [state.profileCode, supabase, reloadCanonicalProfile]
+  );
+
+  const saveAvatarDebounced = useCallback(
+    (next: { avatar: string; avatarConfig: AvatarConfig }) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      if (avatarSaveTimeoutRef.current) {
+        window.clearTimeout(avatarSaveTimeoutRef.current);
+      }
+
+      setAvatarMessageTone("neutral");
+      setAvatarMessage("Ukládám avatar…");
+      avatarSaveTimeoutRef.current = window.setTimeout(() => {
+        void persistAvatar(next);
+      }, 250);
+    },
+    [persistAvatar]
+  );
+
+  const fetchProfileOverview = useCallback(async (providedAccessToken?: string) => {
+    if (!supabase) {
+      setCloudFriends([]);
+      setFriendsFromCloud([]);
+      setActiveExpedition(null);
+      return;
+    }
+
+    const accessToken = providedAccessToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    if (!accessToken) {
+      setCloudFriends([]);
+      setFriendsFromCloud([]);
+      setActiveExpedition(null);
+      return;
+    }
+
+    const response = await fetch("/api/profile/overview", {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Cache-Control": "no-store"
+      }
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setCloudFriends([]);
+      setFriendsFromCloud([]);
+      setActiveExpedition(null);
+      return;
+    }
+
+    const payload = (await response.json()) as {
+      profile?: {
+        child_name?: string;
+        child_age?: number;
+        player_code?: string;
+        profile_code?: string;
+        has_pin?: boolean;
+        avatar?: string;
+        avatar_config?: AvatarConfig;
+      } | null;
+      profile_id?: string | null;
+      friends?: Array<{ code: string; name: string; addedAt?: string }>;
+      session?: ActiveExpedition | null;
+    };
+
+    const effectiveProfile = payload.profile;
+    if (effectiveProfile?.profile_code) {
+      // IMPORTANT:
+      // Profile name/avatar must come only from canonical /api/child-profile/me flow.
+      // /api/profile/overview is used for friends/session widgets and should not overwrite
+      // child_name/avatar with potentially stale concurrent payloads.
+      syncCloudProfile({
+        playerCode: effectiveProfile.player_code,
+        profileCode: effectiveProfile.profile_code,
+        profileRowId: payload.profile_id ?? null,
+        hasPin: effectiveProfile.has_pin
+      });
+    }
+
+    const normalized = (payload.friends ?? []).map((friend) => ({
+      code: friend.code,
+      name: friend.name,
+      addedAt: friend.addedAt
+    }));
+
+    setCloudFriends(normalized);
+    setFriendsFromCloud(normalized.map((item) => ({ code: item.code, name: item.name })));
+    setActiveExpedition(payload.session ?? null);
+  }, [setFriendsFromCloud, supabase, syncCloudProfile]);
 
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
-  }, [state.profile.avatarConfig]);
+    setAvatarEmojiDraft(isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]);
+    setAvatarMode(isEmojiAvatar(state.profile.avatar) ? "emoji" : "custom");
+  }, [state.profile.avatar, state.profile.avatarConfig]);
+
+  useEffect(() => {
+    setNameDraft(state.profile.name);
+  }, [state.profile.name]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarSaveTimeoutRef.current && typeof window !== "undefined") {
+        window.clearTimeout(avatarSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -231,6 +783,9 @@ export function ProfileScreen() {
 
       if (!cancelled) {
         setCloudReady(Boolean(session?.user));
+        if (session?.access_token) {
+          void fetchProfileOverview(session.access_token);
+        }
       }
     }
 
@@ -241,6 +796,9 @@ export function ProfileScreen() {
     } = client.auth.onAuthStateChange((_event, session) => {
       if (!cancelled) {
         setCloudReady(Boolean(session?.user));
+        if (session?.access_token) {
+          void fetchProfileOverview(session.access_token);
+        }
       }
     });
 
@@ -257,161 +815,55 @@ export function ProfileScreen() {
       document.removeEventListener("visibilitychange", onVisibility);
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [fetchProfileOverview, supabase]);
+
+  useEffect(() => {
+    // Keep profile page deterministic even after cross-tab/device changes:
+    // every profile open refreshes canonical server profile once.
+    let cancelled = false;
+    async function bootstrapProfileCloud() {
+      if (cloudReady !== true || cancelled) {
+        return;
+      }
+      await ensureOwnCloudProfile();
+      await fetchProfileOverview();
+    }
+    void bootstrapProfileCloud();
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudReady, ensureOwnCloudProfile, fetchProfileOverview]);
 
   function selectedLabel(options: Array<{ value: string; label: string }>, value: string) {
     return options.find((option) => option.value === value)?.label ?? value;
   }
 
   useEffect(() => {
-    async function syncCloudFriends() {
-      if (!supabase || !state.profileCode) {
-        return;
-      }
-
-      const { data: ownProfile } = await supabase
-        .from("child_profiles")
-        .select("id")
-        .eq("profile_code", state.profileCode)
-        .limit(1)
-        .maybeSingle<{ id: string }>();
-
-      if (!ownProfile?.id) {
-        setFriendsFromCloud([]);
-        return;
-      }
-
-      const [{ data: outgoingFriendships }, { data: incomingFriendships }] = await Promise.all([
-        supabase
-          .from("child_friendships")
-          .select("friend_profile_code, friend_display_name")
-          .eq("child_profile_id", ownProfile.id),
-        supabase.from("child_friendships").select("child_profile_id").eq("friend_child_profile_id", ownProfile.id)
-      ]);
-
-      const incomingIds = ((incomingFriendships as IncomingFriendshipRow[] | null) ?? []).map(
-        (row) => row.child_profile_id
-      );
-
-      let incomingProfiles: Array<{ profile_code: string; child_name: string }> = [];
-
-      if (incomingIds.length > 0) {
-        const { data } = await supabase
-          .from("child_profiles")
-          .select("profile_code, child_name")
-          .in("id", incomingIds);
-
-        incomingProfiles = (data as Array<{ profile_code: string; child_name: string }> | null) ?? [];
-      }
-
-      const merged = [
-        ...(((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
-          code: row.friend_profile_code,
-          name: row.friend_display_name
-        })) as Array<{ code: string; name: string }>),
-        ...incomingProfiles.map((profile) => ({
-          code: profile.profile_code,
-          name: profile.child_name
-        }))
-      ];
-
-      setFriendsFromCloud(merged);
-    }
-
-    syncCloudFriends();
-  }, [setFriendsFromCloud, state.profileCode, supabase]);
-
-  useEffect(() => {
-    async function loadSentInvites() {
-      if (!supabase || !state.profileCode) {
-        setSentInvites([]);
-        return;
-      }
-
-      const { data: ownProfile } = await supabase
-        .from("child_profiles")
-        .select("id")
-        .eq("profile_code", state.profileCode)
-        .limit(1)
-        .maybeSingle<{ id: string }>();
-
-      if (!ownProfile?.id) {
-        setSentInvites([]);
-        return;
-      }
-
-      const { data } = await supabase
-        .from("child_expedition_invites")
-        .select("id, invitee_display_name, created_at")
-        .eq("inviter_child_profile_id", ownProfile.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      setSentInvites((data as SentInviteRow[] | null) ?? []);
-    }
-
-    void loadSentInvites();
-  }, [state.profileCode, supabase, inviteMessage]);
-
-  useEffect(() => {
-    if (!supabase || !state.profileCode) {
+    if (!supabase || !state.playerCode) {
       return;
     }
 
     const channel = supabase
-      .channel(`profile-live-${state.profileCode}`)
+      .channel(`profile-live-${state.playerCode}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "child_friendships" },
         () => {
-          void (async () => {
-            const { data: ownProfile } = await supabase
-              .from("child_profiles")
-              .select("id")
-              .eq("profile_code", state.profileCode)
-              .limit(1)
-              .maybeSingle<{ id: string }>();
-            if (!ownProfile?.id) {
-              setFriendsFromCloud([]);
-              return;
-            }
-            const [{ data: outgoingFriendships }, { data: incomingFriendships }] = await Promise.all([
-              supabase
-                .from("child_friendships")
-                .select("friend_profile_code, friend_display_name")
-                .eq("child_profile_id", ownProfile.id),
-              supabase.from("child_friendships").select("child_profile_id").eq("friend_child_profile_id", ownProfile.id)
-            ]);
-
-            const incomingIds = ((incomingFriendships as IncomingFriendshipRow[] | null) ?? []).map(
-              (row) => row.child_profile_id
-            );
-
-            let incomingProfiles: Array<{ profile_code: string; child_name: string }> = [];
-
-            if (incomingIds.length > 0) {
-              const { data } = await supabase
-                .from("child_profiles")
-                .select("profile_code, child_name")
-                .in("id", incomingIds);
-
-              incomingProfiles = (data as Array<{ profile_code: string; child_name: string }> | null) ?? [];
-            }
-
-            const merged = [
-              ...(((outgoingFriendships as ChildFriendshipRow[] | null) ?? []).map((row) => ({
-                code: row.friend_profile_code,
-                name: row.friend_display_name
-              })) as Array<{ code: string; name: string }>),
-              ...incomingProfiles.map((profile) => ({
-                code: profile.profile_code,
-                name: profile.child_name
-              }))
-            ];
-
-            setFriendsFromCloud(merged);
-          })();
+          void fetchProfileOverview();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "child_game_session_players" },
+        () => {
+          void fetchProfileOverview();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "child_game_sessions" },
+        () => {
+          void fetchProfileOverview();
         }
       )
       .subscribe();
@@ -419,76 +871,7 @@ export function ProfileScreen() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [setFriendsFromCloud, state.profileCode, supabase]);
-
-  async function saveProfileToCloud(name: string, avatarConfig: AvatarConfig) {
-    if (!supabase || !state.profileCode) {
-      return;
-    }
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
-    if (!session?.user) {
-      return;
-    }
-    // Always write by profile_code (UNIQUE) — guarantees we hit the canonical row
-    await supabase
-      .from("child_profiles")
-      .update({ child_name: name, avatar_config: avatarConfig })
-      .eq("profile_code", state.profileCode)
-      .eq("parent_user_id", session.user.id);
-  }
-
-  async function ensureOwnCloudProfile() {
-    if (!supabase) {
-      return null;
-    }
-
-    const { data: existing } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", state.profileCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
-
-    if (existing) {
-      return existing;
-    }
-
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
-
-    if (!session?.user) {
-      return null;
-    }
-
-    const safeAge = Math.max(8, Number(state.profile.age) || 11);
-    const safeName = state.profile.name.trim() || "Hráč";
-
-    const { error } = await supabase.from("child_profiles").upsert(
-      {
-        parent_user_id: session.user.id,
-        child_name: safeName,
-        child_age: safeAge,
-        profile_code: state.profileCode
-      },
-      { onConflict: "profile_code" }
-    );
-
-    if (error) {
-      return null;
-    }
-
-    const { data: created } = await supabase
-      .from("child_profiles")
-      .select("id, child_name, profile_code")
-      .eq("profile_code", state.profileCode)
-      .limit(1)
-      .maybeSingle<ChildProfileRow>();
-
-    return created ?? null;
-  }
+  }, [fetchProfileOverview, state.playerCode, supabase]);
 
   async function resolveFriendProfileByCode(code: string): Promise<ResolvedFriendProfile | null> {
     if (!supabase) {
@@ -507,7 +890,7 @@ export function ProfileScreen() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`
       },
-      body: JSON.stringify({ profileCode: code })
+      body: JSON.stringify({ playerCode: code })
     }).catch(() => null);
 
     if (!response?.ok) {
@@ -520,6 +903,8 @@ export function ProfileScreen() {
 
   async function handleAddFriend() {
     setSavingFriend(true);
+    setFriendMessageTone("neutral");
+    setFriendMessage("");
     const normalizedCode = friendCode.trim().toUpperCase();
     const nickname = "";
 
@@ -528,11 +913,13 @@ export function ProfileScreen() {
 
       if (!result.ok) {
         setSavingFriend(false);
+        setFriendMessageTone("error");
         setFriendMessage(result.message);
         return;
       }
 
       setSavingFriend(false);
+      setFriendMessageTone("success");
       setFriendMessage("Kamarád přidán lokálně.");
       setFriendCode("");
       return;
@@ -540,12 +927,14 @@ export function ProfileScreen() {
 
     if (!normalizedCode || normalizedCode.length < 4) {
       setSavingFriend(false);
+      setFriendMessageTone("error");
       setFriendMessage("Zadej platný kód kamaráda.");
       return;
     }
 
-    if (normalizedCode === state.profileCode.trim().toUpperCase()) {
+    if (normalizedCode === state.playerCode.trim().toUpperCase()) {
       setSavingFriend(false);
+      setFriendMessageTone("error");
       setFriendMessage("Tohle je tvůj vlastní kód.");
       return;
     }
@@ -554,6 +943,7 @@ export function ProfileScreen() {
 
     if (alreadyAdded) {
       setSavingFriend(false);
+      setFriendMessageTone("error");
       setFriendMessage("Tohohle kamaráda už máš přidaného.");
       return;
     }
@@ -562,7 +952,8 @@ export function ProfileScreen() {
 
     if (!ownProfile) {
       setSavingFriend(false);
-      setFriendMessage("Rodičovský účet není aktivní. Odhlaš se a přihlas rodiče znovu.");
+      setFriendMessageTone("error");
+      setFriendMessage("Teď to nejde. Zkus to znovu za pár vteřin.");
       return;
     }
 
@@ -570,191 +961,205 @@ export function ProfileScreen() {
 
     if (!targetProfile?.id) {
       setSavingFriend(false);
+      setFriendMessageTone("error");
       setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
       return;
     }
 
-    const { error: insertError } = await supabase.from("child_friendships").upsert(
-      {
-        child_profile_id: ownProfile.id,
-        friend_child_profile_id: targetProfile.id,
-        friend_profile_code: targetProfile.code,
-        friend_display_name: nickname || targetProfile.name
-      },
-      { onConflict: "child_profile_id,friend_child_profile_id" }
-    );
-
-    if (insertError) {
-      setSavingFriend(false);
-      setFriendMessage("Přidání kamaráda do cloudu se nepodařilo.");
-      return;
-    }
-
-    const localAddResult = addFriendByCode({
-      friendCode: normalizedCode,
-      nickname: nickname || targetProfile.name
-    });
-
-    if (!localAddResult.ok) {
-      setSavingFriend(false);
-      setFriendMessage(localAddResult.message);
-      return;
-    }
-
-    setSavingFriend(false);
-    setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
-    setFriendCode("");
-  }
-
-  async function handleInviteFriend(friendCode: string, friendName: string) {
-    setInviteMessage("");
-
-    if (!supabase) {
-      setInviteMessage("Pozvánky fungují jen při připojení k cloudu.");
-      return;
-    }
-
-    setInvitingFriendCode(friendCode);
-
-    const ownProfile = await ensureOwnCloudProfile();
-
-    if (!ownProfile) {
-      setInvitingFriendCode(null);
-      setInviteMessage("Rodičovský účet není aktivní. Odhlaš se a přihlas rodiče znovu.");
-      return;
-    }
-
-    const targetProfile = await resolveFriendProfileByCode(friendCode);
-
-    if (!targetProfile?.id) {
-      setInvitingFriendCode(null);
-      setInviteMessage("Kamarád s tímto kódem nebyl nalezen.");
-      return;
-    }
     const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-
-    const response = await fetch("/api/invites/create", {
+    const response = await fetch("/api/friends/add", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
       },
       body: JSON.stringify({
-        sourceProfileCode: ownProfile.profile_code,
-        targetProfileCode: targetProfile.code
+        sourcePlayerCode: ownProfile.player_code || ownProfile.profile_code,
+        targetPlayerCode: targetProfile.code
       })
     }).catch(() => null);
 
     if (!response?.ok) {
-      setInvitingFriendCode(null);
+      setSavingFriend(false);
       const payload = (await response?.json().catch(() => ({}))) as { error?: string };
-      if (payload.error === "blocked") {
-        setInviteMessage(`Pozvánku nelze odeslat, ${friendName} má aktivní blokaci.`);
+      if (payload.error === "own_code") {
+        setFriendMessageTone("error");
+        setFriendMessage("Tohle je tvůj vlastní kód.");
+      } else if (payload.error === "rate_limited") {
+        setFriendMessageTone("error");
+        setFriendMessage("Moc pokusů. Zkus to za chvíli.");
+      } else if (payload.error === "target_not_found") {
+        setFriendMessageTone("error");
+        setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
+      } else {
+        setFriendMessageTone("error");
+        setFriendMessage("Přidání kamaráda se nepodařilo.");
+      }
+      return;
+    }
+
+    const addPayload = (await response.json().catch(() => ({}))) as { alreadyFriend?: boolean };
+    if (addPayload.alreadyFriend) {
+      await fetchProfileOverview();
+      setSavingFriend(false);
+      setFriendMessageTone("error");
+      setFriendMessage("Tohohle kamaráda už máš přidaného.");
+      setFriendCode("");
+      return;
+    }
+
+    const localAddResult = addFriendByCode({
+      friendCode: targetProfile.code,
+      nickname: nickname || targetProfile.name
+    });
+
+    if (!localAddResult.ok) {
+      setSavingFriend(false);
+      setFriendMessageTone("error");
+      setFriendMessage(localAddResult.message);
+      return;
+    }
+
+    setSavingFriend(false);
+    setFriendMessageTone("success");
+    setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
+    setFriendCode("");
+    await fetchProfileOverview();
+  }
+
+  function normalizePublicCode(value: string) {
+    return value.trim().toUpperCase();
+  }
+
+  function getFriendPublicCode(friend: FriendListItem | { id: string; name: string; joined: boolean }) {
+    return normalizePublicCode("code" in friend ? friend.code : friend.id);
+  }
+
+  async function handleInviteSelectedFriends() {
+    setInviteMessage("");
+
+    if (!supabase || !state.playerCode) {
+      setInviteMessage("Pozvánky fungují jen při připojení k cloudu.");
+      return;
+    }
+
+    if (selectedInviteCodes.length === 0) {
+      setInviteMessage("Vyber aspoň jednoho kamaráda.");
+      return;
+    }
+
+    if (activeExpedition && (!activeExpedition.isLeader || activeExpedition.status !== "waiting")) {
+      setInviteMessage("Teď nemůžeš posílat nové pozvánky.");
+      return;
+    }
+
+    const ownProfile = await ensureOwnCloudProfile();
+    if (!ownProfile) {
+      setInviteMessage("Pozvánku teď nejde odeslat. Zkus to znovu za pár vteřin.");
+      return;
+    }
+
+    setInvitingFriends(true);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+    const targetCodes = selectedInviteCodes.map((code) => normalizePublicCode(code)).filter((code) => code.length >= 4);
+    const endpoint =
+      activeExpedition && activeExpedition.isLeader && activeExpedition.status === "waiting"
+        ? "/api/expeditions/invite"
+        : "/api/expeditions/create";
+
+    const body: Record<string, unknown> = {
+      playerCode: ownProfile.player_code || ownProfile.profile_code,
+      friendCodes: targetCodes
+    };
+
+    if (endpoint === "/api/expeditions/invite") {
+      body.sessionId = activeExpedition?.id;
+    }
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify(body)
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setInvitingFriends(false);
+      const payload = (await response?.json().catch(() => ({}))) as { error?: string };
+      if (payload.error === "rate_limited") {
+        setInviteMessage("Moc pozvánek najednou. Zkus to za chvíli.");
+      } else if (payload.error === "missing_friend_codes") {
+        setInviteMessage("Vyber aspoň jednoho kamaráda.");
+      } else if (payload.error === "leader_only") {
+        setInviteMessage("Pozvánky může posílat jen vedoucí výpravy.");
       } else {
         setInviteMessage("Pozvánku se nepodařilo odeslat.");
       }
       return;
     }
 
-    const createPayload = (await response.json()) as {
-      alreadyPending?: boolean;
-      invite?: { id?: string; expeditionId?: string };
+    const payload = (await response.json()) as {
+      session?: { id?: string };
+      invited?: Array<{ code: string; name: string }>;
     };
-    const inviteId = createPayload.invite?.id;
-    const expeditionId = createPayload.invite?.expeditionId ?? null;
-
-    if (inviteId) {
-      await fetch("/api/push/notify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-        },
-        body: JSON.stringify({
-          sourceProfileCode: ownProfile.profile_code,
-          targetProfileCode: targetProfile.code,
-          inviteId,
-          title: "Nová pozvánka do výpravy",
-          message: `${ownProfile.child_name} tě zve do výpravy.`,
-          url: "/"
-        })
-      }).catch(() => undefined);
-    }
+    const expeditionId = payload.session?.id ?? activeExpedition?.id ?? null;
 
     setActiveMode("group");
     setCurrentExpeditionId(expeditionId);
-    setInvitingFriendCode(null);
-    setInviteMessage(
-      createPayload.alreadyPending
-        ? `Pozvánka pro ${friendName} už čeká na potvrzení.`
-        : `Pozvánka pro ${friendName} byla odeslaná.`
-    );
+    setInvitingFriends(false);
+    setSelectedInviteCodes([]);
+
+    if ((payload.invited?.length ?? 0) > 0) {
+      setInviteMessage(`Pozváno: ${payload.invited?.map((item) => item.name).join(", ")}.`);
+    } else {
+      setInviteMessage("Nikdo nový nešel právě teď pozvat.");
+    }
+
+    await fetchProfileOverview();
   }
 
-  async function handleBlockFriend(friendCode: string, friendName: string) {
-    if (!supabase || !state.profileCode) {
+  async function handleRemoveFriend(friendCode: string, friendName: string) {
+    if (!supabase || !state.playerCode) {
       return;
     }
 
-    const confirmed = window.confirm(`Opravdu chceš zablokovat hráče ${friendName}?`);
+    const confirmed = window.confirm(`Opravdu chceš odebrat kamaráda ${friendName}?`);
     if (!confirmed) {
       return;
     }
 
-    setBlockingFriendCode(friendCode);
+    setRemovingFriendCode(friendCode);
     const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-    const response = await fetch("/api/invites/block", {
+    const response = await fetch("/api/friends/remove", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
       },
       body: JSON.stringify({
-        sourceProfileCode: state.profileCode,
-        targetProfileCode: friendCode,
-        block: true
+        sourcePlayerCode: state.playerCode,
+        targetPlayerCode: friendCode
       })
     }).catch(() => null);
 
     if (!response?.ok) {
-      setBlockingFriendCode(null);
-      setInviteMessage("Blokaci se nepodařilo uložit.");
+      setRemovingFriendCode(null);
+      const payload = (await response?.json().catch(() => ({}))) as { error?: string };
+      if (payload.error === "rate_limited") {
+        setInviteMessage("Moc pokusů o úpravu kamarádů. Zkus to za chvíli.");
+      } else {
+        setInviteMessage("Odebrání kamaráda se nepodařilo.");
+      }
       return;
     }
 
     removeFriendByCode(friendCode);
-    setBlockingFriendCode(null);
-    setInviteMessage(`${friendName} byl zablokován/a.`);
-  }
-
-  async function handleCancelInvite(inviteId: string) {
-    if (!supabase || !state.profileCode) {
-      return;
-    }
-
-    setCancelingInviteId(inviteId);
-    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-    const response = await fetch("/api/invites/cancel", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-      },
-      body: JSON.stringify({
-        sourceProfileCode: state.profileCode,
-        inviteId
-      })
-    }).catch(() => null);
-
-    if (!response?.ok) {
-      setCancelingInviteId(null);
-      setInviteMessage("Zrušení pozvánky se nepodařilo.");
-      return;
-    }
-
-    setSentInvites((current) => current.filter((invite) => invite.id !== inviteId));
-    setCancelingInviteId(null);
-    setInviteMessage("Čekající pozvánka byla zrušená.");
+    await fetchProfileOverview();
+    setRemovingFriendCode(null);
+    setInviteMessage(`${friendName} byl odebrán/a z kamarádů.`);
   }
 
   async function handleLogout() {
@@ -769,23 +1174,49 @@ export function ProfileScreen() {
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card overflow-hidden p-5">
         <div className="flex items-center gap-4">
-          <AvatarPreview config={state.profile.avatarConfig} size={80} />
+          <AvatarPreview config={state.profile.avatarConfig} emoji={state.profile.avatar} size={80} />
           <div className="flex-1">
             <p className="text-xs uppercase tracking-[0.24em] text-mist">Profil hráče</p>
             <input
-              value={state.profile.name}
-              onChange={(event) => updateProfile({ name: event.target.value })}
-              onBlur={(event) => {
-                const name = event.target.value.trim();
-                if (name) {
-                  void saveProfileToCloud(name, state.profile.avatarConfig);
+              value={nameDraft}
+              onChange={(event) => {
+                setNameDraft(event.target.value);
+                setProfileMessageTone("neutral");
+                setProfileMessage("Neuložené změny.");
+              }}
+              onBlur={() => void persistProfileName()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  (event.currentTarget as HTMLInputElement).blur();
                 }
               }}
               className="mt-1 w-full bg-transparent text-2xl font-bold outline-none"
             />
+            <button
+              onClick={() => void persistProfileName()}
+              disabled={savingProfile}
+              className="mt-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-mist disabled:opacity-70"
+            >
+              {savingProfile ? "Ukládám…" : "Uložit jméno"}
+            </button>
             <p className="mt-1 text-sm text-mist">
               {state.profile.age} let · {state.profile.title}
             </p>
+            {savingProfile ? <p className="mt-1 text-xs text-mist">Ukládám profil…</p> : null}
+            {!savingProfile && profileMessage ? (
+              <p
+                className={`mt-1 text-xs ${
+                  profileMessageTone === "error"
+                    ? "text-coral"
+                    : profileMessageTone === "success"
+                      ? "text-lime"
+                      : "text-mist"
+                }`}
+              >
+                {profileMessage}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -809,6 +1240,216 @@ export function ProfileScreen() {
         >
           Odhlásit
         </button>
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-lime">Profil</p>
+            <h2 className="mt-2 text-xl font-semibold">Avatar studio</h2>
+          </div>
+          <button
+            onClick={() => setAvatarStudioOpen((current) => !current)}
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold"
+          >
+            {avatarStudioOpen ? "Zavřít" : "Upravit avatara"}
+          </button>
+        </div>
+        {avatarStudioOpen ? (
+          <>
+            <p className="mt-2 text-sm text-mist">Každá změna se ukládá automaticky.</p>
+
+            <div className="mt-4 flex justify-center">
+              <AvatarPreview
+                config={avatarDraft}
+                emoji={avatarMode === "emoji" ? avatarEmojiDraft : undefined}
+                size={120}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
+              <button
+                onClick={() => {
+                  setAvatarMode("emoji");
+                  saveAvatarDebounced({
+                    avatar: avatarEmojiDraft,
+                    avatarConfig: avatarDraft
+                  });
+                }}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  avatarMode === "emoji" ? "bg-lime text-night" : "text-mist"
+                }`}
+              >
+                Emoji
+              </button>
+              <button
+                onClick={() => {
+                  setAvatarMode("custom");
+                  saveAvatarDebounced({
+                    avatar: "PB",
+                    avatarConfig: avatarDraft
+                  });
+                }}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  avatarMode === "custom" ? "bg-lime text-night" : "text-mist"
+                }`}
+              >
+                Kreslený
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {avatarMode === "emoji" ? (
+                <div>
+                  <p className="mb-2 text-sm font-medium">Vyber emoji</p>
+                  <div className="grid grid-cols-6 gap-2">
+                    {EMOJI_AVATAR_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setAvatarEmojiDraft(option);
+                          saveAvatarDebounced({
+                            avatar: option,
+                            avatarConfig: avatarDraft
+                          });
+                        }}
+                        className={`rounded-xl border px-2 py-2 text-xl ${
+                          avatarEmojiDraft === option
+                            ? "border-lime bg-lime/15"
+                            : "border-white/10 bg-white/5 hover:border-white/20"
+                        }`}
+                        aria-label={`Vybrat avatar ${option.replace("batuzek-", "")}`}
+                      >
+                        <div className="relative mx-auto h-9 w-9">
+                          <Image
+                            src={`/avatars/batuzek/${option}.png`}
+                            alt={`Batůžek ${option.replace("batuzek-", "")}`}
+                            fill
+                            sizes="36px"
+                            className="object-contain"
+                          />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Hlava: {selectedLabel(HEAD_OPTIONS, avatarDraft.head)}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {HEAD_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            const next = { ...avatarDraft, head: option.value };
+                            setAvatarDraft(next);
+                            saveAvatarDebounced({
+                              avatar: "PB",
+                              avatarConfig: next
+                            });
+                          }}
+                          className={`rounded-xl px-3 py-2 text-sm ${
+                            avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Oči: {selectedLabel(EYE_OPTIONS, avatarDraft.eyes)}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {EYE_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            const next = { ...avatarDraft, eyes: option.value };
+                            setAvatarDraft(next);
+                            saveAvatarDebounced({
+                              avatar: "PB",
+                              avatarConfig: next
+                            });
+                          }}
+                          className={`rounded-xl px-3 py-2 text-sm ${
+                            avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Vlasy: {selectedLabel(HAIR_OPTIONS, avatarDraft.hair)}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {HAIR_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            const next = { ...avatarDraft, hair: option.value };
+                            setAvatarDraft(next);
+                            saveAvatarDebounced({
+                              avatar: "PB",
+                              avatarConfig: next
+                            });
+                          }}
+                          className={`rounded-xl px-3 py-2 text-sm ${
+                            avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Barva</p>
+                    <div className="flex flex-wrap gap-2">
+                      {COLOR_OPTIONS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => {
+                            const next = { ...avatarDraft, color };
+                            setAvatarDraft(next);
+                            saveAvatarDebounced({
+                              avatar: "PB",
+                              avatarConfig: next
+                            });
+                          }}
+                          className={`h-9 w-9 rounded-full border-2 ${
+                            avatarDraft.color === color ? "border-lime" : "border-white/20"
+                          }`}
+                          style={{ backgroundColor: color }}
+                          aria-label={`Barva ${color}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {savingAvatar ? <p className="text-center text-xs text-mist">Ukládám avatar…</p> : null}
+              {avatarMessage ? (
+                <p
+                  className={`text-center text-xs ${
+                    avatarMessageTone === "error"
+                      ? "text-coral"
+                      : avatarMessageTone === "success"
+                        ? "text-lime"
+                        : "text-mist"
+                  }`}
+                >
+                  {avatarMessage}
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="glass-card p-5">
@@ -840,179 +1481,52 @@ export function ProfileScreen() {
         )}
       </section>
 
-      <MobileAppCard />
-
       <section className="glass-card p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="section-title">Avatar studio</h2>
-          <button
-            onClick={() => setAvatarStudioOpen((current) => !current)}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold"
-          >
-            {avatarStudioOpen ? "Zavřít" : "Upravit avatara"}
-          </button>
-        </div>
-        {avatarStudioOpen ? (
-          <>
-            <p className="mt-2 text-sm text-mist">Vyber hlavu, oči, vlasy a barvu. Po výběru se lišta zavře.</p>
-
-            <div className="mt-4 flex justify-center">
-              <AvatarPreview config={avatarDraft} size={120} />
-            </div>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <button
-                  onClick={() => setOpenAvatarPanel((current) => (current === "head" ? null : "head"))}
-                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-                >
-                  <span className="text-sm font-medium">Hlava: {selectedLabel(HEAD_OPTIONS, avatarDraft.head)}</span>
-                  <span className="text-xs text-mist">{openAvatarPanel === "head" ? "Skrýt" : "Otevřít"}</span>
-                </button>
-                {openAvatarPanel === "head" ? (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {HEAD_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setAvatarDraft((current) => ({ ...current, head: option.value }));
-                          setOpenAvatarPanel(null);
-                        }}
-                        className={`rounded-xl px-3 py-2 text-sm ${
-                          avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <button
-                  onClick={() => setOpenAvatarPanel((current) => (current === "eyes" ? null : "eyes"))}
-                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-                >
-                  <span className="text-sm font-medium">Oči: {selectedLabel(EYE_OPTIONS, avatarDraft.eyes)}</span>
-                  <span className="text-xs text-mist">{openAvatarPanel === "eyes" ? "Skrýt" : "Otevřít"}</span>
-                </button>
-                {openAvatarPanel === "eyes" ? (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {EYE_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setAvatarDraft((current) => ({ ...current, eyes: option.value }));
-                          setOpenAvatarPanel(null);
-                        }}
-                        className={`rounded-xl px-3 py-2 text-sm ${
-                          avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <button
-                  onClick={() => setOpenAvatarPanel((current) => (current === "hair" ? null : "hair"))}
-                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-                >
-                  <span className="text-sm font-medium">Vlasy: {selectedLabel(HAIR_OPTIONS, avatarDraft.hair)}</span>
-                  <span className="text-xs text-mist">{openAvatarPanel === "hair" ? "Skrýt" : "Otevřít"}</span>
-                </button>
-                {openAvatarPanel === "hair" ? (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {HAIR_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setAvatarDraft((current) => ({ ...current, hair: option.value }));
-                          setOpenAvatarPanel(null);
-                        }}
-                        className={`rounded-xl px-3 py-2 text-sm ${
-                          avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <button
-                  onClick={() => setOpenAvatarPanel((current) => (current === "color" ? null : "color"))}
-                  className="flex w-full items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-left"
-                >
-                  <span className="text-sm font-medium">Barva</span>
-                  <span className="text-xs text-mist">{openAvatarPanel === "color" ? "Skrýt" : "Otevřít"}</span>
-                </button>
-                {openAvatarPanel === "color" ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {COLOR_OPTIONS.map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => {
-                          setAvatarDraft((current) => ({ ...current, color }));
-                          setOpenAvatarPanel(null);
-                        }}
-                        className={`h-9 w-9 rounded-full border-2 ${
-                          avatarDraft.color === color ? "border-lime" : "border-white/20"
-                        }`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Barva ${color}`}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              <button
-                onClick={() => {
-                  updateProfile({ avatarConfig: avatarDraft });
-                  void saveProfileToCloud(state.profile.name, avatarDraft);
-                  setAvatarStudioOpen(false);
-                }}
-                className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
-              >
-                Uložit avatar
-              </button>
-            </div>
-          </>
-        ) : null}
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Papírová verze</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">Hrál/a jsi venku na papíře?</h2>
+        <p className="mt-2 text-sm leading-6 text-mist">
+          Vytiskni si misi do terénu a po návratu domů zadej stejné odpovědi do aplikace. Jen tak vznikne skutečný
+          výsledek i body.
+        </p>
+        <Link
+          href="/paper-score"
+          className="mt-4 inline-flex rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+        >
+          Tisk a vyhodnocení v aplikaci
+        </Link>
       </section>
+
+      <MobileAppCard />
 
       <section className="glass-card p-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
-            <h2 className="mt-2 text-xl font-semibold">Tvůj profilový kód</h2>
+            <h2 className="mt-2 text-xl font-semibold">Můj kód</h2>
           </div>
-          <div className="rounded-full bg-lime/12 px-3 py-2 text-xs text-lime">
-            {state.activeMode === "group" ? "Skupinový tah" : "Solo tah"}
-          </div>
+          <div className="rounded-full bg-lime/12 px-3 py-2 text-xs text-lime">Solo tah</div>
         </div>
         <div className="mt-4 flex flex-col items-center gap-4 rounded-[24px] bg-white/5 p-4">
           <div className="rounded-xl border border-white/10 bg-night/70 px-3 py-2 text-sm font-semibold tracking-wide text-lime">
-            {state.profileCode}
+            {state.playerCode}
           </div>
           <p className="text-center text-sm leading-6 text-mist">
-            Kamarád si tě přidá opsáním tohoto kódu.
+            Kamarád si tě přidá podle tohoto kódu.
           </p>
         </div>
       </section>
 
       <section id="add-friend" className="glass-card p-5">
         <h2 className="section-title">Přidat kamaráda</h2>
+        {cloudReady === null ? (
+          <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+            <p className="text-sm text-mist">Kontroluju přihlášení účtu…</p>
+            <div className="mt-2 h-2 w-40 animate-pulse rounded-full bg-white/10" />
+          </div>
+        ) : null}
         {cloudReady === false ? (
           <div className="mt-3 rounded-2xl border border-coral/40 bg-coral/10 p-3">
-            <p className="text-sm text-white">Cloud účet rodiče není přihlášený.</p>
+            <p className="text-sm text-white">Cloud účet není přihlášený.</p>
             <button
               onClick={() => {
                 openParentAuthGate();
@@ -1020,7 +1534,7 @@ export function ProfileScreen() {
               }}
               className="mt-3 rounded-xl bg-coral px-3 py-2 text-xs font-semibold text-white"
             >
-              Přihlásit rodiče
+              Přihlásit se
             </button>
           </div>
         ) : null}
@@ -1032,85 +1546,34 @@ export function ProfileScreen() {
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
           />
           <p className="text-sm text-mist">Zadej kód kamaráda.</p>
+          {friendCode.trim() ? (
+            <p className="text-xs text-mist/80">
+              Ověřím kód: <span className="font-semibold text-white/90">{friendCode.trim().toUpperCase()}</span>
+            </p>
+          ) : (
+            <p className="text-xs text-mist/80">Tip: veřejný kód má tvar BAT-XXXXXX.</p>
+          )}
           <button
             onClick={handleAddFriend}
-            disabled={savingFriend}
+            disabled={savingFriend || cloudReady !== true}
             className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
           >
             {savingFriend ? "Přidávám..." : "Přidat kamaráda"}
           </button>
-          {friendMessage ? <p className="text-sm text-mist">{friendMessage}</p> : null}
+          {friendMessage ? (
+            <p
+              className={`text-sm ${
+                friendMessageTone === "error"
+                  ? "text-coral"
+                  : friendMessageTone === "success"
+                    ? "text-lime"
+                    : "text-mist"
+              }`}
+            >
+              {friendMessage}
+            </p>
+          ) : null}
         </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <h2 className="section-title">Kamarádi</h2>
-        {friends.length === 0 ? (
-          <p className="mt-4 text-sm text-mist">
-            Zatím tu nikoho nemáš. Přidej prvního kamaráda přes kód.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {friends.map((friend) => (
-              <div key={friend.id} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold">
-                    {friend.name.slice(0, 2).toUpperCase()}
-                  </div>
-                    <div>
-                      <div className="font-medium">{friend.name}</div>
-                      <div className="text-sm text-mist">Kód: {friend.id}</div>
-                    </div>
-                  </div>
-                <div className="flex items-center gap-2">
-                  <div className="rounded-full bg-lime/12 px-3 py-2 text-xs font-medium text-lime">
-                    {friend.joined ? "Ve výpravě" : "Mimo výpravu"}
-                  </div>
-                  <button
-                    onClick={() => handleInviteFriend(friend.id, friend.name)}
-                    disabled={invitingFriendCode === friend.id}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold"
-                  >
-                    {invitingFriendCode === friend.id ? "Posílám…" : "Pozvat"}
-                  </button>
-                  <button
-                    onClick={() => handleBlockFriend(friend.id, friend.name)}
-                    disabled={blockingFriendCode === friend.id}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-coral"
-                  >
-                    {blockingFriendCode === friend.id ? "Blokuju…" : "Blokovat"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {inviteMessage ? <p className="mt-3 text-sm text-mist">{inviteMessage}</p> : null}
-      </section>
-
-      <section className="glass-card p-5">
-        <h2 className="section-title">Odeslané pozvánky</h2>
-        {sentInvites.length === 0 ? (
-          <p className="mt-4 text-sm text-mist">Teď nemáš žádnou čekající pozvánku.</p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {sentInvites.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
-                <div>
-                  <div className="font-medium">{invite.invitee_display_name}</div>
-                  <div className="text-sm text-mist">Čeká na potvrzení</div>
-                </div>
-                <button
-                  onClick={() => handleCancelInvite(invite.id)}
-                  disabled={cancelingInviteId === invite.id}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-coral"
-                >
-                  {cancelingInviteId === invite.id ? "Ruším…" : "Zrušit"}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
     </main>

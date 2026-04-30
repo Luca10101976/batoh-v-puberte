@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { locations } from "@/lib/mock-data";
 
 type ParentAlertPayload = {
-  parentEmail?: string;
   profileCode?: string;
   childName?: string;
   childAge?: number;
+  locationId?: string;
   event?: "registration" | "checkin";
 };
 
@@ -22,62 +24,48 @@ export async function POST(request: Request) {
   const body = (await request.json()) as ParentAlertPayload;
   const authHeader = request.headers.get("authorization") ?? "";
   const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-
-  let parentEmail = "";
-  if (accessToken) {
-    const {
-      data: { user },
-      error: authError
-    } = await authClient.auth.getUser(accessToken);
-
-    if (!authError && user?.email) {
-      parentEmail = user.email.trim();
-    }
+  if (!accessToken) {
+    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
   }
 
-  if (!parentEmail) {
-    const fallbackEmail = body.parentEmail?.trim() ?? "";
-    const profileCode = body.profileCode?.trim() ?? "";
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceRoleKey || !fallbackEmail || !profileCode) {
-      return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
-    }
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+  const {
+    data: { user },
+    error: authError
+  } = await authClient.auth.getUser(accessToken);
+  const authUserId = user?.id ?? "";
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-    const { data: profileRow, error: profileError } = await adminClient
-      .from("child_profiles")
-      .select("parent_user_id")
-      .eq("profile_code", profileCode)
-      .limit(1)
-      .maybeSingle<{ parent_user_id: string }>();
-
-    if (profileError || !profileRow?.parent_user_id) {
-      return NextResponse.json({ ok: false, message: "Nelze ověřit profil dítěte." }, { status: 403 });
-    }
-
-    const { data: parentUser, error: parentUserError } = await adminClient.auth.admin.getUserById(
-      profileRow.parent_user_id
-    );
-
-    const parentUserEmail = parentUser?.user?.email?.trim().toLowerCase() ?? "";
-    if (parentUserError || !parentUserEmail || parentUserEmail !== fallbackEmail.toLowerCase()) {
-      return NextResponse.json({ ok: false, message: "E-mail neodpovídá registrovanému rodiči." }, { status: 403 });
-    }
-
-    parentEmail = fallbackEmail;
+  const parentEmail = user?.email?.trim() ?? "";
+  if (authError || !parentEmail) {
+    return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
   }
 
   const childName = body.childName?.trim();
   const childAge = body.childAge;
   const event = body.event ?? "registration";
+  const locationId = body.locationId?.trim() ?? "";
 
   if (!childName) {
     return NextResponse.json({ ok: false, message: "Chybí povinná data." }, { status: 400 });
   }
 
+  if (event === "checkin") {
+    const safeLocationId = locationId || "unknown";
+    const limit = await checkRateLimit({
+      action: `parent_checkin_${safeLocationId}`,
+      ip: getRequestIpAddress(request),
+      userId: authUserId,
+      limit: 1,
+      windowMinutes: 5,
+      blockMinutes: 1
+    });
+    if (!limit.allowed) {
+      return NextResponse.json({ ok: true, skipped: "rate_limited_checkin" });
+    }
+  }
+
   const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.PARENT_ALERT_FROM_EMAIL ?? "onboarding@resend.dev";
+  const fromEmail = process.env.PARENT_ALERT_FROM_EMAIL ?? "postope@panbatoh.cz";
 
   if (!resendApiKey) {
     return NextResponse.json(
@@ -87,9 +75,11 @@ export async function POST(request: Request) {
   }
 
   const isRegistration = event === "registration";
+  const locationName =
+    event === "checkin" && locationId ? locations.find((location) => location.id === locationId)?.name ?? locationId : "";
   const subject = isRegistration
     ? `Batoh v pubertě: registrace hráče ${childName}`
-    : `Batoh v pubertě: bezpečnostní check-in (${childName})`;
+    : `Batoh v pubertě: zahájení mise (${childName})`;
   const now = new Date().toLocaleString("cs-CZ", {
     dateStyle: "medium",
     timeStyle: "short"
@@ -100,9 +90,10 @@ export async function POST(request: Request) {
     "",
     isRegistration
       ? `${childName} (${childAge ?? "?"} let) se právě zaregistroval/a do aplikace Batoh v pubertě.`
-      : `${childName} (${childAge ?? "?"} let) právě spustil/a hru v aplikaci Batoh v pubertě.`,
+      : `${childName} (${childAge ?? "?"} let) právě spustil/a misi v aplikaci Batoh v pubertě.`,
+    !isRegistration && locationName ? `Mise: ${locationName}` : "",
     `Čas události: ${now}`,
-    "Tohle je informační e-mail pro rodiče.",
+    "Tohle je informační e-mail pro vlastníka účtu.",
     "",
     "Tým Batoh v pubertě"
   ].join("\n");
@@ -111,10 +102,11 @@ export async function POST(request: Request) {
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
       <p>Dobrý den,</p>
 	      <p><strong>${childName}</strong> (${childAge ?? "?"} let) ${
-          isRegistration ? "se právě zaregistroval/a" : "právě spustil/a hru"
+          isRegistration ? "se právě zaregistroval/a" : "právě spustil/a misi"
         } do aplikace <strong>Batoh v pubertě</strong>.</p>
+	      ${!isRegistration && locationName ? `<p><strong>Mise:</strong> ${locationName}</p>` : ""}
 	      <p><strong>Čas události:</strong> ${now}</p>
-	      <p>Tohle je informační e-mail pro rodiče.</p>
+	      <p>Tohle je informační e-mail pro vlastníka účtu.</p>
       <p style="margin-top: 18px;">Tým Batoh v pubertě</p>
     </div>
   `;
@@ -123,7 +115,8 @@ export async function POST(request: Request) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "User-Agent": "batoh-v-puberte/1.0 (+https://batoh-v-puberte.vercel.app)"
     },
     body: JSON.stringify({
       from: fromEmail,
@@ -136,6 +129,12 @@ export async function POST(request: Request) {
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && errorText.includes("1010")) {
+      return NextResponse.json(
+        { ok: false, message: "Odeslání zablokováno (Resend 1010). Ověř User-Agent a doménu odesílatele." },
+        { status: response.status }
+      );
+    }
     return NextResponse.json(
       { ok: false, message: `Odeslání e-mailu selhalo: ${errorText}` },
       { status: response.status }

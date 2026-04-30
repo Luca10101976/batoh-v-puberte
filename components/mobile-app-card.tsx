@@ -87,7 +87,7 @@ export function MobileAppCard() {
       return;
     }
 
-    if (!state.profileCode) {
+    if (!state.playerCode) {
       setPushMessage("Nejdřív dokonči registraci profilu.");
       return;
     }
@@ -126,7 +126,7 @@ export function MobileAppCard() {
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
       },
       body: JSON.stringify({
-        profileCode: state.profileCode,
+        playerCode: state.playerCode,
         subscription: subscription.toJSON(),
         userAgent: navigator.userAgent
       })

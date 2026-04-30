@@ -2,22 +2,57 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppStateProvider } from "@/components/app-state-provider";
 import { AppFrame } from "@/components/app-frame";
+import { getAppVersion } from "@/lib/app-version";
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://batoh-v-puberte.vercel.app";
 
 export const metadata: Metadata = {
   title: "Batoh v pubertě",
   description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
   applicationName: "Batoh v pubertě",
+  metadataBase: new URL(siteUrl),
+  alternates: {
+    canonical: "/"
+  },
+  robots: {
+    index: true,
+    follow: true
+  },
+  openGraph: {
+    type: "website",
+    locale: "cs_CZ",
+    url: "/",
+    title: "Batoh v pubertě",
+    description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
+    siteName: "Batoh v pubertě",
+    images: [
+      {
+        url: "/images/panbatoh-og.jpg",
+        width: 683,
+        height: 683,
+        alt: "Pan Batoh - logo"
+      }
+    ]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Batoh v pubertě",
+    description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
+    images: ["/images/panbatoh-og.jpg"]
+  },
   icons: {
-    icon: "/icons/icon.svg",
-    apple: "/icons/icon.svg"
+    icon: [
+      { url: "/icons/mozek-favicon.svg", type: "image/svg+xml" }
+    ],
+    shortcut: "/icons/mozek-favicon.svg",
+    apple: [{ url: "/icons/mozek-favicon.svg", type: "image/svg+xml" }]
   }
 };
 
 export const viewport: Viewport = {
   themeColor: "#07111f",
   width: "device-width",
-  initialScale: 1,
-  maximumScale: 1
+  initialScale: 1
 };
 
 export default function RootLayout({
@@ -25,11 +60,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const appVersion = getAppVersion();
+
   return (
     <html lang="cs">
       <body>
         <AppStateProvider>
-          <AppFrame>{children}</AppFrame>
+          <AppFrame appVersion={appVersion}>{children}</AppFrame>
         </AppStateProvider>
       </body>
     </html>

@@ -18,12 +18,20 @@ a {
   @apply text-inherit no-underline;
 }
 
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  @apply outline-none ring-2 ring-lime/70 ring-offset-2 ring-offset-night;
+}
+
 * {
   @apply border-white/10;
 }
 
 .app-shell {
-  @apply mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-10 pt-6;
+  @apply mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-10 pt-6 sm:px-6 lg:px-8 xl:pt-8;
 }
 
 .glass-card {
@@ -31,7 +39,7 @@ a {
 }
 
 .section-title {
-  @apply text-lg font-semibold tracking-tight text-white;
+  @apply text-lg font-semibold tracking-tight text-white lg:text-xl;
 }
 
 .section-copy {

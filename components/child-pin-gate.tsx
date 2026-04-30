@@ -8,15 +8,22 @@ export function ChildPinGate() {
   const { unlockWithPin } = useAppState();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setLoading(true);
 
-    const ok = unlockWithPin(pin);
+    const result = await unlockWithPin(pin);
+    setLoading(false);
 
-    if (!ok) {
-      setError("PIN nesedí. Zkus to znovu.");
+    if (!result.ok) {
+      if (result.code === "too_many_attempts") {
+        setError("Příliš mnoho pokusů. PIN je dočasně zablokovaný na 15 minut.");
+        return;
+      }
+      setError(result.message || "PIN nesedí. Zkus to znovu.");
     }
   }
 
@@ -44,8 +51,12 @@ export function ChildPinGate() {
 
           {error ? <p className="text-sm text-coral">{error}</p> : null}
 
-          <button type="submit" className="w-full rounded-2xl bg-coral px-4 py-3 text-base font-semibold text-white">
-            Odemknout hru
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-2xl bg-coral px-4 py-3 text-base font-semibold text-white disabled:opacity-70"
+          >
+            {loading ? "Ověřuji PIN..." : "Odemknout hru"}
           </button>
         </form>
       </section>

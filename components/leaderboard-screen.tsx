@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -18,6 +19,8 @@ export function LeaderboardScreen() {
   const [error, setError] = useState("");
   const [friendsBoard, setFriendsBoard] = useState<LeaderboardEntry[]>([]);
   const [globalBoard, setGlobalBoard] = useState<LeaderboardEntry[]>([]);
+  const [friendsLoaded, setFriendsLoaded] = useState(false);
+  const [globalLoaded, setGlobalLoaded] = useState(false);
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -28,9 +31,22 @@ export function LeaderboardScreen() {
   const playerScore = getPlayerScore();
 
   useEffect(() => {
-    async function loadBoards() {
-      if (!supabase || !state.profileCode) {
+    setFriendsLoaded(false);
+    setGlobalLoaded(false);
+    setFriendsBoard([]);
+    setGlobalBoard([]);
+  }, [state.playerCode]);
+
+  useEffect(() => {
+    async function loadActiveBoard() {
+      if (!supabase || !state.playerCode) {
         setLoading(false);
+        return;
+      }
+
+      const shouldLoadFriends = tab === "friends" && !friendsLoaded;
+      const shouldLoadGlobal = tab === "global" && !globalLoaded;
+      if (!shouldLoadFriends && !shouldLoadGlobal) {
         return;
       }
 
@@ -45,49 +61,39 @@ export function LeaderboardScreen() {
         return;
       }
 
-      const [friendsResponse, globalResponse] = await Promise.all([
-        fetch("/api/leaderboard", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            scope: "friends",
-            profileCode: state.profileCode,
-            limit: 20
-          })
-        }).catch(() => null),
-        fetch("/api/leaderboard", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            scope: "global",
-            profileCode: state.profileCode,
-            limit: 20
-          })
-        }).catch(() => null)
-      ]);
+      const scope: "friends" | "global" = shouldLoadFriends ? "friends" : "global";
+      const response = await fetch("/api/leaderboard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          scope,
+          playerCode: state.playerCode,
+          limit: 20
+        })
+      }).catch(() => null);
 
-      if (!friendsResponse?.ok || !globalResponse?.ok) {
+      if (!response?.ok) {
         setLoading(false);
         setError("Žebříček se teď nepodařilo načíst.");
         return;
       }
 
-      const friendsPayload = (await friendsResponse.json()) as { entries?: LeaderboardEntry[] };
-      const globalPayload = (await globalResponse.json()) as { entries?: LeaderboardEntry[] };
-
-      setFriendsBoard(friendsPayload.entries ?? []);
-      setGlobalBoard(globalPayload.entries ?? []);
+      const payload = (await response.json()) as { entries?: LeaderboardEntry[] };
+      if (scope === "friends") {
+        setFriendsBoard(payload.entries ?? []);
+        setFriendsLoaded(true);
+      } else {
+        setGlobalBoard(payload.entries ?? []);
+        setGlobalLoaded(true);
+      }
       setLoading(false);
     }
 
-    void loadBoards();
-  }, [state.profileCode, supabase]);
+    void loadActiveBoard();
+  }, [friendsLoaded, globalLoaded, state.playerCode, supabase, tab]);
 
   const fallbackFriendsBoard = useMemo(
     () =>
@@ -136,7 +142,32 @@ export function LeaderboardScreen() {
         </div>
       </section>
 
-      {loading ? <p className="text-sm text-mist">Načítám žebříček…</p> : null}
+      {tab === "friends" ? (
+        <section className="glass-card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-mist">Chceš soutěžit s někým známým? Přidej si kamaráda podle kódu.</p>
+            <Link
+              href="/profile#add-friend"
+              className="inline-flex items-center justify-center rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+            >
+              Přidat kamaráda
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {loading ? (
+        <div className="space-y-3">
+          <section className="glass-card animate-pulse p-4">
+            <div className="h-4 w-28 rounded bg-white/10" />
+            <div className="mt-3 h-3 w-40 rounded bg-white/10" />
+          </section>
+          <section className="glass-card animate-pulse p-4">
+            <div className="h-4 w-24 rounded bg-white/10" />
+            <div className="mt-3 h-3 w-36 rounded bg-white/10" />
+          </section>
+        </div>
+      ) : null}
       {!loading && error ? <p className="text-sm text-mist">{error}</p> : null}
 
       {!loading ? (
@@ -150,16 +181,16 @@ export function LeaderboardScreen() {
                 }`}
               >
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-base font-bold">
                     {index + 1}
                   </div>
                   <div>
                     <div className="font-semibold">{entry.name}</div>
-                    <div className="text-sm text-mist">{entry.completed} dokončených misí</div>
+                    <div className="text-xs text-mist">{entry.completed} dokončených misí</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-semibold text-lime">{entry.score}</div>
+                  <div className="text-lg font-semibold text-lime">{entry.score}</div>
                   <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
                   {entry.isYou ? <div className="mt-1 text-[11px] text-mist">Ty</div> : null}
                 </div>
@@ -181,12 +212,12 @@ export function LeaderboardScreen() {
                 }`}
               >
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-base font-bold">
                     {index + 1}
                   </div>
                   <div>
                     <div className="font-semibold">{entry.name}</div>
-                    <div className="text-sm text-mist">{entry.completed} dokončených misí celkem</div>
+                    <div className="text-xs text-mist">{entry.completed} dokončených misí celkem</div>
                   </div>
                 </div>
                 <div className="text-right">

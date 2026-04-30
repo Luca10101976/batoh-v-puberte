@@ -1,5 +1,20 @@
+import type { Metadata } from "next";
 import { HomeScreen } from "@/components/home-screen";
+import { getGameplayLocation, getPublishedLocationIds } from "@/lib/gameplay-server";
 
-export default function HomePage() {
-  return <HomeScreen />;
+export const metadata: Metadata = {
+  title: "Domů | Batoh v pubertě",
+  description: "Vyber lokaci, plň mise a sbírej body ve městské hře pro děti.",
+  alternates: {
+    canonical: "/"
+  }
+};
+
+export default async function HomePage() {
+  const publishedLocationIds = await getPublishedLocationIds();
+  const publishedLocations = (
+    await Promise.all(publishedLocationIds.map((locationId) => getGameplayLocation(locationId)))
+  ).filter((location): location is NonNullable<Awaited<ReturnType<typeof getGameplayLocation>>> => Boolean(location));
+
+  return <HomeScreen publishedLocations={publishedLocations} />;
 }

@@ -1,6 +1,6 @@
-const CACHE_NAME = "batoh-v-puberte-v2";
+const CACHE_NAME = "batoh-v-puberte-v4";
 const OFFLINE_URL = "/offline";
-const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icons/icon.svg"];
+const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icons/mozek-favicon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -17,6 +17,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
     return;
@@ -25,6 +31,13 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
 
   if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  // Never cache API responses or authenticated GETs.
+  // Profile/auth data must always come from the live server state.
+  if (requestUrl.pathname.startsWith("/api/") || event.request.headers.has("authorization")) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
@@ -60,7 +73,7 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
           return response;
         })
-        .catch(() => caches.match(OFFLINE_URL));
+        .catch(() => caches.match(OFFLINE_URL))
     })
   );
 });
@@ -77,8 +90,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Batoh v pubertě";
   const options = {
     body: payload.body || "Máš novou zprávu v aplikaci.",
-    icon: "/icons/icon.svg",
-    badge: "/icons/icon.svg",
+    icon: "/icons/mozek-favicon.svg",
+    badge: "/icons/mozek-favicon.svg",
     data: {
       url: payload.url || "/"
     }

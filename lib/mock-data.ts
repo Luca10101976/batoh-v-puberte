@@ -36,7 +36,6 @@ export type MapLocation = {
   difficulty: "Lehká" | "Střední" | "Vyšší";
   distance: string;
   duration: string;
-  areaHint: string;
   vibe: string[];
   lat: number;
   lng: number;
@@ -93,7 +92,6 @@ export const locations: MapLocation[] = [
     difficulty: "Střední",
     distance: "Praha 5",
     duration: "35-50 min",
-    areaHint: "Drž se v místě hry.",
     vibe: ["Městská záhada", "Detaily, které unikají", "Ideální pro partu"],
     lat: 50.0717634,
     lng: 14.3762351,
@@ -229,9 +227,7 @@ export const locations: MapLocation[] = [
             type: "question",
             typeLabel: "Otázka",
             title: "Co je uvnitř",
-            content: "Co je dnes uvnitř altánu?",
-            illustrationImage: "/images/klamovka-altan.png",
-            illustrationImageAlt: "Altánek v Klamovce"
+            content: "Co je dnes uvnitř altánu?"
           },
           {
             id: "klamovka-altan-3",
@@ -239,7 +235,7 @@ export const locations: MapLocation[] = [
             typeLabel: "Výběr",
             title: "Která zvířata byla v parku",
             content: "Jaká zvířata se podle dobových záznamů chovala v parku Klamovka?",
-            options: ["vlci a medvedi", "kolibříci", "rýžový špaček jménem Atbaliba"]
+            options: ["Pávi a labutě", "Vlci, medvědi, kůň a brazilský ptáček", "Sloni a velbloudi"]
           }
         ],
         clue: [
@@ -332,7 +328,6 @@ export const locations: MapLocation[] = [
     difficulty: "Vyšší",
     distance: "Centrum města",
     duration: "60-90 min",
-    areaHint: "Drž se v historickém centru Českých Budějovic.",
     vibe: ["Městské pátrání", "Logika a kód", "Ideální na výlet"],
     lat: 48.9747,
     lng: 14.4749,

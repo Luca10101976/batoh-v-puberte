@@ -72,12 +72,12 @@ export default function AuthCallbackPage() {
         } = await supabase.auth.getSession();
 
         if (session?.user) {
-          setMessage("Účet je potvrzený. Přesměrovávám na přihlášení dítěte…");
+          setMessage("Účet je potvrzený. Přesměrovávám na dokončení profilu…");
           router.replace("/?auth=confirmed");
           return;
         }
 
-        setMessage("Potvrzení proběhlo. Přihlas se prosím stejným e-mailem a heslem.");
+        setMessage("Potvrzení proběhlo. Teď se přihlas stejným e-mailem a heslem a dokonči nastavení profilu.");
         router.replace("/?auth=confirmed");
       } catch (error: any) {
         const msg = String(error?.message || "").toLowerCase();

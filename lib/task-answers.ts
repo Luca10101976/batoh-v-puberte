@@ -27,7 +27,7 @@ export const taskAnswers: Record<string, string[]> = {
     "ass"
   ],
   "klamovka-altan-2": ["galerie", "vystavni prostor", "galerie / vystavni prostor"],
-  "klamovka-altan-3": ["ryzovy spacek jmenem atbaliba", "rýžový špaček jménem atbaliba"],
+  "klamovka-altan-3": ["Vlci, medvědi, kůň a brazilský ptáček"],
   "klamovka-hodiny-1": ["4", "ctyri", "čtyři"],
   "klamovka-hodiny-2": ["praha"],
   "klamovka-hodiny-3": ["ne", "mozna v jinem vesmiru", "možná v jiném vesmíru"],

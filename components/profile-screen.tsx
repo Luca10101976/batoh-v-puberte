@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
@@ -251,7 +250,7 @@ export function ProfileScreen() {
   const [nameDraft, setNameDraft] = useState(state.profile.name);
   const [savingFriend, setSavingFriend] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
-  const [, setCloudProfileError] = useState("");
+  const [cloudProfileError, setCloudProfileError] = useState("");
   const [removingFriendCode, setRemovingFriendCode] = useState<string | null>(null);
   const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition | null>(null);
   const [selectedInviteCodes, setSelectedInviteCodes] = useState<string[]>([]);
@@ -335,7 +334,14 @@ export function ProfileScreen() {
     }).catch(() => null);
 
     if (!response?.ok) {
-      setCloudProfileError("Načtení cloud profilu selhalo.");
+      const payload = (await response?.json().catch(() => null)) as { message?: string; code?: string } | null;
+      if (response?.status === 401) {
+        setCloudProfileError("Účet už není přihlášený. Přihlas se znovu.");
+      } else if (typeof payload?.message === "string" && payload.message.trim()) {
+        setCloudProfileError(payload.message.trim());
+      } else {
+        setCloudProfileError("Načtení cloud profilu selhalo.");
+      }
       return null;
     }
 
@@ -370,7 +376,14 @@ export function ProfileScreen() {
       }).catch(() => null);
 
       if (!bootstrapResponse?.ok) {
-        setCloudProfileError("Cloud profil zatím neexistuje.");
+        const bootstrapPayload = (await bootstrapResponse?.json().catch(() => null)) as { message?: string; code?: string } | null;
+        if (bootstrapResponse?.status === 401) {
+          setCloudProfileError("Účet už není přihlášený. Přihlas se znovu.");
+        } else if (typeof bootstrapPayload?.message === "string" && bootstrapPayload.message.trim()) {
+          setCloudProfileError(bootstrapPayload.message.trim());
+        } else {
+          setCloudProfileError("Cloud profil zatím neexistuje.");
+        }
         return null;
       }
 
@@ -953,7 +966,15 @@ export function ProfileScreen() {
     if (!ownProfile) {
       setSavingFriend(false);
       setFriendMessageTone("error");
-      setFriendMessage("Teď to nejde. Zkus to znovu za pár vteřin.");
+      setFriendMessage(cloudProfileError || "Nejdřív se nepodařilo načíst tvůj hráčský profil. Zkus to znovu za pár vteřin.");
+      return;
+    }
+
+    const ownCanonicalCode = normalizePublicCode(ownProfile.player_code || ownProfile.profile_code || "");
+    if (normalizedCode === ownCanonicalCode) {
+      setSavingFriend(false);
+      setFriendMessageTone("error");
+      setFriendMessage("Tohle je tvůj vlastní kód.");
       return;
     }
 
@@ -963,6 +984,13 @@ export function ProfileScreen() {
       setSavingFriend(false);
       setFriendMessageTone("error");
       setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
+      return;
+    }
+
+    if (targetProfile.id === ownProfile.id || normalizePublicCode(targetProfile.code) === ownCanonicalCode) {
+      setSavingFriend(false);
+      setFriendMessageTone("error");
+      setFriendMessage("Tohle je tvůj vlastní kód.");
       return;
     }
 
@@ -1474,26 +1502,12 @@ export function ProfileScreen() {
                       {earnedPoints}/{maxPoints} bodů
                     </div>
                   </div>
+                  <div className="mt-2 text-xs text-mist">Zobrazuje se nejlepší uložený výsledek této mise.</div>
                 </div>
               );
             })}
           </div>
         )}
-      </section>
-
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Papírová verze</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">Hrál/a jsi venku na papíře?</h2>
-        <p className="mt-2 text-sm leading-6 text-mist">
-          Vytiskni si misi do terénu a po návratu domů zadej stejné odpovědi do aplikace. Jen tak vznikne skutečný
-          výsledek i body.
-        </p>
-        <Link
-          href="/paper-score"
-          className="mt-4 inline-flex rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
-        >
-          Tisk a vyhodnocení v aplikaci
-        </Link>
       </section>
 
       <MobileAppCard />
@@ -1526,7 +1540,10 @@ export function ProfileScreen() {
         ) : null}
         {cloudReady === false ? (
           <div className="mt-3 rounded-2xl border border-coral/40 bg-coral/10 p-3">
-            <p className="text-sm text-white">Cloud účet není přihlášený.</p>
+            <p className="text-sm text-white">
+              Profil tady ještě vidíš z uložených dat v zařízení, ale cloud účet už není přihlášený.
+              Pro kamarády a další online akce je potřeba přihlásit se znovu.
+            </p>
             <button
               onClick={() => {
                 openParentAuthGate();
@@ -1534,46 +1551,48 @@ export function ProfileScreen() {
               }}
               className="mt-3 rounded-xl bg-coral px-3 py-2 text-xs font-semibold text-white"
             >
-              Přihlásit se
+              Přihlásit se znovu
             </button>
           </div>
         ) : null}
-        <div className="mt-4 space-y-3">
-          <input
-            value={friendCode}
-            onChange={(event) => setFriendCode(event.target.value.toUpperCase())}
-            placeholder="Kód kamaráda (např. BAT-AB12CD)"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
-          />
-          <p className="text-sm text-mist">Zadej kód kamaráda.</p>
-          {friendCode.trim() ? (
-            <p className="text-xs text-mist/80">
-              Ověřím kód: <span className="font-semibold text-white/90">{friendCode.trim().toUpperCase()}</span>
-            </p>
-          ) : (
-            <p className="text-xs text-mist/80">Tip: veřejný kód má tvar BAT-XXXXXX.</p>
-          )}
-          <button
-            onClick={handleAddFriend}
-            disabled={savingFriend || cloudReady !== true}
-            className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white"
-          >
-            {savingFriend ? "Přidávám..." : "Přidat kamaráda"}
-          </button>
-          {friendMessage ? (
-            <p
-              className={`text-sm ${
-                friendMessageTone === "error"
-                  ? "text-coral"
-                  : friendMessageTone === "success"
-                    ? "text-lime"
-                    : "text-mist"
-              }`}
+        {cloudReady === true ? (
+          <div className="mt-4 space-y-3">
+            <input
+              value={friendCode}
+              onChange={(event) => setFriendCode(event.target.value.toUpperCase())}
+              placeholder="Kód kamaráda (např. BAT-AB12CD)"
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
+            />
+            <p className="text-sm text-mist">Zadej kód kamaráda.</p>
+            {friendCode.trim() ? (
+              <p className="text-xs text-mist/80">
+                Ověřím kód: <span className="font-semibold text-white/90">{friendCode.trim().toUpperCase()}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-mist/80">Tip: veřejný kód má tvar BAT-XXXXXX.</p>
+            )}
+            <button
+              onClick={handleAddFriend}
+              disabled={savingFriend}
+              className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
             >
-              {friendMessage}
-            </p>
-          ) : null}
-        </div>
+              {savingFriend ? "Přidávám..." : "Přidat kamaráda"}
+            </button>
+            {friendMessage ? (
+              <p
+                className={`text-sm ${
+                  friendMessageTone === "error"
+                    ? "text-coral"
+                    : friendMessageTone === "success"
+                      ? "text-lime"
+                      : "text-mist"
+                }`}
+              >
+                {friendMessage}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
     </main>

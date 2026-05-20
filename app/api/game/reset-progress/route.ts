@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 
-type PushSubscriptionPayload = {
-  endpoint: string;
-  keys?: {
-    p256dh?: string;
-    auth?: string;
-  };
+type ChildProfileRow = {
+  id: string;
+  profile_code: string;
 };
+
+function normalizeCode(value: string) {
+  return value.trim().toUpperCase();
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -37,10 +38,10 @@ export async function POST(request: NextRequest) {
   }
 
   const rateLimitResult = await checkRateLimit({
-    action: "push_subscribe",
+    action: "reset_progress",
     ip: getRequestIpAddress(request),
     userId: user.id,
-    limit: 30,
+    limit: 10,
     windowMinutes: 60,
     blockMinutes: 15
   });
@@ -56,64 +57,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = (await request.json()) as {
-    playerCode?: string;
-    profileCode?: string;
-    subscription?: PushSubscriptionPayload;
-    userAgent?: string;
-  };
-
-  const profileCode = (body.playerCode ?? body.profileCode)?.trim().toUpperCase();
-  const endpoint = body.subscription?.endpoint?.trim();
-  const p256dh = body.subscription?.keys?.p256dh?.trim();
-  const auth = body.subscription?.keys?.auth?.trim();
-
-  if (!profileCode || !endpoint || !p256dh || !auth) {
+  const payload = (await request.json().catch(() => null)) as { profileCode?: string } | null;
+  const profileCode = normalizeCode(payload?.profileCode ?? "");
+  if (!profileCode) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-  const { data: ownByPlayerCode } = await admin
+  const { data: ownProfile } = await admin
     .from("child_profiles")
-    .select("id, profile_code, player_code")
-    .eq("player_code", profileCode)
+    .select("id, profile_code")
     .eq("parent_user_id", user.id)
+    .eq("profile_code", profileCode)
     .limit(1)
-    .maybeSingle<{ id: string; profile_code: string; player_code?: string | null }>();
+    .maybeSingle<ChildProfileRow>();
 
-  // Legacy compatibility path (A2): fallback to old profile_code until A3 cleanup.
-  const ownChildProfile = ownByPlayerCode?.id
-    ? ownByPlayerCode
-    : (
-        await admin
-          .from("child_profiles")
-          .select("id, profile_code, player_code")
-          .eq("profile_code", profileCode)
-          .eq("parent_user_id", user.id)
-          .limit(1)
-          .maybeSingle<{ id: string; profile_code: string; player_code?: string | null }>()
-      ).data;
-
-  if (!ownChildProfile?.id) {
+  if (!ownProfile?.id) {
     return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
   }
 
-  const publicPlayerCode = ownChildProfile.player_code || ownChildProfile.profile_code;
+  const taskDelete = await admin.from("child_task_progress").delete().eq("child_profile_id", ownProfile.id);
+  if (taskDelete.error) {
+    return NextResponse.json({ ok: false, error: "task_progress_reset_failed" }, { status: 500 });
+  }
 
-  const { error } = await admin.from("child_push_subscriptions").upsert(
-    {
-      profile_code: publicPlayerCode,
-      endpoint,
-      p256dh,
-      auth,
-      user_agent: body.userAgent || null,
-      updated_at: new Date().toISOString()
-    },
-    { onConflict: "endpoint" }
-  );
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: "save_failed" }, { status: 500 });
+  const locationDelete = await admin.from("child_location_progress").delete().eq("profile_code", ownProfile.profile_code);
+  if (locationDelete.error) {
+    return NextResponse.json({ ok: false, error: "location_progress_reset_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

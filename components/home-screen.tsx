@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CitySelector } from "@/components/city-selector";
@@ -11,6 +11,10 @@ import { getUnlockRequirement } from "@/lib/location-unlock";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
 
 type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
+
+function isExternalImage(src: string) {
+  return /^https?:\/\//i.test(src);
+}
 
 function formatStopCount(count: number) {
   if (count === 1) {
@@ -32,53 +36,21 @@ function formatTaskCount(count: number) {
   return `${count} úkolů`;
 }
 
-type FriendActivityRow = {
-  friend_profile_code: string;
-  friend_display_name: string;
-  created_at: string;
-};
-
-type IncomingFriendshipRow = {
-  child_profile_id: string;
-  created_at: string;
-};
-
 export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLocation[] }) {
   const { state, isLocationUnlocked, setCity } = useAppState();
-  const [isMapLoaded, setIsMapLoaded] = useState(false);
   const publishedCities = useMemo(
-    () => Array.from(new Set(publishedLocations.map((location) => location.city))),
+    () => Array.from(new Set(publishedLocations.map((location) => location.city))).sort((a, b) => a.localeCompare(b, "cs")),
     [publishedLocations]
   );
   const cityLocations = useMemo(
-    () => publishedLocations.filter((location) => location.city === state.city),
+    () =>
+      publishedLocations
+        .filter((location) => location.city === state.city)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "cs")),
     [publishedLocations, state.city]
   );
   const primaryLocation = cityLocations[0] ?? publishedLocations[0] ?? null;
-  const unlockedInCity = cityLocations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length;
-  const cityScore = unlockedInCity * 120;
-  const mapUrl = useMemo(() => {
-    if (!primaryLocation) {
-      return "";
-    }
-
-    const mapDelta = 0.0075;
-    return `https://www.openstreetmap.org/export/embed.html?bbox=${primaryLocation.lng - mapDelta}%2C${
-      primaryLocation.lat - mapDelta
-    }%2C${primaryLocation.lng + mapDelta}%2C${primaryLocation.lat + mapDelta}&layer=mapnik&marker=${
-      primaryLocation.lat
-    }%2C${primaryLocation.lng}`;
-  }, [primaryLocation]);
-  const openStreetMapUrl = useMemo(() => {
-    if (!primaryLocation) {
-      return "";
-    }
-    return `https://www.openstreetmap.org/?mlat=${primaryLocation.lat}&mlon=${primaryLocation.lng}#map=16/${primaryLocation.lat}/${primaryLocation.lng}`;
-  }, [primaryLocation]);
-
-  useEffect(() => {
-    setIsMapLoaded(false);
-  }, [primaryLocation?.id]);
 
   useEffect(() => {
     if (publishedCities.length === 0) {
@@ -93,169 +65,174 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
     <main className="flex flex-1 flex-col gap-6 pb-24">
       <HeroCard />
 
-      <section className="glass-card overflow-hidden p-5">
-        <div className="mb-5 flex items-center justify-between">
+      <section className="glass-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-sky">Vybrané město</p>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight">{state.city}</h2>
-            <p className="mt-2 text-sm text-mist">Město vybíráš ručně podle toho, kde chceš hrát.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-bold tracking-tight">{state.city}</h2>
+              <span className="rounded-full bg-lime/12 px-3 py-2 text-xs font-semibold text-lime">
+                {cityLocations.length} {cityLocations.length === 1 ? "hra" : cityLocations.length >= 2 && cityLocations.length <= 4 ? "hry" : "her"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-mist">
+              Vyber město a hned pod ním uvidíš všechny dostupné hry v dané lokalitě.
+            </p>
           </div>
           <CitySelector cities={publishedCities} />
         </div>
-
-        <div className="relative h-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-ink">
-          {primaryLocation && isMapLoaded ? (
-            <iframe
-              title="Mapa lokace"
-              src={mapUrl}
-              className="h-full w-full"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(82,200,255,0.18),transparent_35%),radial-gradient(circle_at_80%_80%,rgba(180,255,98,0.18),transparent_38%),linear-gradient(180deg,#07111f_0%,#091526_100%)]">
-              <div className="rounded-2xl border border-white/10 bg-night/80 px-4 py-3 text-center backdrop-blur">
-                <p className="text-xs uppercase tracking-[0.2em] text-mist">Mapa</p>
-                <p className="mt-1 text-sm text-white">Načti mapu pro přesnou orientaci</p>
-              </div>
-            </div>
-          )}
-
-          {primaryLocation ? (
-            <Link
-              href={`/locations/${primaryLocation.id}`}
-              className="absolute left-4 top-4 z-10 rounded-full border border-white/10 bg-night/90 px-4 py-2 text-sm font-semibold text-white backdrop-blur"
-            >
-              {primaryLocation.name}
-            </Link>
-          ) : null}
-
-          {!isMapLoaded && primaryLocation ? (
-            <div className="absolute right-4 top-4 z-10 flex gap-2">
-              <button
-                onClick={() => setIsMapLoaded(true)}
-                className="rounded-full border border-lime/40 bg-lime/20 px-4 py-2 text-xs font-semibold text-lime backdrop-blur"
-              >
-                Načíst mapu
-              </button>
-              <a
-                href={openStreetMapUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-full border border-white/10 bg-night/90 px-4 py-2 text-xs font-semibold text-white backdrop-blur"
-              >
-                Otevřít OSM
-              </a>
-            </div>
-          ) : null}
-
-        </div>
       </section>
 
-      <section className="glass-card p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-coral">Mise ve městě</p>
-            <h2 className="mt-2 text-xl font-semibold">{state.city}</h2>
+      {primaryLocation ? (
+        <section className="glass-card overflow-hidden p-5">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-lime">Doporučená hra v městě</p>
+              <h2 className="mt-2 text-xl font-semibold">Začni tady</h2>
+            </div>
+            <span className="rounded-full bg-white/8 px-3 py-2 text-xs font-semibold text-mist">
+              {state.city}
+            </span>
           </div>
-          <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">Vyber si misi</div>
+
+          <div className="relative min-h-[320px] overflow-hidden rounded-[24px] border border-white/10 bg-ink">
+            {isExternalImage(primaryLocation.image) ? (
+              <img src={primaryLocation.image} alt={primaryLocation.name} className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <Image
+                src={primaryLocation.image}
+                alt={primaryLocation.name}
+                fill
+                priority
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 896px"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-r from-night via-night/70 to-night/25" />
+            <div className="relative z-10 flex min-h-[320px] flex-col justify-end p-5 md:max-w-[55%]">
+              <p className="text-xs uppercase tracking-[0.24em] text-lime">Vybraná mise</p>
+              <h3 className="mt-2 text-3xl font-bold tracking-tight">{primaryLocation.name}</h3>
+              <p className="mt-2 text-sm leading-6 text-mist">{primaryLocation.teaser}</p>
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-mist">
+                <span className="rounded-full bg-white/10 px-3 py-2">{primaryLocation.distance}</span>
+                <span className="rounded-full bg-white/10 px-3 py-2">{formatStopCount(primaryLocation.episodes.length)}</span>
+                <span className="rounded-full bg-white/10 px-3 py-2">
+                  {formatTaskCount(primaryLocation.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0))}
+                </span>
+              </div>
+              <div className="mt-5">
+                <Link
+                  href={`/locations/${primaryLocation.id}`}
+                  className="inline-flex rounded-[22px] bg-lime px-5 py-3 text-sm font-bold text-night"
+                >
+                  Otevřít startovní místo
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="glass-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Všechny hry ve městě</p>
+            <h2 className="mt-2 text-xl font-semibold">{state.city}</h2>
+            <p className="mt-2 text-sm leading-6 text-mist">
+              Tady je kompletní přehled všech her v tomhle městě. Žádná není schovaná mimo výběr.
+            </p>
+          </div>
+          <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">
+            {cityLocations.length === 0
+              ? "0 her"
+              : cityLocations.length === 1
+                ? "1 hra"
+                : cityLocations.length >= 2 && cityLocations.length <= 4
+                  ? `${cityLocations.length} hry`
+                  : `${cityLocations.length} her`}
+          </div>
         </div>
+
         {!state.registrationCompleted ? (
           <p className="mt-3 text-sm leading-6 text-mist">
             Místa si můžeš projít hned. Přihlášení hráče se otevře až ve chvíli, kdy budeš chtít misi opravdu hrát.
           </p>
         ) : null}
 
-        <div className="mt-4 space-y-3">
-          {cityLocations.length === 0 ? (
-            <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
-              Pro tohle město zatím nemáme připravenou misi.
-            </div>
-          ) : (
-            cityLocations.map((missionLocation) => {
+        {cityLocations.length === 0 ? (
+          <div className="mt-5 rounded-2xl bg-white/5 p-4 text-sm text-mist">
+            Pro tohle město zatím nemáme připravenou žádnou hru.
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {cityLocations.map((missionLocation) => {
               const missionUnlocked = isLocationUnlocked(missionLocation.id, missionLocation.unlocked);
               const unlockRequirement = getUnlockRequirement(missionLocation, locations);
               const taskCount = missionLocation.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
+
               return (
                 <Link
                   key={missionLocation.id}
                   href={`/locations/${missionLocation.id}`}
-                  className="block rounded-[24px] border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
+                  className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/5 transition hover:border-lime/30 hover:bg-white/10"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold">{missionLocation.name}</h3>
-                      <p className="mt-1 text-sm text-mist">
-                        {missionUnlocked
-                          ? missionLocation.teaser
-                          : `Odemkneš po dokončení: ${unlockRequirement?.name ?? "předchozího místa"}`}
-                      </p>
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    {isExternalImage(missionLocation.image) ? (
+                      <img
+                        src={missionLocation.image}
+                        alt={missionLocation.name}
+                        className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <Image
+                        src={missionLocation.image}
+                        alt={missionLocation.name}
+                        fill
+                        className="object-cover transition duration-300 group-hover:scale-[1.03]"
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-night via-night/45 to-transparent" />
+                    <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+                      <span className="rounded-full bg-night/70 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-sky backdrop-blur">
+                        {missionLocation.distance}
+                      </span>
+                      <span
+                        className={`rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.2em] backdrop-blur ${
+                          missionUnlocked ? "bg-lime/20 text-lime" : "bg-white/10 text-white/75"
+                        }`}
+                      >
+                        {missionUnlocked ? "Odemčeno" : "Zamčeno"}
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-lime">{formatStopCount(missionLocation.episodes.length)}</div>
-                      <div className="text-xs text-mist">{missionUnlocked ? formatTaskCount(taskCount) : "Zamčeno"}</div>
+                    <div className="absolute inset-x-4 bottom-4">
+                      <h3 className="text-2xl font-bold tracking-tight text-white">{missionLocation.name}</h3>
+                      <p className="mt-2 text-sm leading-6 text-white/80">{missionLocation.teaser}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-4">
+                    <div className="flex flex-wrap gap-2 text-[11px] text-mist">
+                      <span className="rounded-full bg-white/5 px-3 py-2">{formatStopCount(missionLocation.episodes.length)}</span>
+                      <span className="rounded-full bg-white/5 px-3 py-2">{formatTaskCount(taskCount)}</span>
+                    </div>
+
+                    {!missionUnlocked ? (
+                      <p className="text-sm leading-6 text-mist">
+                        Odemkneš po dokončení: {unlockRequirement?.name ?? "předchozího místa"}
+                      </p>
+                    ) : null}
+
+                    <div className="inline-flex rounded-[18px] bg-lime px-4 py-3 text-sm font-semibold text-night">
+                      Otevřít detail hry
                     </div>
                   </div>
                 </Link>
               );
-            })
-          )}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="section-title">Dnes doporučené lokace</h2>
-          <Link href="/leaderboard" className="text-sm text-lime">
-            Žebříček
-          </Link>
-        </div>
-
-        {cityLocations.length === 0 ? (
-          <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">V tomhle městě zatím není dostupná žádná lokace.</div>
-        ) : (
-          cityLocations.map((location) => {
-            const unlocked = isLocationUnlocked(location.id, location.unlocked);
-            const unlockRequirement = getUnlockRequirement(location, locations);
-            const taskCount = location.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
-
-            return (
-              <Link
-                key={location.id}
-                href={`/locations/${location.id}`}
-                className="glass-card flex items-center gap-4 p-3"
-              >
-                <div className="relative h-20 w-20 overflow-hidden rounded-[20px]">
-                  <Image src={location.image} alt={location.name} fill className="object-cover" sizes="80px" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold">{location.name}</h3>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.2em] ${
-                        unlocked ? "bg-lime/15 text-lime" : "bg-white/8 text-mist"
-                      }`}
-                    >
-                      {unlocked ? "Odemčeno" : "Zamčeno"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-mist">{location.teaser}</p>
-                  {!unlocked ? (
-                    <p className="mt-2 text-xs text-mist">
-                      Odemkneš po dokončení: {unlockRequirement?.name ?? "předchozího místa"}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-mist">
-                    <span className="rounded-full bg-white/5 px-2 py-1">{location.distance}</span>
-                    <span className="rounded-full bg-white/5 px-2 py-1">{formatStopCount(location.episodes.length)}</span>
-                    <span className="rounded-full bg-white/5 px-2 py-1">{formatTaskCount(taskCount)}</span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })
+            })}
+          </div>
         )}
       </section>
-
     </main>
   );
 }

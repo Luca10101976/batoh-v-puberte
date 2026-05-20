@@ -10,6 +10,10 @@ import type { GameplayEpisode } from "@/lib/gameplay-types";
 
 type DetailLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
 
+function isExternalImage(src: string) {
+  return /^https?:\/\//i.test(src);
+}
+
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
   const router = useRouter();
@@ -26,14 +30,18 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <div className="glass-card relative h-72 overflow-hidden rounded-[32px]">
-        <Image
-          src={location.image}
-          alt={location.name}
-          fill
-          priority
-          className="object-cover"
-          sizes="(max-width: 768px) 100vw, 896px"
-        />
+        {isExternalImage(location.image) ? (
+          <img src={location.image} alt={location.name} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <Image
+            src={location.image}
+            alt={location.name}
+            fill
+            priority
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 896px"
+          />
+        )}
         <div className="absolute inset-0 flex h-full flex-col justify-end bg-gradient-to-t from-night via-night/40 to-transparent p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-sky">Lokace</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{location.name}</h1>
@@ -99,14 +107,6 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
               </div>
             )
           ))}
-        </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Bezpečné hraní</p>
-        <div className="mt-3 rounded-[24px] border border-lime/20 bg-lime/10 p-4">
-          <p className="text-sm font-medium text-white">{location.areaHint}</p>
-          <p className="mt-2 text-sm leading-6 text-mist">Hraj bezpečně a drž se trasy mise.</p>
         </div>
       </section>
 

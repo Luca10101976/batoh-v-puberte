@@ -38,7 +38,7 @@ export function StopForm({ stop, action }: StopFormProps) {
   }, [router, state.success]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} encType="multipart/form-data" className="space-y-5">
       <input type="hidden" name="stop_id" value={stop.id} />
       <input type="hidden" name="mission_id" value={stop.mission_id} />
 

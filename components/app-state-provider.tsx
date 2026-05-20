@@ -283,15 +283,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const writeTimer = window.setTimeout(() => {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateRef.current));
+    }, 150);
+
+    return () => {
+      window.clearTimeout(writeTimer);
+    };
   }, [hydrated, state]);
 
   useEffect(() => {
     let retryTimer: number | null = null;
+    let hydrationTimer: number | null = null;
 
     async function hydrateCloudState() {
       const currentState = stateRef.current;
       if (!hydrated || !supabase) {
+        return;
+      }
+
+      if (!currentState.registrationCompleted) {
         return;
       }
 
@@ -431,24 +442,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       const canonicalProfileCode = childProfile.profile_code || currentState.profileCode;
       const canonicalPlayerCode = childProfile.player_code || childProfile.profile_code || currentState.playerCode;
-      if (remoteRows.length === 0) {
-        const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await supabase
-          .from("child_location_progress")
-          .select("location_id, completed_at, penalty_points, first_completed_at, status")
-          .eq("profile_code", canonicalProfileCode);
-        if (progressRowsWithPenaltyError?.code === "42703") {
-          const { data: progressRowsLegacy } = await supabase
-            .from("child_location_progress")
-            .select("location_id, completed_at")
-            .eq("profile_code", canonicalProfileCode);
-          remoteRows = (progressRowsLegacy as Array<{ location_id: string; completed_at: string }> | null) ?? [];
-        } else {
-          remoteRows =
-            (progressRowsWithPenalty as Array<{ location_id: string; completed_at: string; penalty_points?: number | null }> | null) ??
-            [];
-        }
-      }
-
       setState((current) => {
         const shouldApplyRemoteProfile = profileMutationVersionRef.current === hydrationStartMutationVersion;
         const completedLocationIds = Array.from(new Set(remoteRows.map((row) => row.location_id)));
@@ -472,10 +465,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           playerCode: canonicalPlayerCode,
           profileCode: canonicalProfileCode,
           profileRowId: childProfile.profile_id || current.profileRowId,
-          hasChildPin:
-            typeof childProfile.has_pin === "boolean"
-              ? childProfile.has_pin
-              : Boolean(childProfile.pin_updated_at) || current.hasChildPin,
+          hasChildPin: false,
           profile: {
             ...current.profile,
             name: shouldApplyRemoteProfile ? childProfile.child_name || current.profile.name : current.profile.name,
@@ -497,8 +487,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       cloudHydratedForUserRef.current = session.user.id;
     }
 
-    void hydrateCloudState();
+    hydrationTimer = window.setTimeout(() => {
+      void hydrateCloudState();
+    }, 900);
+
     return () => {
+      if (hydrationTimer) {
+        window.clearTimeout(hydrationTimer);
+      }
       if (retryTimer) {
         window.clearTimeout(retryTimer);
       }
@@ -537,7 +533,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...current,
         registrationCompleted: true,
         parentEmail: parentEmail.trim(),
-        hasChildPin: hasChildPin ?? current.hasChildPin,
+        hasChildPin: false,
         playerCode: playerCode || current.playerCode || profileCode || current.profileCode || generateProfileCode(),
         profileCode: profileCode || current.profileCode || generateProfileCode(),
         profileRowId: profileRowId || current.profileRowId || null,
@@ -759,7 +755,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         playerCode: payload.playerCode || current.playerCode,
         profileCode: payload.profileCode || current.profileCode,
         profileRowId: payload.profileRowId || current.profileRowId || null,
-        hasChildPin: typeof payload.hasPin === "boolean" ? payload.hasPin : current.hasChildPin,
+        hasChildPin: false,
         profile: {
           ...current.profile,
           name: payload.childName || current.profile.name,
@@ -817,7 +813,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const resetProgress = useCallback(() => {
     setState((current) => {
       if (supabase && current.profileCode) {
-        void supabase.from("child_location_progress").delete().eq("profile_code", current.profileCode);
+        void supabase.auth.getSession().then(({ data }) => {
+          const accessToken = data.session?.access_token ?? "";
+          if (!accessToken) {
+            return;
+          }
+          void fetch("/api/game/reset-progress", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ profileCode: current.profileCode })
+          });
+        });
       }
 
       return {

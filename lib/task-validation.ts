@@ -1,4 +1,5 @@
 import { getGameplayTask, getGameplayTaskIds } from "@/lib/gameplay-server";
+import type { GameplayTask } from "@/lib/gameplay-types";
 
 export const MAX_TASK_ATTEMPTS = 3;
 export const UNKNOWN_TASK_PENALTY = 15;
@@ -64,61 +65,6 @@ function buildAcceptedWordSet(acceptedAnswers: string[]) {
   return acceptedWords;
 }
 
-function expandChoiceAcceptedAnswers(acceptedAnswers: string[], options?: string[]) {
-  const expanded = new Set<string>();
-  const normalizedOptions = (options ?? [])
-    .map((option) => normalize(option))
-    .filter(Boolean);
-
-  acceptedAnswers.forEach((value) => {
-    const normalized = normalize(value);
-    if (!normalized) {
-      return;
-    }
-
-    expanded.add(normalized);
-
-    normalizedOptions.forEach((option) => {
-      if (option.length < 6) {
-        return;
-      }
-
-      if (normalized.endsWith(option) && normalized !== option) {
-        expanded.add(option);
-      }
-    });
-
-    const containingOptions = normalizedOptions.filter((option) => {
-      if (option.length < 6) {
-        return false;
-      }
-
-      return normalized.includes(option);
-    });
-
-    if (containingOptions.length === 1) {
-      expanded.add(containingOptions[0]);
-    }
-
-    const index = Number.parseInt(normalized, 10);
-    if (!Number.isFinite(index) || !options?.length) {
-      return;
-    }
-
-    const oneBasedOption = options[index - 1];
-    if (oneBasedOption) {
-      expanded.add(normalize(oneBasedOption));
-    }
-
-    const zeroBasedOption = options[index];
-    if (zeroBasedOption) {
-      expanded.add(normalize(zeroBasedOption));
-    }
-  });
-
-  return Array.from(expanded);
-}
-
 export async function getTaskByLocationAndId(locationId: string, taskId: string) {
   return getGameplayTask(locationId, taskId);
 }
@@ -127,12 +73,8 @@ export async function getLocationTaskIds(locationId: string) {
   return getGameplayTaskIds(locationId);
 }
 
-export async function isAnswerCorrect(locationId: string, taskId: string, answer: string) {
-  const task = await getGameplayTask(locationId, taskId);
-  const acceptedAnswers =
-    task?.type === "choice"
-      ? expandChoiceAcceptedAnswers(task.correctAnswers ?? [], task.options)
-      : task?.correctAnswers ?? [];
+export function isTaskAnswerCorrect(task: GameplayTask | null | undefined, answer: string) {
+  const acceptedAnswers = task?.correctAnswers ?? [];
   const multiWordRule = task?.legacyTaskId ? MULTI_WORD_RULES[task.legacyTaskId] : undefined;
   const inferredMinimumMatches =
     task?.type === "question"
@@ -167,6 +109,11 @@ export async function isAnswerCorrect(locationId: string, taskId: string, answer
   }
 
   return acceptedAnswers.some((value) => normalize(value) === normalizedInput);
+}
+
+export async function isAnswerCorrect(locationId: string, taskId: string, answer: string) {
+  const task = await getGameplayTask(locationId, taskId);
+  return isTaskAnswerCorrect(task, answer);
 }
 
 export async function computePenaltyFromTaskProgress(locationId: string, rows: TaskProgressLike[]) {

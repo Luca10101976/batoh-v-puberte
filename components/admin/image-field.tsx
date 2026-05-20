@@ -1,6 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { useEffect, useRef, useState } from "react";
+
 type AdminImageFieldProps = {
   title: string;
   imageUrl?: string | null;
@@ -29,13 +31,39 @@ export function AdminImageField({
   previewVariant = "square"
 }: AdminImageFieldProps) {
   const isSquare = previewVariant === "square";
+  const initialPreview = (imageUrl ?? "").trim();
+  const [selectedFileName, setSelectedFileName] = useState("");
+  const [previewSource, setPreviewSource] = useState(initialPreview);
+  const [hasUnsavedPreview, setHasUnsavedPreview] = useState(false);
+  const localObjectUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (localObjectUrlRef.current) {
+      URL.revokeObjectURL(localObjectUrlRef.current);
+      localObjectUrlRef.current = null;
+    }
+
+    setPreviewSource((imageUrl ?? "").trim());
+    setHasUnsavedPreview(false);
+    setSelectedFileName("");
+  }, [imageUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (localObjectUrlRef.current) {
+        URL.revokeObjectURL(localObjectUrlRef.current);
+      }
+    };
+  }, []);
+
+  const hasPreview = Boolean(previewSource);
 
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-mist">{title}</span>
         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-mist">
-          {imageUrl ? "Aktuální fotka" : "Bez fotky"}
+          {hasUnsavedPreview ? "Nový náhled" : hasPreview ? "Aktuální fotka" : "Bez fotky"}
         </span>
       </div>
 
@@ -44,17 +72,21 @@ export function AdminImageField({
           isSquare ? "max-w-[420px]" : ""
         }`}
       >
-        {imageUrl ? (
+        {hasPreview ? (
           <div className="relative">
             <img
-              src={imageUrl}
+              src={previewSource}
               alt={alt}
               className={isSquare ? "aspect-square w-full object-cover" : "h-64 w-full object-cover sm:h-72"}
             />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night/80 to-transparent px-4 py-4">
-              <p className="text-sm font-medium text-white">Aktuální náhled</p>
+              <p className="text-sm font-medium text-white">{hasUnsavedPreview ? "Nový náhled před uložením" : "Aktuální náhled"}</p>
               <p className="text-xs text-white/70">
-                {isSquare ? "Ve hře se tahle fotka používá jako kompaktní čtvercový náhled." : "Po uložení se nová fotka propíše do hry."}
+                {hasUnsavedPreview
+                  ? "Soubor nebo URL jsou vybrané správně. Teď už stačí dole uložit formulář."
+                  : isSquare
+                    ? "Ve hře se tahle fotka používá jako kompaktní čtvercový náhled."
+                    : "Po uložení se nová fotka propíše do hry."}
               </p>
             </div>
           </div>
@@ -71,8 +103,8 @@ export function AdminImageField({
               <p className="text-base font-semibold text-white">{emptyLabel}</p>
               <p className="mt-1 text-sm text-mist">
                 {isSquare
-                  ? "Nahrajte čitelnou fotku na čtvercový výřez. Po uložení se objeví tady."
-                  : "Nahrajte obrázek nebo vložte URL a po uložení se objeví tady."}
+                  ? "Nahrajte čitelnou fotku na čtvercový výřez. Po výběru ji uvidíte hned tady."
+                  : "Nahrajte obrázek nebo vložte URL a po výběru se objeví hned tady."}
               </p>
             </div>
           </div>
@@ -99,7 +131,29 @@ export function AdminImageField({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               className="mt-4 block w-full text-sm text-white file:mr-3 file:rounded-xl file:border-0 file:bg-night/80 file:px-4 file:py-2 file:font-semibold file:text-white"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+
+                if (localObjectUrlRef.current) {
+                  URL.revokeObjectURL(localObjectUrlRef.current);
+                  localObjectUrlRef.current = null;
+                }
+
+                if (!file) {
+                  setSelectedFileName("");
+                  setHasUnsavedPreview(false);
+                  setPreviewSource((imageUrl ?? "").trim());
+                  return;
+                }
+
+                const nextObjectUrl = URL.createObjectURL(file);
+                localObjectUrlRef.current = nextObjectUrl;
+                setSelectedFileName(file.name);
+                setHasUnsavedPreview(true);
+                setPreviewSource(nextObjectUrl);
+              }}
             />
+            {selectedFileName ? <p className="mt-2 text-xs text-lime">Vybraný soubor: {selectedFileName}</p> : null}
           </label>
 
           <label className="block space-y-2 rounded-[24px] border border-white/10 bg-night/25 p-5">
@@ -107,6 +161,16 @@ export function AdminImageField({
             <input
               name={urlInputName}
               defaultValue={imageUrl ?? ""}
+              onChange={(event) => {
+                const nextValue = event.target.value.trim();
+                if (localObjectUrlRef.current) {
+                  URL.revokeObjectURL(localObjectUrlRef.current);
+                  localObjectUrlRef.current = null;
+                }
+                setSelectedFileName("");
+                setHasUnsavedPreview(Boolean(nextValue) && nextValue !== (imageUrl ?? "").trim());
+                setPreviewSource(nextValue || (imageUrl ?? "").trim());
+              }}
               placeholder={urlPlaceholder}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
             />

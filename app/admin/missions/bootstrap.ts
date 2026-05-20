@@ -1,4 +1,5 @@
 import { locations, nearbyMissions } from "@/lib/mock-data";
+import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { taskAnswers } from "@/lib/task-answers";
 
@@ -39,6 +40,22 @@ function mapTaskType(value: string): "otevrena" | "vyber" | "ano-ne" {
   return "otevrena";
 }
 
+function buildCanonicalTaskAnswer(taskType: "otevrena" | "vyber" | "ano-ne", question: string, rawAnswer: string, options: string[]) {
+  if (taskType === "vyber" || taskType === "ano-ne") {
+    return (
+      getCanonicalCorrectAnswer({
+        id: "",
+        type: taskType,
+        question,
+        correct_answer: rawAnswer,
+        options
+      }) ?? rawAnswer
+    );
+  }
+
+  return rawAnswer;
+}
+
 function buildLegacyAnswerRows() {
   return locations.flatMap((location) =>
     location.episodes.flatMap((episode, episodeIndex) =>
@@ -47,7 +64,12 @@ function buildLegacyAnswerRows() {
         missionTitle: nearbyMissions.find((mission) => mission.locationId === location.id)?.name ?? location.name,
         stopOrder: episodeIndex + 1,
         taskOrder: taskIndex + 1,
-        correctAnswer: (taskAnswers[task.id] ?? []).join("\n")
+        correctAnswer: buildCanonicalTaskAnswer(
+          mapTaskType(task.type),
+          `${task.title}\n\n${task.content}`.trim(),
+          (taskAnswers[task.id] ?? []).join("\n"),
+          Array.isArray(task.options) ? task.options : []
+        )
       }))
     )
   );
@@ -260,12 +282,19 @@ export async function bootstrapMozekContent() {
       }
 
       return episode.tasks.map((task, index) => ({
-        stop_id: stopId,
         type: mapTaskType(task.type),
         question: `${task.title}\n\n${task.content}`.trim(),
-        correct_answer: (taskAnswers[task.id] ?? []).join("\n"),
+        rawAnswer: (taskAnswers[task.id] ?? []).join("\n"),
         options: Array.isArray(task.options) ? task.options : [],
+        stop_id: stopId,
         order: index + 1
+      })).map((row) => ({
+        stop_id: row.stop_id,
+        type: row.type,
+        question: row.question,
+        correct_answer: buildCanonicalTaskAnswer(row.type, row.question, row.rawAnswer, row.options),
+        options: row.options,
+        order: row.order
       }));
     })
   );

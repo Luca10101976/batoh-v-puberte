@@ -1,15 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { BottomNav } from "@/components/bottom-nav";
-import { ChildPinGate } from "@/components/child-pin-gate";
-import { ParentAuthGate } from "@/components/parent-auth-gate";
 import { useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+const ParentAuthGate = dynamic(() => import("@/components/parent-auth-gate").then((mod) => mod.ParentAuthGate), {
+  ssr: false,
+  loading: () => (
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 text-center">
+      <section className="glass-card w-full p-6">
+        <p className="text-sm text-mist">Připravuji přihlášení...</p>
+      </section>
+    </main>
+  )
+});
+
 export function AppFrame({ children, appVersion }: { children: ReactNode; appVersion: string }) {
-  const { hydrated, pinUnlocked, state } = useAppState();
+  const { hydrated, state } = useAppState();
   const pathname = usePathname();
   const [sessionChecked, setSessionChecked] = useState(false);
   const [hasCloudSession, setHasCloudSession] = useState(false);
@@ -31,8 +41,9 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
     pathname?.startsWith("/locations") ||
     pathname?.startsWith("/auth/callback") ||
     pathname === "/offline";
+  const isNavSuppressedRoute = pathname?.startsWith("/auth/callback") || pathname === "/offline";
   const requiresPlayerAuth = !isAdminRoute && !isPublicBrowseRoute;
-  const showPlayerNav = hasRegistration && !isPublicBrowseRoute;
+  const showPlayerNav = !isAdminRoute && !isNavSuppressedRoute;
   const needsManualRefresh =
     isAdminRoute ||
     pathname?.startsWith("/play") ||
@@ -94,61 +105,65 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
 
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
 
-    void navigator.serviceWorker
-      .register("/sw.js")
-      .then((registration) => {
-        if (cancelled) {
-          return;
-        }
-
-        const probeForUpdate = () => {
-          void registration.update().catch(() => undefined);
-        };
-
-        const revealIfWaiting = () => {
-          if (registration.waiting) {
-            setUpdateReady(true);
-            if (!needsManualRefresh) {
-              scheduleAutoRefresh();
-            }
-          }
-        };
-
-        revealIfWaiting();
-        registration.addEventListener("updatefound", () => {
-          const installingWorker = registration.installing;
-          if (!installingWorker) {
+    const registerServiceWorker = () => {
+      void navigator.serviceWorker
+        .register("/sw.js")
+        .then((registration) => {
+          if (cancelled) {
             return;
           }
 
-          installingWorker.addEventListener("statechange", () => {
-            if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+          const probeForUpdate = () => {
+            void registration.update().catch(() => undefined);
+          };
+
+          const revealIfWaiting = () => {
+            if (registration.waiting) {
               setUpdateReady(true);
               if (!needsManualRefresh) {
                 scheduleAutoRefresh();
               }
             }
+          };
+
+          revealIfWaiting();
+          registration.addEventListener("updatefound", () => {
+            const installingWorker = registration.installing;
+            if (!installingWorker) {
+              return;
+            }
+
+            installingWorker.addEventListener("statechange", () => {
+              if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+                setUpdateReady(true);
+                if (!needsManualRefresh) {
+                  scheduleAutoRefresh();
+                }
+              }
+            });
           });
-        });
 
-        visibilityHandler = () => {
-          if (document.visibilityState === "visible") {
-            probeForUpdate();
-          }
-        };
+          visibilityHandler = () => {
+            if (document.visibilityState === "visible") {
+              probeForUpdate();
+            }
+          };
 
-        focusHandler = probeForUpdate;
-        pageShowHandler = (event) => {
-          if (event.persisted) {
-            probeForUpdate();
-          }
-        };
-        window.addEventListener("focus", focusHandler);
-        window.addEventListener("pageshow", pageShowHandler);
-        document.addEventListener("visibilitychange", visibilityHandler);
-        pollTimer = window.setInterval(probeForUpdate, 15_000);
-      })
-      .catch(() => undefined);
+          focusHandler = probeForUpdate;
+          pageShowHandler = (event) => {
+            if (event.persisted) {
+              probeForUpdate();
+            }
+          };
+          window.addEventListener("focus", focusHandler);
+          window.addEventListener("pageshow", pageShowHandler);
+          document.addEventListener("visibilitychange", visibilityHandler);
+          pollTimer = window.setInterval(probeForUpdate, 60_000);
+        })
+        .catch(() => undefined);
+    };
+
+    registerServiceWorker();
 
     return () => {
       cancelled = true;
@@ -217,7 +232,7 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
     document.addEventListener("visibilitychange", handleVisibilityChange);
     pollTimer = window.setInterval(() => {
       void checkVersion();
-    }, 15_000);
+    }, 30_000);
 
     return () => {
       cancelled = true;
@@ -254,6 +269,12 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
       return;
     }
 
+    if (!requiresPlayerAuth) {
+      setSessionChecked(true);
+      setHasCloudSession(true);
+      return;
+    }
+
     if (!supabase) {
       setSessionChecked(true);
       setHasCloudSession(true);
@@ -261,13 +282,22 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
     }
 
     let cancelled = false;
-    void supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) {
-        return;
-      }
-      setHasCloudSession(Boolean(data.session?.user));
-      setSessionChecked(true);
-    });
+    let startupTimer: number | null = null;
+    const checkSession = () => {
+      void supabase.auth.getSession().then(({ data }) => {
+        if (cancelled) {
+          return;
+        }
+        setHasCloudSession(Boolean(data.session?.user));
+        setSessionChecked(true);
+      });
+    };
+
+    if (hasRegistration) {
+      startupTimer = window.setTimeout(checkSession, 800);
+    } else {
+      checkSession();
+    }
 
     const {
       data: { subscription }
@@ -291,9 +321,12 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
 
     return () => {
       cancelled = true;
+      if (startupTimer !== null) {
+        window.clearTimeout(startupTimer);
+      }
       subscription.unsubscribe();
     };
-  }, [hydrated, supabase]);
+  }, [hasRegistration, hydrated, requiresPlayerAuth, supabase]);
 
   if (isAdminRoute) {
     return (
@@ -319,18 +352,6 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
   // Fast local startup: if we already have local registration,
   // don't block rendering on session check network latency.
   if (!requiresPlayerAuth && !sessionChecked && hasRegistration) {
-    if (state.hasChildPin && !pinUnlocked) {
-      return (
-        <div className="app-shell">
-          <div className="mx-auto w-full max-w-4xl">
-            {updateBanner}
-            {children}
-          </div>
-          {showPlayerNav ? <BottomNav /> : null}
-        </div>
-      );
-    }
-
     return (
       <div className="app-shell">
         <div className="mx-auto w-full max-w-4xl">
@@ -343,10 +364,6 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
   }
 
   if (!sessionChecked && hasRegistration) {
-    if (state.hasChildPin && !pinUnlocked) {
-      return <ChildPinGate />;
-    }
-
     return (
       <div className="app-shell">
         <div className="mx-auto w-full max-w-4xl">
@@ -378,10 +395,6 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
 
   if (sessionChecked && !hasCloudSession) {
     return <ParentAuthGate />;
-  }
-
-  if (state.hasChildPin && !pinUnlocked) {
-    return <ChildPinGate />;
   }
 
   return (

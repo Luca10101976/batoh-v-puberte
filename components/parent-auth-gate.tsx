@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAppState } from "@/components/app-state-provider";
 import { RegistrationGate } from "@/components/registration-gate";
-import { normalizePin } from "@/lib/pin";
 import type { AvatarConfig } from "@/components/app-state-provider";
 
 type ChildProfileRow = {
@@ -21,21 +21,17 @@ type ChildProfileRow = {
   avatar_config?: AvatarConfig | null;
 };
 
-function generateProfileCode() {
-  return `BAT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-}
-
 export function ParentAuthGate() {
-  const { completeRegistration, setTrustedContacts } = useAppState();
+  const { completeRegistration, openParentAuthGate, setTrustedContacts } = useAppState();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const registrationAppliedRef = useRef(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [accountEmail, setAccountEmail] = useState("");
   const [password, setPassword] = useState("");
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("11");
-  const [childPin, setChildPin] = useState("");
-  const [childPinConfirm, setChildPinConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -50,105 +46,16 @@ export function ParentAuthGate() {
     }
   }, []);
 
-  const ensureProfileForLoggedUser = useCallback(
-    async (parentUserId: string, parentUserEmail: string) => {
-      if (!supabase) {
-        return null;
-      }
-
-      const modern = await supabase
-        .from("child_profiles")
-        .select("id, child_name, child_age, profile_code, player_code, pin_hash, pin_updated_at, created_at")
-        .eq("parent_user_id", parentUserId)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .limit(1);
-
-      if (!modern.error && modern.data?.[0]) {
-        const row = modern.data[0] as {
-          child_name: string;
-          child_age: number;
-          profile_code: string;
-          player_code?: string | null;
-          pin_hash?: string | null;
-          pin_updated_at?: string | null;
-        };
-        return {
-          name: row.child_name,
-          age: row.child_age,
-          profileCode: row.profile_code,
-          playerCode: row.player_code || row.profile_code,
-          profileRowId: (modern.data[0] as { id?: string | null }).id ?? null,
-          hasChildPin: Boolean(row.pin_hash) || Boolean(row.pin_updated_at)
-        };
-      }
-
-      if (modern.error?.code === "42703") {
-        const legacy = await supabase
-          .from("child_profiles")
-          .select("child_name, child_age, profile_code, pin_updated_at")
-          .eq("parent_user_id", parentUserId)
-          .order("created_at", { ascending: true })
-          .limit(1);
-
-        if (!legacy.error && legacy.data?.[0]) {
-          const row = legacy.data[0] as {
-            child_name: string;
-            child_age: number;
-            profile_code: string;
-            pin_updated_at?: string | null;
-          };
-          return {
-            name: row.child_name,
-            age: row.child_age,
-            profileCode: row.profile_code,
-          playerCode: row.profile_code,
-          profileRowId: null,
-          hasChildPin: Boolean(row.pin_updated_at)
-        };
-        }
-      }
-
-      const fallbackCode = generateProfileCode();
-      const fallbackName = parentUserEmail.split("@")[0]?.slice(0, 40) || "Hráč";
-
-      const createModern = await supabase.from("child_profiles").insert({
-        parent_user_id: parentUserId,
-        child_name: fallbackName,
-        child_age: 11,
-        profile_code: fallbackCode,
-        player_code: fallbackCode,
-        contact_email: parentUserEmail || null
-      });
-
-      if (createModern.error?.code === "42703") {
-        const createLegacy = await supabase.from("child_profiles").insert({
-          parent_user_id: parentUserId,
-          child_name: fallbackName,
-          child_age: 11,
-          profile_code: fallbackCode
-        });
-        if (createLegacy.error) {
-          return null;
-        }
-      } else if (createModern.error) {
-        return null;
-      }
-
-      return {
-        name: fallbackName,
-        age: 11,
-        profileCode: fallbackCode,
-        playerCode: fallbackCode,
-        profileRowId: null,
-        hasChildPin: false
-      };
-    },
-    [supabase]
-  );
+  const postAuthTarget = useMemo(() => {
+    if (!pathname || pathname === "/" || pathname.startsWith("/auth/callback")) {
+      return "/profile";
+    }
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
 
   const hydrateFromCloud = useCallback(
-    async (parentUserId: string, parentUserEmail: string, providedAccessToken?: string) => {
+    async (parentUserEmail: string, providedAccessToken?: string) => {
       if (!supabase || registrationAppliedRef.current) {
         return;
       }
@@ -156,8 +63,6 @@ export function ParentAuthGate() {
       const sessionAccessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
       const accessToken = providedAccessToken || sessionAccessToken;
       let data: ChildProfileRow | null = null;
-      let hasChildPin = false;
-
       if (accessToken) {
         const response = await fetch("/api/child-profile/me", {
           cache: "no-store",
@@ -172,7 +77,6 @@ export function ParentAuthGate() {
             | { profile?: ChildProfileRow | null }
             | null;
           data = payload?.profile ?? null;
-          hasChildPin = Boolean(data?.has_pin);
         }
       }
 
@@ -193,45 +97,14 @@ export function ParentAuthGate() {
               | { profile?: ChildProfileRow | null }
               | null;
             data = retryPayload?.profile ?? null;
-            hasChildPin = Boolean(data?.has_pin);
-          }
-        }
-      }
-
-      if (!data) {
-        // Client-side fallback for older schema variants / transient API issues.
-        const modernQuery = await supabase
-          .from("child_profiles")
-          .select("id, child_name, child_age, profile_code, player_code, contact_email, pin_hash, pin_updated_at, created_at")
-          .eq("parent_user_id", parentUserId)
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .limit(1);
-
-        if (!modernQuery.error && modernQuery.data?.[0]) {
-          data = modernQuery.data[0] as ChildProfileRow;
-          hasChildPin = Boolean((modernQuery.data[0] as { pin_hash?: string | null; pin_updated_at?: string | null }).pin_hash)
-            || Boolean((modernQuery.data[0] as { pin_hash?: string | null; pin_updated_at?: string | null }).pin_updated_at);
-        } else if (modernQuery.error?.code === "42703") {
-          const legacyQuery = await supabase
-            .from("child_profiles")
-            .select("child_name, child_age, profile_code, pin_updated_at")
-            .eq("parent_user_id", parentUserId)
-            .order("created_at", { ascending: true })
-            .limit(1);
-
-          if (!legacyQuery.error && legacyQuery.data?.[0]) {
-            data = legacyQuery.data[0] as ChildProfileRow;
-            hasChildPin = Boolean((legacyQuery.data[0] as { pin_updated_at?: string | null }).pin_updated_at);
           }
         }
       }
 
       if (!data) {
         setAccountEmail(parentUserEmail);
-        setNeedsChildProfile(false);
-        setMode("signup");
-        setInfo("K tomuto e-mailu jsme nenašli profil hráče. Vytvoř ho v záložce Vytvořit účet.");
+        setNeedsChildProfile(true);
+        setInfo("Účet je přihlášený. Teď nastav jméno a věk hráče.");
         setLoading(false);
         return;
       }
@@ -244,13 +117,13 @@ export function ParentAuthGate() {
         profileCode: data.profile_code,
         profileRowId: (data as { id?: string | null }).id ?? null,
         parentEmail: parentUserEmail,
-        hasChildPin,
+        hasChildPin: false,
         avatar: data.avatar ?? undefined,
         avatarConfig: data.avatar_config ?? undefined
       });
-      router.replace("/profile");
+      router.replace(postAuthTarget);
     },
-    [completeRegistration, router, supabase]
+    [completeRegistration, postAuthTarget, router, supabase]
   );
 
   useEffect(() => {
@@ -269,7 +142,7 @@ export function ParentAuthGate() {
         return;
       }
 
-      await hydrateFromCloud(session.user.id, session.user.email ?? "");
+      await hydrateFromCloud(session.user.email ?? "");
       setLoading(false);
     }
 
@@ -357,26 +230,10 @@ export function ParentAuthGate() {
       // Canonical-only hydration path:
       // Do not hydrate profile from login payload, because historical rows can make this stale.
       // Always fetch profile through /api/child-profile/me (single canonical source).
-      await hydrateFromCloud(payload.user.id, payload.user.email ?? accountEmail.trim(), payload.session.access_token);
+      await hydrateFromCloud(payload.user.email ?? accountEmail.trim(), payload.session.access_token);
       if (!registrationAppliedRef.current) {
-        const ensured = await ensureProfileForLoggedUser(payload.user.id, payload.user.email ?? accountEmail.trim());
-        if (ensured) {
-          registrationAppliedRef.current = true;
-          completeRegistration({
-            name: ensured.name,
-            age: ensured.age,
-            playerCode: ensured.playerCode,
-            profileCode: ensured.profileCode,
-            profileRowId: ensured.profileRowId,
-            parentEmail: payload.user.email ?? accountEmail.trim(),
-            hasChildPin: ensured.hasChildPin
-          });
-          setSaving(false);
-          router.replace("/profile");
-          return;
-        }
-        setMode("signup");
-        setInfo("Profil se nepodařilo načíst ani vytvořit. Zkus prosím Vytvořit účet.");
+        setNeedsChildProfile(true);
+        setInfo("Účet je přihlášený. Teď nastav jméno a věk hráče.");
       }
       setSaving(false);
       return;
@@ -453,26 +310,13 @@ export function ParentAuthGate() {
 
     const trimmedName = childName.trim();
     const numericAge = Number(childAge);
-    const normalizedPin = normalizePin(childPin);
-    const normalizedPinConfirm = normalizePin(childPinConfirm);
-
     if (trimmedName.length < 2) {
-      setError("Napiš prosím jméno dítěte.");
+      setError("Napiš prosím jméno hráče.");
       return;
     }
 
     if (!Number.isInteger(numericAge) || numericAge < 8) {
       setError("Věk musí být číslo od 8 výš.");
-      return;
-    }
-
-    if (normalizedPin.length < 4 || normalizedPin.length > 6) {
-      setError("PIN dítěte musí mít 4 až 6 číslic.");
-      return;
-    }
-
-    if (normalizedPin !== normalizedPinConfirm) {
-      setError("PIN a potvrzení PINu se neshodují.");
       return;
     }
 
@@ -489,97 +333,35 @@ export function ParentAuthGate() {
       return;
     }
 
-    // Canonical row = oldest — consistent with read path
-    const { data: existingRows } = await supabase
-      .from("child_profiles")
-      .select("id, profile_code, player_code")
-      .eq("parent_user_id", session.user.id)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true })
-      .limit(1);
-
-    const existing = existingRows?.[0] as { id: string; profile_code: string; player_code?: string | null } | undefined;
-    const profileCode = existing?.profile_code || generateProfileCode();
-    const playerCode = existing?.player_code || profileCode;
-    const contactEmail = (session.user.email ?? accountEmail.trim()) || null;
-
-    if (existing?.id) {
-      const { error: updateError } = await supabase
-        .from("child_profiles")
-        .update({
-          child_name: trimmedName,
-          child_age: numericAge,
-          player_code: playerCode,
-          contact_email: contactEmail
-        })
-        .eq("id", existing.id);
-
-      if (updateError?.code === "42703") {
-        const legacyUpdate = await supabase
-          .from("child_profiles")
-          .update({
-            child_name: trimmedName,
-            child_age: numericAge
-          })
-          .eq("id", existing.id);
-
-        if (legacyUpdate.error) {
-          setSaving(false);
-          setError("Uložení profilu dítěte se nepodařilo.");
-          return;
-        }
-      } else if (updateError) {
-        setSaving(false);
-        setError("Uložení profilu dítěte se nepodařilo.");
-        return;
-      }
-    } else {
-      const { error: insertError } = await supabase.from("child_profiles").insert({
-        parent_user_id: session.user.id,
-        child_name: trimmedName,
-        child_age: numericAge,
-        profile_code: profileCode,
-        player_code: profileCode,
-        contact_email: contactEmail
-      });
-
-      if (insertError?.code === "42703") {
-        const legacyInsert = await supabase.from("child_profiles").insert({
-          parent_user_id: session.user.id,
-          child_name: trimmedName,
-          child_age: numericAge,
-          profile_code: profileCode
-        });
-        if (legacyInsert.error) {
-          setSaving(false);
-          setError("Uložení profilu dítěte se nepodařilo.");
-          return;
-        }
-      } else if (insertError) {
-        setSaving(false);
-        setError("Uložení profilu dítěte se nepodařilo.");
-        return;
-      }
-    }
-
     const accessToken = session.access_token ?? "";
-    const setPinResponse = await fetch("/api/pin/set", {
-      method: "POST",
+    const profileResponse = await fetch("/api/child-profile/me", {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
-        pin: normalizedPin,
-        profileCode
+        child_name: trimmedName,
+        child_age: numericAge
       })
     }).catch(() => null);
 
-    if (!setPinResponse?.ok) {
+    const profilePayload = (await profileResponse?.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          profile?: ChildProfileRow;
+          profile_id?: string | null;
+        }
+      | null;
+
+    if (!profileResponse?.ok || !profilePayload?.ok || !profilePayload.profile?.profile_code) {
       setSaving(false);
-      setError("Profil je uložený, ale PIN se nepodařilo bezpečně nastavit. Zkus to znovu.");
+      setError("Uložení profilu hráče se nepodařilo.");
       return;
     }
+
+    const profileCode = profilePayload.profile.profile_code;
+    const playerCode = profilePayload.profile.player_code || profileCode;
 
     const parentAlertResponse = await fetch("/api/parent-alert", {
       method: "POST",
@@ -609,13 +391,32 @@ export function ParentAuthGate() {
       age: numericAge,
       playerCode,
       profileCode,
-      profileRowId: existing?.id ?? null,
+      profileRowId: profilePayload.profile_id ?? null,
       parentEmail: accountEmail || session.user.email || "",
-      hasChildPin: true
+      hasChildPin: false
     });
     setTrustedContacts([accountEmail || session.user.email || ""]);
     setSaving(false);
-    router.replace("/profile");
+    router.replace(postAuthTarget);
+  }
+
+  async function handleUseDifferentAccount() {
+    setError("");
+    setInfo("");
+
+    if (supabase) {
+      await supabase.auth.signOut().catch(() => null);
+    }
+
+    registrationAppliedRef.current = false;
+    openParentAuthGate();
+    setNeedsChildProfile(false);
+    setMode("login");
+    setAccountEmail("");
+    setPassword("");
+    setChildName("");
+    setChildAge("11");
+    setInfo("Přihlášení bylo zrušené. Můžeš použít jiný e-mail nebo vytvořit nový účet.");
   }
 
   if (!supabase) {
@@ -627,10 +428,20 @@ export function ParentAuthGate() {
       <main className="flex min-h-screen items-center justify-center px-4 py-6">
         <section className="glass-card w-full max-w-md p-6">
           <p className="text-xs uppercase tracking-[0.24em] text-coral">Profil hráče</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight">Jednorázové nastavení hráče</h1>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight">Dokončení registrace hráče</h1>
           <p className="mt-3 text-sm leading-6 text-mist">
-            Účet je přihlášený. Tohle není další přihlášení. Jen jednou nastav profil hráče pro všechna zařízení.
+            Účet <span className="font-semibold text-white">{accountEmail || "pro potvrzený e-mail"}</span> je už potvrzený a
+            přihlášený. Teď už jen dokonči jméno hráče a věk.
           </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleUseDifferentAccount}
+              className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-mist transition hover:border-white/20 hover:text-white"
+            >
+              Použít jiný e-mail
+            </button>
+          </div>
 
           <form onSubmit={handleChildProfile} className="mt-6 space-y-4">
             <label className="block space-y-2">
@@ -651,34 +462,6 @@ export function ParentAuthGate() {
                 value={childAge}
                 onChange={(event) => setChildAge(event.target.value)}
                 min={8}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-sm text-mist">PIN hráče</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={childPin}
-                onChange={(event) => setChildPin(normalizePin(event.target.value))}
-                placeholder="4 až 6 číslic"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-sm text-mist">Potvrdit PIN</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={childPinConfirm}
-                onChange={(event) => setChildPinConfirm(normalizePin(event.target.value))}
-                placeholder="Zopakuj stejný PIN"
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
               />
             </label>
@@ -717,12 +500,12 @@ export function ParentAuthGate() {
         </div>
 
         <h1 className="mt-5 text-2xl font-bold">
-          {mode === "login" ? "Přihlášení hráče" : "Vytvoření účtu hráče"}
+          {mode === "login" ? "Přihlášení" : "Vytvoř účet"}
         </h1>
         <p className="mt-2 text-sm leading-6 text-mist">
           {mode === "login"
-            ? "Přihlas se e-mailem a heslem. Hráč pak pokračuje svým PINem."
-            : "Pro první spuštění: vytvoř účet hráče. Po potvrzení e-mailu se přihlas stejnými údaji."}
+            ? "Přihlas se e-mailem a heslem a pokračuj do hry."
+            : "Nejdřív si vytvoř účet e-mailem a heslem. Hned potom nastavíš jméno hráče a věk."}
         </p>
         {loading ? <p className="mt-2 text-xs text-mist">Kontroluju, jestli už tenhle účet existuje…</p> : null}
 

@@ -31,21 +31,25 @@ export function ChildPinGate() {
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
         <p className="text-xs uppercase tracking-[0.24em] text-coral">Rychlý vstup</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Přihlášení dítěte</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Přihlášení hráče</h1>
         <p className="mt-3 text-sm leading-6 text-mist">Zadej svůj PIN a pokračuj do hry.</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm text-mist">PIN dítěte</span>
+            <span className="text-sm text-mist">PIN hráče</span>
             <input
-              type="password"
+              type="text"
               inputMode="numeric"
               pattern="[0-9]*"
               maxLength={6}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={pin}
               onChange={(event) => setPin(normalizePin(event.target.value))}
               placeholder="4 až 6 číslic"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
+              style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
             />
           </label>
 

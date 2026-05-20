@@ -5,9 +5,10 @@ import { getGameplayLocation } from "@/lib/gameplay-server";
 export default async function PlayPage({
   params
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const location = await getGameplayLocation(params.id);
+  const { id } = await params;
+  const location = await getGameplayLocation(id);
 
   if (!location) {
     notFound();

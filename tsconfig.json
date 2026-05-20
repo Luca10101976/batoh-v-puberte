@@ -24,5 +24,11 @@
     ]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "lucie-lejnarova-2c4fec1e", "**/lucie-lejnarova-2c4fec1e/**"]
+  "exclude": [
+    "node_modules",
+    "lucie-lejnarova-2c4fec1e",
+    "**/lucie-lejnarova-2c4fec1e/**",
+    "back-office-app",
+    "back-office-app/**"
+  ]
 }

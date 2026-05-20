@@ -30,14 +30,16 @@ export default async function StopEditPage({
   params,
   searchParams
 }: {
-  params: { id: string };
-  searchParams?: { status?: string };
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ status?: string }>;
 }) {
+  const { id } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
   const { data: stop, error: stopError } = await supabase
     .from("mission_stops")
     .select("id, mission_id, title, description, image_url, order")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle<MissionStopRow>();
 
   if (!stop || stopError) {
@@ -62,7 +64,7 @@ export default async function StopEditPage({
     .eq("stop_id", stop.id)
     .order("order", { ascending: true });
 
-  const status = statusText(searchParams?.status);
+  const status = statusText(resolvedSearchParams?.status);
   const tasks = ((tasksData ?? []) as MissionTaskRow[]) ?? [];
 
   return (

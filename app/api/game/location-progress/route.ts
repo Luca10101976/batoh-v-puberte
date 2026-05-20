@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 
 type ChildProfileRow = {
@@ -37,6 +38,26 @@ export async function POST(request: NextRequest) {
 
   if (authError || !user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  const rateLimitResult = await checkRateLimit({
+    action: "location_progress",
+    ip: getRequestIpAddress(request),
+    userId: user.id,
+    limit: 120,
+    windowMinutes: 60,
+    blockMinutes: 15
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "rate_limited",
+        retry_after: rateLimitResult.retryAfterSeconds ?? 60
+      },
+      { status: 429 }
+    );
   }
 
   const body = (await request.json()) as {

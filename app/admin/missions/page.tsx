@@ -124,8 +124,9 @@ function getVisibleDatabaseMissions(missions: MissionRow[]) {
 export default async function AdminMissionsPage({
   searchParams
 }: {
-  searchParams?: { status?: string };
+  searchParams?: Promise<{ status?: string }>;
 }) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
   await (async () => {
     const { data: tasks } = await supabase
@@ -159,7 +160,7 @@ export default async function AdminMissionsPage({
 
   const dbMissions = ((data ?? []) as MissionRow[]) ?? [];
   const dbStops = ((stopsData ?? []) as MissionStopRow[]) ?? [];
-  const status = statusText(searchParams?.status);
+  const status = statusText(resolvedSearchParams?.status);
 
   const isUsingFallbackContent = !error && !stopsError && dbMissions.length === 0;
   const visibleDatabaseMissions = getVisibleDatabaseMissions(dbMissions);

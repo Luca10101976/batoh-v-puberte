@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
-import { getGameplayLocation } from "@/lib/gameplay-server";
 import {
   MAX_TASK_ATTEMPTS,
   UNKNOWN_TASK_PENALTY,
   getTaskByLocationAndId,
-  isAnswerCorrect
+  isTaskAnswerCorrect
 } from "@/lib/task-validation";
 
 type ChildProfileRow = {
@@ -96,14 +95,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
 
-  const knownLocation = await getGameplayLocation(locationId);
-  if (!knownLocation) {
-    return NextResponse.json({ ok: false, error: "unknown_location" }, { status: 400 });
-  }
-
   const task = await getTaskByLocationAndId(locationId, taskId);
   if (!task) {
-    return NextResponse.json({ ok: false, error: "unknown_task" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "unknown_location_or_task" }, { status: 400 });
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
@@ -189,7 +183,7 @@ export async function POST(request: NextRequest) {
     }
 
     nextAttempts = currentAttempts + 1;
-    if (await isAnswerCorrect(locationId, taskId, answer)) {
+    if (isTaskAnswerCorrect(task, answer)) {
       nextStatus = "correct";
     } else if (nextAttempts >= MAX_TASK_ATTEMPTS) {
       nextStatus = "unknown";

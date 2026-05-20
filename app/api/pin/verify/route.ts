@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { isPinFormatValid, normalizePin, verifyPin } from "@/lib/pin";
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -9,14 +10,6 @@ type VerifyPinPayload = {
   pin?: string;
   profileCode?: string;
 };
-
-function getIpAddress(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || null;
-  }
-  return request.headers.get("x-real-ip")?.trim() || null;
-}
 
 function getLockUntilIso() {
   return new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString();
@@ -61,9 +54,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Neplatné přihlášení." }, { status: 401 });
   }
 
+  const rateLimitResult = await checkRateLimit({
+    action: "pin_verify",
+    ip: getRequestIpAddress(request),
+    userId: user.id,
+    limit: 30,
+    windowMinutes: 15,
+    blockMinutes: 15
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "rate_limited",
+        message: "Příliš mnoho pokusů. Zkus to za chvíli.",
+        retry_after: rateLimitResult.retryAfterSeconds ?? 60
+      },
+      { status: 429 }
+    );
+  }
+
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const requestedProfileCode = (body?.profileCode ?? "").trim().toUpperCase();
-  const ipAddress = getIpAddress(request);
+  const ipAddress = getRequestIpAddress(request);
   const userAgent = request.headers.get("user-agent") ?? null;
   const nowIso = new Date().toISOString();
 

@@ -15,9 +15,10 @@ function firstValue(value: string | string[] | undefined) {
 export default async function NewStopPage({
   searchParams
 }: {
-  searchParams?: { missionId?: string | string[] };
+  searchParams?: Promise<{ missionId?: string | string[] }>;
 }) {
-  const missionId = firstValue(searchParams?.missionId).trim();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const missionId = firstValue(resolvedSearchParams?.missionId).trim();
   if (!missionId) {
     return (
       <main className="mx-auto w-full max-w-5xl py-8">

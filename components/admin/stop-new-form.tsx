@@ -39,7 +39,7 @@ export function StopNewForm({ missionId, initialOrder, action }: StopNewFormProp
   }, [router, state.success]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} encType="multipart/form-data" className="space-y-5">
       <input type="hidden" name="mission_id" value={missionId} />
 
       <section className="glass-card p-5">

@@ -4,11 +4,12 @@ import { LocationDetailScreen } from "@/components/location-detail-screen";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 
 type LocationDetailPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function generateMetadata({ params }: LocationDetailPageProps): Promise<Metadata> {
-  const location = await getGameplayLocation(params.id);
+  const { id } = await params;
+  const location = await getGameplayLocation(id);
 
   if (!location) {
     return {
@@ -45,7 +46,8 @@ export async function generateMetadata({ params }: LocationDetailPageProps): Pro
 export default async function LocationDetailPage({
   params
 }: LocationDetailPageProps) {
-  const location = await getGameplayLocation(params.id);
+  const { id } = await params;
+  const location = await getGameplayLocation(id);
 
   if (!location) {
     notFound();

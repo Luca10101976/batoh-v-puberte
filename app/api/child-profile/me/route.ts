@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 
 type ChildProfileDto = {
   child_name: string;
@@ -20,6 +21,7 @@ type ChildProfileDto = {
 
 type PatchPayload = {
   child_name?: string;
+  child_age?: number;
   profile_code?: string;
   player_code?: string;
   avatar?: string;
@@ -337,22 +339,48 @@ export async function PATCH(request: Request) {
     return jsonNoStore({ ok: false, message: "Neplatné přihlášení." }, 401);
   }
 
+  const rateLimitResult = await checkRateLimit({
+    action: "child_profile_patch",
+    ip: getRequestIpAddress(request),
+    userId: user.id,
+    limit: 60,
+    windowMinutes: 60,
+    blockMinutes: 15
+  });
+
+  if (!rateLimitResult.allowed) {
+    return jsonNoStore(
+      {
+        ok: false,
+        code: "rate_limited",
+        message: "Příliš mnoho změn profilu. Zkus to znovu později.",
+        retry_after: rateLimitResult.retryAfterSeconds ?? 60
+      },
+      429
+    );
+  }
+
   const payload = (await request.json().catch(() => null)) as PatchPayload | null;
   const childName = typeof payload?.child_name === "string" ? payload.child_name.trim() : "";
+  const childAge = typeof payload?.child_age === "number" ? payload.child_age : Number(payload?.child_age);
   const profileCode = typeof payload?.profile_code === "string" ? payload.profile_code.trim().toUpperCase() : "";
   const playerCode = typeof payload?.player_code === "string" ? payload.player_code.trim().toUpperCase() : "";
   const avatar = typeof payload?.avatar === "string" ? payload.avatar.trim() : "";
   const avatarConfig = payload?.avatar_config ? normalizeAvatarConfig(payload.avatar_config) : null;
   const hasNameUpdate = typeof payload?.child_name === "string";
+  const hasAgeUpdate = Object.prototype.hasOwnProperty.call(payload ?? {}, "child_age");
   const hasAvatarUpdate = typeof payload?.avatar === "string";
   const hasAvatarConfigUpdate = Object.prototype.hasOwnProperty.call(payload ?? {}, "avatar_config");
 
-  if (!hasNameUpdate && !hasAvatarUpdate && !hasAvatarConfigUpdate) {
+  if (!hasNameUpdate && !hasAgeUpdate && !hasAvatarUpdate && !hasAvatarConfigUpdate) {
     return jsonNoStore({ ok: false, code: "no_changes" }, 400);
   }
 
   if (hasNameUpdate && (!childName || childName.length < 2 || childName.length > 40)) {
     return jsonNoStore({ ok: false, code: "invalid_child_name" }, 400);
+  }
+  if (hasAgeUpdate && (!Number.isInteger(childAge) || childAge < 8 || childAge > 18)) {
+    return jsonNoStore({ ok: false, code: "invalid_child_age" }, 400);
   }
   if (
     hasAvatarUpdate &&
@@ -378,6 +406,7 @@ export async function PATCH(request: Request) {
 
   if (!targetRow?.id) {
     const safeChildName = childName || (user.email?.split("@")[0] || "Hráč").slice(0, 40);
+    const safeChildAge = hasAgeUpdate ? childAge : 11;
     let profileCodeSeed = playerCode || profileCode || generateProfileCode();
     let created = false;
 
@@ -385,7 +414,7 @@ export async function PATCH(request: Request) {
       const legacyInsert = await adminClient.from("child_profiles").insert({
         parent_user_id: user.id,
         child_name: safeChildName,
-        child_age: 11,
+        child_age: safeChildAge,
         profile_code: profileCodeSeed
       });
 
@@ -424,6 +453,9 @@ export async function PATCH(request: Request) {
   const updateData: Record<string, unknown> = {};
   if (hasNameUpdate) {
     updateData.child_name = childName;
+  }
+  if (hasAgeUpdate) {
+    updateData.child_age = childAge;
   }
   if (hasAvatarUpdate) {
     updateData.avatar = avatar;
@@ -467,6 +499,9 @@ export async function PATCH(request: Request) {
   if (hasNameUpdate) {
     mirrorData.child_name = childName;
   }
+  if (hasAgeUpdate) {
+    mirrorData.child_age = childAge;
+  }
   if (hasAvatarUpdate) {
     mirrorData.avatar = avatar;
   }
@@ -509,7 +544,7 @@ export async function PATCH(request: Request) {
     ok: true,
       profile: {
         child_name: childName || "Hráč",
-        child_age: 11,
+        child_age: hasAgeUpdate ? childAge : 11,
         player_code: toCode(targetRow.player_code) || toCode(targetRow.profile_code),
         profile_code: toCode(targetRow.profile_code),
         contact_email: user.email ?? null,

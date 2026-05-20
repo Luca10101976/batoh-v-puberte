@@ -21,6 +21,14 @@ type RateLimitResult = {
   remaining?: number;
 };
 
+type RateLimitPolicy = {
+  limit: number;
+  windowMinutes: number;
+  blockMinutes: number;
+};
+
+type RateLimitOverride = Partial<RateLimitPolicy>;
+
 type InMemoryBucket = {
   attempts: number;
   windowStartTs: number;
@@ -28,6 +36,8 @@ type InMemoryBucket = {
 };
 
 const inMemoryBuckets = new Map<string, InMemoryBucket>();
+let cachedOverrideRaw: string | null = null;
+let cachedOverrides: Record<string, RateLimitOverride> = {};
 
 type RateLimitRow = {
   id: string;
@@ -49,6 +59,91 @@ function clampPositiveInt(value: number | undefined, fallback: number) {
     return fallback;
   }
   return Math.floor(value);
+}
+
+function toPositiveInt(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return Math.floor(parsed);
+}
+
+function getRateLimitOverrides() {
+  const raw = process.env.RATE_LIMIT_OVERRIDES_JSON?.trim() || "";
+  if (raw === cachedOverrideRaw) {
+    return cachedOverrides;
+  }
+
+  cachedOverrideRaw = raw;
+  cachedOverrides = {};
+
+  if (!raw) {
+    return cachedOverrides;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return cachedOverrides;
+    }
+
+    Object.entries(parsed as Record<string, unknown>).forEach(([action, value]) => {
+      if (!action.trim() || !value || typeof value !== "object" || Array.isArray(value)) {
+        return;
+      }
+
+      const data = value as Record<string, unknown>;
+      const override: RateLimitOverride = {};
+      const limit = toPositiveInt(data.limit);
+      const windowMinutes = toPositiveInt(data.windowMinutes);
+      const blockMinutes = toPositiveInt(data.blockMinutes);
+
+      if (limit) {
+        override.limit = limit;
+      }
+      if (windowMinutes) {
+        override.windowMinutes = windowMinutes;
+      }
+      if (blockMinutes) {
+        override.blockMinutes = blockMinutes;
+      }
+      if (Object.keys(override).length > 0) {
+        cachedOverrides[action.trim()] = override;
+      }
+    });
+  } catch {
+    cachedOverrides = {};
+  }
+
+  return cachedOverrides;
+}
+
+function resolveRateLimitPolicy({
+  action,
+  limit,
+  windowMinutes,
+  blockMinutes
+}: {
+  action: string;
+  limit?: number;
+  windowMinutes?: number;
+  blockMinutes?: number;
+}): RateLimitPolicy {
+  const base: RateLimitPolicy = {
+    limit: clampPositiveInt(limit, DEFAULT_LIMIT),
+    windowMinutes: clampPositiveInt(windowMinutes, DEFAULT_WINDOW_MINUTES),
+    blockMinutes: clampPositiveInt(blockMinutes, DEFAULT_BLOCK_MINUTES)
+  };
+  const overrides = getRateLimitOverrides();
+  const globalOverride = overrides["*"] ?? {};
+  const actionOverride = overrides[action] ?? {};
+
+  return {
+    limit: clampPositiveInt(actionOverride.limit ?? globalOverride.limit, base.limit),
+    windowMinutes: clampPositiveInt(actionOverride.windowMinutes ?? globalOverride.windowMinutes, base.windowMinutes),
+    blockMinutes: clampPositiveInt(actionOverride.blockMinutes ?? globalOverride.blockMinutes, base.blockMinutes)
+  };
 }
 
 function getRetryAfterSeconds(blockedUntil: string | null, nowTs: number) {
@@ -100,9 +195,10 @@ export async function checkRateLimit({
 
   const ipAddress = ip?.trim() || null;
   const normalizedUserId = userId?.trim() || null;
-  const maxAttempts = clampPositiveInt(limit, DEFAULT_LIMIT);
-  const windowMin = clampPositiveInt(windowMinutes, DEFAULT_WINDOW_MINUTES);
-  const blockMin = clampPositiveInt(blockMinutes, DEFAULT_BLOCK_MINUTES);
+  const policy = resolveRateLimitPolicy({ action: actionKey, limit, windowMinutes, blockMinutes });
+  const maxAttempts = policy.limit;
+  const windowMin = policy.windowMinutes;
+  const blockMin = policy.blockMinutes;
   const now = new Date();
   const nowIso = now.toISOString();
   const nowTs = now.getTime();
@@ -195,9 +291,10 @@ export function checkInMemoryRateLimit({
 
   const ipAddress = ip?.trim() || "unknown";
   const normalizedUserId = userId?.trim() || "anonymous";
-  const maxAttempts = clampPositiveInt(limit, DEFAULT_LIMIT);
-  const windowMin = clampPositiveInt(windowMinutes, DEFAULT_WINDOW_MINUTES);
-  const blockMin = clampPositiveInt(blockMinutes, DEFAULT_BLOCK_MINUTES);
+  const policy = resolveRateLimitPolicy({ action: actionKey, limit, windowMinutes, blockMinutes });
+  const maxAttempts = policy.limit;
+  const windowMin = policy.windowMinutes;
+  const blockMin = policy.blockMinutes;
   const nowTs = Date.now();
   const windowMs = windowMin * 60 * 1000;
   const blockMs = blockMin * 60 * 1000;

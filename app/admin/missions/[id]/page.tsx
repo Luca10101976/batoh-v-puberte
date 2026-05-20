@@ -31,21 +31,23 @@ export default async function MissionDetailPage({
   params,
   searchParams
 }: {
-  params: { id: string };
-  searchParams?: { status?: string };
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ status?: string }>;
 }) {
+  const { id } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
   let missionQuery = await supabase
     .from("missions")
     .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, created_at")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle<MissionRow>();
 
   if (missionQuery.error?.message?.toLowerCase().includes("hero_image_url")) {
     missionQuery = await supabase
       .from("missions")
       .select("id, title, city, intro_text, difficulty, duration_min, points, is_published, created_at")
-      .eq("id", params.id)
+      .eq("id", id)
       .maybeSingle<MissionRow>();
   }
 
@@ -74,7 +76,7 @@ export default async function MissionDetailPage({
     .order("order", { ascending: true });
 
   const orderedStops = ((stops ?? []) as MissionStopRow[]) ?? [];
-  const status = statusText(searchParams?.status);
+  const status = statusText(resolvedSearchParams?.status);
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-5 pb-10">

@@ -17,6 +17,10 @@ const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
 type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
 
+function isExternalImage(src: string) {
+  return /^https?:\/\//i.test(src);
+}
+
 function isManualTask(task: GameplayTask) {
   return task.type === "photo";
 }
@@ -100,6 +104,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     status === "correct" ||
     status === "unknown" ||
     status === "manual";
+  const verificationFinished = status === "correct" || status === "unknown" || status === "manual";
 
   const completionLabel = useMemo(() => `Body se připíšou hráči ${state.profile.name}.`, [state.profile.name]);
   const hasAnyTasks = totalTasks > 0;
@@ -143,7 +148,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           setTaskIndex(0);
         }
 
-        setMessage("Tohle je opakované hraní. Začínáš znovu na čisto.");
+        setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
         setResuming(false);
         return;
       }
@@ -175,7 +180,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       const rows = payload?.task_progress ?? [];
       if (rows.length === 0) {
         if (payload?.location?.status === "completed") {
-          setMessage("Tohle je opakované hraní. Začínáš znovu na čisto.");
+          setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
         }
         setResuming(false);
         return;
@@ -609,28 +614,42 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             {isLastTask && !isLastEpisode ? "Po tomhle úkolu se přesuneš na další zastavení." : "Jsi ve správném bodě mise."}
           </p>
         </div>
-      </section>
 
-      <section className="glass-card p-5">
-        <span className="rounded-full bg-sky/12 px-3 py-1 text-xs uppercase tracking-[0.2em] text-sky">
-          {activeEpisode.name}
-        </span>
-        {activeEpisode.illustrationImage ? (
-          <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
-            <Image
-              src={activeEpisode.illustrationImage}
-              alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
-              width={720}
-              height={720}
-              className="aspect-square w-full object-cover object-center"
-            />
-          </figure>
-        ) : null}
-        <p className="mt-4 text-base leading-7 text-white/90">{activeEpisode.intro}</p>
+        <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs uppercase tracking-[0.24em] text-sky">O tomhle zastavení</p>
+              <h2 className="mt-3 text-xl font-semibold text-white">{activeEpisode.name}</h2>
+              <p className="mt-3 text-sm leading-7 text-white/90">{activeEpisode.intro}</p>
 
-        <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
-          <p className="mt-3 text-sm leading-6 text-mist">{activeEpisode.background}</p>
+              {activeEpisode.background ? (
+                <div className="mt-4 rounded-[24px] border border-white/10 bg-night/35 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
+                  <p className="mt-3 text-sm leading-6 text-mist">{activeEpisode.background}</p>
+                </div>
+              ) : null}
+            </div>
+
+            {activeEpisode.illustrationImage ? (
+              <figure className="mx-auto w-full max-w-[220px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:mx-0 lg:w-[220px] lg:flex-none">
+                {isExternalImage(activeEpisode.illustrationImage) ? (
+                  <img
+                    src={activeEpisode.illustrationImage}
+                    alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
+                    className="aspect-square w-full object-cover object-center"
+                  />
+                ) : (
+                  <Image
+                    src={activeEpisode.illustrationImage}
+                    alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
+                    width={720}
+                    height={720}
+                    className="aspect-square w-full object-cover object-center"
+                  />
+                )}
+              </figure>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -645,13 +664,21 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>
         {activeTask.illustrationImage ? (
           <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
-            <Image
-              src={activeTask.illustrationImage}
-              alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
-              width={720}
-              height={720}
-              className="aspect-square w-full object-cover object-center"
-            />
+            {isExternalImage(activeTask.illustrationImage) ? (
+              <img
+                src={activeTask.illustrationImage}
+                alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
+                className="aspect-square w-full object-cover object-center"
+              />
+            ) : (
+              <Image
+                src={activeTask.illustrationImage}
+                alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
+                width={720}
+                height={720}
+                className="aspect-square w-full object-cover object-center"
+              />
+            )}
             <figcaption className="px-3 py-2 text-center text-xs text-mist">Ilustrační foto k úkolu</figcaption>
           </figure>
         ) : null}
@@ -738,45 +765,52 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             </button>
           </div>
         ) : (
-          <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="mt-5 space-y-3">
             <button
               onClick={() => void handleValidate()}
-              disabled={taskOutcomes[activeTask.id] === "unknown" || submittingAnswer}
-              className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold"
+              disabled={verificationFinished || taskOutcomes[activeTask.id] === "unknown" || submittingAnswer}
+              className={`w-full rounded-[24px] px-4 py-4 text-sm font-bold transition-colors ${
+                verificationFinished
+                  ? "border border-white/10 bg-white/5 text-mist"
+                  : "bg-lime text-night"
+              } disabled:cursor-not-allowed`}
             >
-              Ověřit úkol
+              {submittingAnswer ? "Ověřuji..." : "Ověřit úkol"}
             </button>
-            <button
-              onClick={() => void handleUnknown()}
-              disabled={submittingAnswer}
-              className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
-            >
-              Nevím
-            </button>
-            <button
-              onClick={advance}
-              disabled={!canAdvance}
-              className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-mist"
-            >
-              {isLastTask && isLastEpisode
-                ? "Dokončit misi"
-                : isLastTask && !isLastEpisode
-                  ? "Další zastavení"
-                  : "Další stopa"}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => void handleUnknown()}
+                disabled={submittingAnswer || verificationFinished}
+                className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
+              >
+                Přeskočit −{UNKNOWN_PENALTY_POINTS}
+              </button>
+              <button
+                onClick={advance}
+                disabled={!canAdvance}
+                className={`rounded-[24px] px-4 py-4 text-sm font-semibold transition-colors ${
+                  canAdvance
+                    ? "bg-lime text-night"
+                    : "border border-white/10 bg-white/5 text-mist"
+                } disabled:cursor-not-allowed`}
+              >
+                {isLastTask && isLastEpisode
+                  ? "Dokončit misi"
+                  : isLastTask && !isLastEpisode
+                    ? "Další zastavení"
+                    : "Další stopa"}
+              </button>
+            </div>
           </div>
         )}
       </section>
 
       {alreadyUnlocked ? (
         <div className="rounded-[24px] border border-lime/20 bg-lime/10 p-4 text-sm text-mist">
-          Tuhle lokaci už máš jednou dokončenou. Klidně si ji projdi znovu, ale ve sbírce už je odemčená.
+          Tuhle lokaci už máš jednou dokončenou. Klidně si ji projdi znovu, ale nejlepší výsledek už si tím nezhoršíš.
         </div>
       ) : null}
 
-      <p className="px-1 text-[11px] text-mist/80">
-        Bezpečnostní upozornění: {location.areaHint}
-      </p>
     </main>
   );
 }

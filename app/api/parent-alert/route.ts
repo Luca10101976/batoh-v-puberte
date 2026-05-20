@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkInMemoryRateLimit, checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { locations } from "@/lib/mock-data";
 
 type ParentAlertPayload = {
@@ -13,6 +13,26 @@ type ParentAlertPayload = {
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 
+type ParentAlertRateLimit = {
+  action: string;
+  limit: number;
+  windowMinutes: number;
+  blockMinutes: number;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function normalizePlainText(value: string) {
+  return value.replace(/[\u0000-\u001F\u007F]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 export async function POST(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey =
@@ -21,7 +41,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Supabase auth není nastavené." }, { status: 500 });
   }
 
-  const body = (await request.json()) as ParentAlertPayload;
+  const body = (await request.json().catch(() => null)) as ParentAlertPayload | null;
   const authHeader = request.headers.get("authorization") ?? "";
   const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!accessToken) {
@@ -40,28 +60,57 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Neautorizovaný požadavek." }, { status: 401 });
   }
 
-  const childName = body.childName?.trim();
-  const childAge = body.childAge;
-  const event = body.event ?? "registration";
-  const locationId = body.locationId?.trim() ?? "";
+  const childName = normalizePlainText(body?.childName ?? "");
+  const childAge = typeof body?.childAge === "number" && Number.isInteger(body.childAge) ? body.childAge : null;
+  const event = body?.event === "checkin" ? "checkin" : "registration";
+  const locationId = normalizePlainText(body?.locationId ?? "");
 
-  if (!childName) {
+  if (!childName || childName.length > 40 || (childAge !== null && (childAge < 8 || childAge > 18))) {
     return NextResponse.json({ ok: false, message: "Chybí povinná data." }, { status: 400 });
   }
 
-  if (event === "checkin") {
-    const safeLocationId = locationId || "unknown";
-    const limit = await checkRateLimit({
-      action: `parent_checkin_${safeLocationId}`,
-      ip: getRequestIpAddress(request),
+  const safeLocationId = locationId || "unknown";
+  const rateLimit: ParentAlertRateLimit =
+    event === "checkin"
+      ? {
+          action: `parent_checkin_${safeLocationId}`,
+          limit: 1,
+          windowMinutes: 5,
+          blockMinutes: 1
+        }
+      : {
+          action: "parent_registration",
+          limit: 3,
+          windowMinutes: 60,
+          blockMinutes: 15
+        };
+  const ipAddress = getRequestIpAddress(request);
+  let limitResult;
+  try {
+    limitResult = await checkRateLimit({
+      action: rateLimit.action,
+      ip: ipAddress,
       userId: authUserId,
-      limit: 1,
-      windowMinutes: 5,
-      blockMinutes: 1
+      limit: rateLimit.limit,
+      windowMinutes: rateLimit.windowMinutes,
+      blockMinutes: rateLimit.blockMinutes
     });
-    if (!limit.allowed) {
-      return NextResponse.json({ ok: true, skipped: "rate_limited_checkin" });
-    }
+  } catch {
+    limitResult = checkInMemoryRateLimit({
+      action: rateLimit.action,
+      ip: ipAddress,
+      userId: authUserId,
+      limit: rateLimit.limit,
+      windowMinutes: rateLimit.windowMinutes,
+      blockMinutes: rateLimit.blockMinutes
+    });
+  }
+
+  if (!limitResult.allowed) {
+    return NextResponse.json(
+      { ok: event === "checkin", skipped: "rate_limited_parent_alert", retry_after: limitResult.retryAfterSeconds ?? 60 },
+      { status: event === "checkin" ? 200 : 429 }
+    );
   }
 
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -84,13 +133,17 @@ export async function POST(request: Request) {
     dateStyle: "medium",
     timeStyle: "short"
   });
+  const safeChildName = escapeHtml(childName);
+  const safeChildAge = childAge ?? "?";
+  const safeLocationName = escapeHtml(locationName);
+  const safeNow = escapeHtml(now);
 
   const text = [
     "Dobrý den,",
     "",
     isRegistration
-      ? `${childName} (${childAge ?? "?"} let) se právě zaregistroval/a do aplikace Batoh v pubertě.`
-      : `${childName} (${childAge ?? "?"} let) právě spustil/a misi v aplikaci Batoh v pubertě.`,
+      ? `${childName} (${safeChildAge} let) se právě zaregistroval/a do aplikace Batoh v pubertě.`
+      : `${childName} (${safeChildAge} let) právě spustil/a misi v aplikaci Batoh v pubertě.`,
     !isRegistration && locationName ? `Mise: ${locationName}` : "",
     `Čas události: ${now}`,
     "Tohle je informační e-mail pro vlastníka účtu.",
@@ -101,11 +154,11 @@ export async function POST(request: Request) {
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
       <p>Dobrý den,</p>
-	      <p><strong>${childName}</strong> (${childAge ?? "?"} let) ${
+	      <p><strong>${safeChildName}</strong> (${safeChildAge} let) ${
           isRegistration ? "se právě zaregistroval/a" : "právě spustil/a misi"
         } do aplikace <strong>Batoh v pubertě</strong>.</p>
-	      ${!isRegistration && locationName ? `<p><strong>Mise:</strong> ${locationName}</p>` : ""}
-	      <p><strong>Čas události:</strong> ${now}</p>
+	      ${!isRegistration && locationName ? `<p><strong>Mise:</strong> ${safeLocationName}</p>` : ""}
+	      <p><strong>Čas události:</strong> ${safeNow}</p>
 	      <p>Tohle je informační e-mail pro vlastníka účtu.</p>
       <p style="margin-top: 18px;">Tým Batoh v pubertě</p>
     </div>

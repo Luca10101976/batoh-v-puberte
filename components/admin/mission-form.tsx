@@ -46,7 +46,7 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
   }, [router, state.success]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} encType="multipart/form-data" className="space-y-5">
       {mission ? <input type="hidden" name="mission_id" value={mission.id} /> : null}
 
       <section className="glass-card p-5">

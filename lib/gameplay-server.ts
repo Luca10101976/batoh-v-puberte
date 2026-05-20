@@ -1,6 +1,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib/mock-data";
 import { normalizeMissionTaskAnswersInDatabase } from "@/lib/mission-task-normalization";
+import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { taskAnswers } from "@/lib/task-answers";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 
@@ -49,7 +50,6 @@ type DbBackedLocationSeed = {
   difficulty: "Lehká" | "Střední" | "Vyšší";
   distance: string;
   duration: string;
-  areaHint: string;
   vibe: string[];
   lat: number;
   lng: number;
@@ -277,7 +277,6 @@ function buildDbBackedLocationSeed(
       typeof mission.duration_min === "number" && Number.isFinite(mission.duration_min)
         ? `${mission.duration_min} min`
         : "",
-    areaHint: "Hraj bezpečně a drž se trasy mise.",
     vibe: [],
     lat: anchor?.lat ?? 50.087,
     lng: anchor?.lng ?? 14.421,
@@ -379,7 +378,38 @@ function buildTaskFromDb(
   const questionParts = splitQuestion(task.question);
   const correctnessRule = parseTaskCorrectnessRule(task.question, task.correct_answer);
   const correctAnswers = correctnessRule.correctAnswers;
-  const fallbackAnswers = legacyTask ? taskAnswers[legacyTask.id] ?? [] : [];
+  const options = parseTaskOptions(task.type, task.options);
+  const legacyFallbackAnswers = legacyTask ? taskAnswers[legacyTask.id] ?? [] : [];
+  const canonicalDbAnswer =
+    task.type === "otevrena"
+      ? null
+      : getCanonicalCorrectAnswer({
+          id: task.id,
+          type: task.type,
+          question: task.question,
+          correct_answer: task.correct_answer,
+          options: task.options
+        });
+  const canonicalLegacyFallbackAnswer =
+    task.type === "otevrena" || !legacyTask
+      ? null
+      : getCanonicalCorrectAnswer({
+          id: legacyTask.id,
+          type: task.type,
+          question: task.question,
+          correct_answer: legacyFallbackAnswers.join("\n"),
+          options
+        });
+  const finalCorrectAnswers =
+    task.type === "otevrena"
+      ? correctAnswers.length > 0
+        ? correctAnswers
+        : legacyFallbackAnswers
+      : canonicalDbAnswer
+        ? [canonicalDbAnswer]
+        : canonicalLegacyFallbackAnswer
+          ? [canonicalLegacyFallbackAnswer]
+          : [];
 
   return {
     id: task.id,
@@ -387,10 +417,10 @@ function buildTaskFromDb(
     typeLabel: mapTaskTypeLabel(task.type),
     title: questionParts.title,
     content: questionParts.content,
-    options: parseTaskOptions(task.type, task.options),
+    options,
     illustrationImage: legacyTask?.illustrationImage,
     illustrationImageAlt: legacyTask?.illustrationImageAlt,
-    correctAnswers: correctAnswers.length > 0 ? correctAnswers : fallbackAnswers,
+    correctAnswers: finalCorrectAnswers,
     minCorrectMatches: correctnessRule.minCorrectMatches,
     legacyTaskId: legacyTask?.id
   };
@@ -436,19 +466,35 @@ function buildEpisodesFromMock(episodes: Episode[]): GameplayEpisode[] {
     illustrationImage: episode.illustrationImage,
     illustrationImageAlt: episode.illustrationImageAlt,
     clue: episode.clue,
-    tasks: episode.tasks.map((task) => ({
-      id: task.id,
-      type: task.type === "choice" ? "choice" : task.type === "photo" ? "photo" : "question",
-      typeLabel: task.typeLabel,
-      title: task.title,
-      content: task.content,
-      options: task.options,
-      illustrationImage: task.illustrationImage,
-      illustrationImageAlt: task.illustrationImageAlt,
-      correctAnswers: taskAnswers[task.id] ?? [],
-      minCorrectMatches: undefined,
-      legacyTaskId: task.id
-    }))
+    tasks: episode.tasks.map((task) => {
+      const options = task.options;
+      const rawAnswers = taskAnswers[task.id] ?? [];
+      const mappedType = task.type === "choice" ? "vyber" : task.type === "photo" ? "otevrena" : "otevrena";
+      const canonicalChoiceAnswer =
+        task.type === "choice"
+          ? getCanonicalCorrectAnswer({
+              id: task.id,
+              type: mappedType,
+              question: `${task.title}\n\n${task.content}`.trim(),
+              correct_answer: rawAnswers.join("\n"),
+              options
+            })
+          : null;
+
+      return {
+        id: task.id,
+        type: task.type === "choice" ? "choice" : task.type === "photo" ? "photo" : "question",
+        typeLabel: task.typeLabel,
+        title: task.title,
+        content: task.content,
+        options,
+        illustrationImage: task.illustrationImage,
+        illustrationImageAlt: task.illustrationImageAlt,
+        correctAnswers: task.type === "choice" ? (canonicalChoiceAnswer ? [canonicalChoiceAnswer] : []) : rawAnswers,
+        minCorrectMatches: undefined,
+        legacyTaskId: task.id
+      };
+    })
   }));
 }
 

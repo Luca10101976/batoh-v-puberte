@@ -8,6 +8,7 @@ import { useAppState } from "@/components/app-state-provider";
 import { locations, type MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement } from "@/lib/location-unlock";
 import { parseRequestedPlayStep } from "@/lib/play-resume";
+import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 
@@ -97,7 +98,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     .slice(0, episodeIndex)
     .reduce((sum, episode) => sum + episode.tasks.length, 0);
   const progress = Math.round(((completedTasksBeforeCurrent + taskIndex + 1) / totalTasks) * 100);
-  const alreadyUnlocked = state.completedLocationIds.includes(location.id);
+  const historicallyCompleted = state.completedLocationIds.includes(location.id);
   const knownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "known").length;
   const unknownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "unknown").length;
   const canAdvance =
@@ -130,29 +131,6 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         return;
       }
 
-      if (alreadyUnlocked) {
-        await fetch("/api/game/reset-location-replay", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            profileCode: state.profileCode,
-            locationId: location.id
-          })
-        }).catch(() => null);
-
-        if (requestedEpisodeIndex !== null) {
-          setEpisodeIndex(requestedEpisodeIndex);
-          setTaskIndex(requestedTaskIndex ?? 0);
-        }
-
-        setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
-        setResuming(false);
-        return;
-      }
-
       const response = await fetch("/api/game/location-progress", {
         method: "POST",
         headers: {
@@ -178,10 +156,52 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         | null;
 
       const rows = payload?.task_progress ?? [];
+      const locationProgress = payload?.location ?? null;
+
       if (rows.length === 0) {
-        if (payload?.location?.status === "completed") {
+        if (isCompletedLocationProgress(locationProgress)) {
+          await fetch("/api/game/reset-location-replay", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              profileCode: state.profileCode,
+              locationId: location.id
+            })
+          }).catch(() => null);
+
+          if (requestedEpisodeIndex !== null) {
+            setEpisodeIndex(requestedEpisodeIndex);
+            setTaskIndex(requestedTaskIndex ?? 0);
+          } else {
+            setEpisodeIndex(0);
+            setTaskIndex(0);
+          }
+
           setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
+          setResuming(false);
+          return;
         }
+
+        if (isActiveInProgressLocation(locationProgress)) {
+          if (requestedEpisodeIndex !== null) {
+            setEpisodeIndex(requestedEpisodeIndex);
+            setTaskIndex(requestedTaskIndex ?? 0);
+          } else {
+            setEpisodeIndex(0);
+            setTaskIndex(0);
+          }
+
+          if (historicallyCompleted || hasHistoricalLocationCompletion(locationProgress)) {
+            setMessage("Tohle je opakované hraní. Pokračuješ v novém pokusu.");
+          }
+
+          setResuming(false);
+          return;
+        }
+
         setResuming(false);
         return;
       }
@@ -237,7 +257,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     }
 
     void hydrateInProgressMission();
-  }, [alreadyUnlocked, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, state.profileCode, supabase, taskPositionById]);
+  }, [historicallyCompleted, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, state.profileCode, supabase, taskPositionById]);
 
   async function finishLocation() {
     const participants = [SELF_MEMBER_ID];
@@ -811,7 +831,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         )}
       </section>
 
-      {alreadyUnlocked ? (
+      {historicallyCompleted ? (
         <div className="rounded-[24px] border border-lime/20 bg-lime/10 p-4 text-sm text-mist">
           Tuhle hru už máš jednou dokončenou. Klidně si ji projdi znovu, ale nejlepší výsledek už si tím nezhoršíš.
         </div>

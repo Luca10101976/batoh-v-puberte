@@ -7,6 +7,7 @@ import {
   getTaskByLocationAndId,
   isTaskAnswerCorrect
 } from "@/lib/task-validation";
+import { isCompletedLocationProgress } from "@/lib/location-progress-state";
 
 type ChildProfileRow = {
   id: string;
@@ -125,9 +126,7 @@ export async function POST(request: NextRequest) {
       completed_at?: string | null;
     }>();
 
-  const isReplayOfCompletedMission =
-    existingLocationProgressRow?.status === "completed" ||
-    Boolean(existingLocationProgressRow?.first_completed_at || existingLocationProgressRow?.completed_at);
+  const isReplayOfCompletedMission = isCompletedLocationProgress(existingLocationProgressRow);
 
   const { data: existingRow, error: existingError } = await admin
     .from("child_task_progress")

@@ -104,5 +104,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
   }
 
+  const nowIso = new Date().toISOString();
+  const { error: updateError } = await admin
+    .from("child_location_progress")
+    .update({
+      status: "in_progress",
+      completion_source: "gameplay",
+      updated_at: nowIso
+    })
+    .eq("profile_code", ownProfile.profile_code)
+    .eq("location_id", locationId);
+
+  if (updateError?.code === "42703") {
+    await admin
+      .from("child_location_progress")
+      .update({ completed_at: nowIso })
+      .eq("profile_code", ownProfile.profile_code)
+      .eq("location_id", locationId);
+  } else if (updateError) {
+    return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
+  }
+
   return NextResponse.json({ ok: true, reset: true });
 }

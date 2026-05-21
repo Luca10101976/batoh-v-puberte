@@ -12,6 +12,7 @@ import {
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { pickLatestActiveMission } from "@/lib/home-resume";
+import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { locations } from "@/lib/mock-data";
 import { isLocationUnlockedByChain } from "@/lib/location-unlock";
 
@@ -456,7 +457,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const canonicalPlayerCode = childProfile.player_code || childProfile.profile_code || currentState.playerCode;
       setState((current) => {
         const shouldApplyRemoteProfile = profileMutationVersionRef.current === hydrationStartMutationVersion;
-        const completedLocationIds = Array.from(new Set(remoteRows.map((row) => row.location_id)));
+        const completedLocationIds = Array.from(new Set(remoteRows.filter((row) => hasHistoricalLocationCompletion(row)).map((row) => row.location_id)));
         const lastCompletedAt: Record<string, string> = {};
         const locationPenaltyPoints: Record<string, number> = {};
         const activeMission = pickLatestActiveMission(remoteRows);

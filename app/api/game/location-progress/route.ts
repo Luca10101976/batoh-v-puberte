@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getGameplayLocation } from "@/lib/gameplay-server";
+import { isCompletedLocationProgress } from "@/lib/location-progress-state";
 
 type ChildProfileRow = {
   id: string;
@@ -103,9 +104,7 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle<{ status?: "in_progress" | "completed" | null; first_completed_at?: string | null; completed_at?: string | null }>();
 
-  const isReplayOfCompletedMission =
-    locationRow?.status === "completed" ||
-    Boolean(locationRow?.first_completed_at || locationRow?.completed_at);
+  const isReplayOfCompletedMission = isCompletedLocationProgress(locationRow);
 
   return NextResponse.json({
     ok: true,

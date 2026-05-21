@@ -4,6 +4,7 @@ import { getGameplayLocation } from "@/lib/gameplay-server";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { computeMissionPenalty } from "@/lib/scoring";
 import { computePenaltyFromTaskProgress } from "@/lib/task-validation";
+import { deriveCompletionUpdate } from "@/lib/location-completion-state";
 
 type ChildProfileRow = {
   id: string;
@@ -287,15 +288,19 @@ export async function POST(request: NextRequest) {
 
   const rowsToUpdate = canonicalParticipants.filter((code) => {
     const existing = existingByCode.get(normalizeCode(code));
-    const finalPenalty = Math.max(0, penaltyByCode.get(code) ?? penaltyPoints);
     if (!existing) {
       return false;
     }
-    const shouldImprovePenalty =
-      typeof existing.penalty_points === "number" ? existing.penalty_points > finalPenalty : hasPenaltyColumn;
-    const shouldSetFirstCompleted = hasExtendedProgressColumns && gameplayUnlockEligible && !existing.first_completed_at;
-    const shouldFinalizeStatus = hasExtendedProgressColumns && existing.status !== "completed";
-    return shouldImprovePenalty || shouldSetFirstCompleted || shouldFinalizeStatus;
+
+    const finalPenalty = Math.max(0, penaltyByCode.get(code) ?? penaltyPoints);
+    const decision = deriveCompletionUpdate({
+      existing,
+      finalPenalty,
+      source,
+      hasExtendedProgressColumns
+    });
+
+    return decision.shouldUpdate;
   });
 
   if (rowsToInsert.length === 0 && rowsToUpdate.length === 0) {
@@ -342,24 +347,27 @@ export async function POST(request: NextRequest) {
 
       const finalPenalty = Math.max(0, penaltyByCode.get(profile_code) ?? penaltyPoints);
       const finalBestScore = Math.max(0, 120 - finalPenalty);
-      const shouldImprovePenalty =
-        typeof existing.penalty_points === "number" ? existing.penalty_points > finalPenalty : hasPenaltyColumn;
-      const shouldSetFirstCompleted = gameplayUnlockEligible && !existing.first_completed_at;
+      const decision = deriveCompletionUpdate({
+        existing,
+        finalPenalty,
+        source,
+        hasExtendedProgressColumns
+      });
 
       const nextPayload: Record<string, unknown> = {
         completed_at: completedAt
       };
 
-      if (shouldImprovePenalty || typeof existing.penalty_points !== "number") {
+      if (typeof existing.penalty_points !== "number" || existing.penalty_points > finalPenalty) {
         nextPayload.penalty_points = finalPenalty;
       }
       if (hasExtendedProgressColumns) {
         nextPayload.status = "completed";
         nextPayload.completion_source = source;
-        if (typeof existing.best_score !== "number" || existing.best_score < finalBestScore) {
+        if (decision.bestScoreUpdated) {
           nextPayload.best_score = finalBestScore;
         }
-        if (shouldSetFirstCompleted) {
+        if (decision.firstCompletionTriggered) {
           nextPayload.first_completed_at = completedAt;
           firstCompletionCodes.add(normalizeCode(profile_code));
         }

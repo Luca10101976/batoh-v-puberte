@@ -1324,7 +1324,7 @@ export function ProfileScreen() {
             <p className="mt-2 text-sm text-mist">Vyber si jedno emoji. Každá změna se uloží automaticky.</p>
 
             <div className="mt-4 flex justify-center">
-              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={132} />
+              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={148} />
             </div>
 
             <div className="mt-5 space-y-4">
@@ -1348,13 +1348,13 @@ export function ProfileScreen() {
                       }`}
                       aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
                     >
-                      <div className="absolute inset-[10px] rounded-[18px] bg-night/40" />
-                      <div className="relative z-10 mx-auto h-16 w-16 sm:h-[72px] sm:w-[72px]" style={AVATAR_MASK_STYLE}>
+                      <div className="absolute inset-[8px] rounded-[18px] bg-night/40" />
+                      <div className="relative z-10 mx-auto h-[76px] w-[76px] sm:h-[88px] sm:w-[88px]" style={AVATAR_MASK_STYLE}>
                         <Image
                           src={`/avatars/batuzek/${option}.png`}
                           alt={`Emoji ${option.replace("batuzek-", "")}`}
                           fill
-                          sizes="72px"
+                          sizes="88px"
                           className="object-contain"
                         />
                       </div>

@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
 import { locations, type MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement } from "@/lib/location-unlock";
+import { parseRequestedPlayStep } from "@/lib/play-resume";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 
@@ -29,33 +30,18 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   const { state, setActiveMode, completeLocation, isLocationUnlocked } = useAppState();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const requestedEpisodeIndex = useMemo(() => {
-    const episodeParam = searchParams.get("episode");
-    if (!episodeParam) {
-      return null;
-    }
-
-    const episodeNumber = Number(episodeParam);
-    if (!Number.isInteger(episodeNumber) || episodeNumber < 1 || episodeNumber > location.episodes.length) {
-      return null;
-    }
-
-    return episodeNumber - 1;
-  }, [location.episodes.length, searchParams]);
-  const requestedTaskIndex = useMemo(() => {
-    const taskParam = searchParams.get("task");
-    if (!taskParam || requestedEpisodeIndex === null) {
-      return null;
-    }
-
-    const taskNumber = Number(taskParam);
-    const requestedEpisode = location.episodes[requestedEpisodeIndex];
-    if (!requestedEpisode || !Number.isInteger(taskNumber) || taskNumber < 1 || taskNumber > requestedEpisode.tasks.length) {
-      return null;
-    }
-
-    return taskNumber - 1;
-  }, [location.episodes, requestedEpisodeIndex, searchParams]);
+  const requestedStep = useMemo(
+    () =>
+      parseRequestedPlayStep({
+        episodeParam: searchParams.get("episode"),
+        taskParam: searchParams.get("task"),
+        episodeCount: location.episodes.length,
+        taskCountForEpisode: (episodeIndex) => location.episodes[episodeIndex]?.tasks.length ?? 0
+      }),
+    [location.episodes, searchParams]
+  );
+  const requestedEpisodeIndex = requestedStep.episodeIndex;
+  const requestedTaskIndex = requestedStep.taskIndex;
   const [episodeIndex, setEpisodeIndex] = useState(0);
   const [taskIndex, setTaskIndex] = useState(0);
   const [input, setInput] = useState("");

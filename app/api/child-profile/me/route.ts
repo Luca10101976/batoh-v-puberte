@@ -251,6 +251,7 @@ export async function GET(request: Request) {
   let progressRows: Array<{
     location_id: string;
     completed_at: string;
+    updated_at?: string;
     penalty_points?: number;
     first_completed_at?: string;
     status?: "in_progress" | "completed";
@@ -275,6 +276,7 @@ export async function GET(request: Request) {
         const penaltyPoints =
           typeof penaltyRaw === "number" && Number.isFinite(penaltyRaw) ? Math.max(0, penaltyRaw) : undefined;
         const firstCompletedAtRaw = toStr(row.first_completed_at).trim();
+        const updatedAtRaw = toStr(row.updated_at).trim();
         const statusRaw = toStr(row.status).trim().toLowerCase();
         const completionSourceRaw = toStr(row.completion_source).trim().toLowerCase();
         const bestScoreRaw = row.best_score;
@@ -283,6 +285,7 @@ export async function GET(request: Request) {
         return {
           location_id: locationId,
           completed_at: completedAt,
+          ...(updatedAtRaw ? { updated_at: updatedAtRaw } : {}),
           ...(typeof penaltyPoints === "number" ? { penalty_points: penaltyPoints } : {}),
           ...(firstCompletedAtRaw ? { first_completed_at: firstCompletedAtRaw } : {}),
           ...(statusRaw === "in_progress" || statusRaw === "completed" ? { status: statusRaw } : {}),
@@ -296,6 +299,7 @@ export async function GET(request: Request) {
         ): row is {
           location_id: string;
           completed_at: string;
+          updated_at?: string;
           penalty_points?: number;
           first_completed_at?: string;
           status?: "in_progress" | "completed";

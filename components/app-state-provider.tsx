@@ -365,6 +365,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       let remoteRows: Array<{
         location_id: string;
         completed_at: string;
+        updated_at?: string;
         penalty_points?: number | null;
         first_completed_at?: string | null;
         status?: "in_progress" | "completed" | null;
@@ -399,6 +400,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                 progress?: Array<{
                   location_id: string;
                   completed_at: string;
+                  updated_at?: string;
                   penalty_points?: number | null;
                   first_completed_at?: string | null;
                   status?: "in_progress" | "completed" | null;

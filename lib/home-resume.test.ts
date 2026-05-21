@@ -50,12 +50,14 @@ test("když existují dvě rozehrané mise, vybere se ta naposledy aktivní", ()
     {
       location_id: "klamovka",
       status: "in_progress",
-      completed_at: "2026-05-20T10:00:00.000Z"
+      completed_at: "2026-05-20T10:00:00.000Z",
+      updated_at: "2026-05-20T10:30:00.000Z"
     },
     {
       location_id: "budejovice-zaba",
       status: "in_progress",
-      completed_at: "2026-05-20T12:00:00.000Z"
+      completed_at: "2026-05-20T09:00:00.000Z",
+      updated_at: "2026-05-20T12:00:00.000Z"
     }
   ]);
 

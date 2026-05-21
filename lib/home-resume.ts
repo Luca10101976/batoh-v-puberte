@@ -1,6 +1,7 @@
 type ActiveMissionRow = {
   location_id: string;
   completed_at: string;
+  updated_at?: string;
   status?: "in_progress" | "completed" | null;
 };
 
@@ -42,11 +43,12 @@ export type ResumeMissionCard = {
 };
 
 export function pickLatestActiveMission(progressRows: ActiveMissionRow[]): ActiveMissionSummary {
+  const getActivityAt = (row: ActiveMissionRow) => row.updated_at?.trim() || row.completed_at?.trim() || "";
   const latestRow =
     progressRows
-      .filter((row) => row.status === "in_progress" && row.location_id?.trim() && row.completed_at?.trim())
+      .filter((row) => row.status === "in_progress" && row.location_id?.trim() && getActivityAt(row))
       .slice()
-      .sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0] ?? null;
+      .sort((a, b) => getActivityAt(b).localeCompare(getActivityAt(a)))[0] ?? null;
 
   if (!latestRow) {
     return null;
@@ -54,7 +56,7 @@ export function pickLatestActiveMission(progressRows: ActiveMissionRow[]): Activ
 
   return {
     locationId: latestRow.location_id,
-    updatedAt: latestRow.completed_at
+    updatedAt: getActivityAt(latestRow)
   };
 }
 

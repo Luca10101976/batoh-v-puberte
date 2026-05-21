@@ -11,6 +11,7 @@ import {
   type ReactNode
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { pickLatestActiveMission } from "@/lib/home-resume";
 import { locations } from "@/lib/mock-data";
 import { isLocationUnlockedByChain } from "@/lib/location-unlock";
 
@@ -35,6 +36,11 @@ type PlayerProfile = {
   avatarConfig: AvatarConfig;
 };
 
+type ActiveMissionSummary = {
+  locationId: string;
+  updatedAt: string;
+} | null;
+
 type AppState = {
   registrationCompleted: boolean;
   parentEmail: string;
@@ -46,6 +52,7 @@ type AppState = {
   profile: PlayerProfile;
   completedLocationIds: string[];
   completedGameplayLocationIds: string[];
+  activeMission: ActiveMissionSummary;
   lastCompletedAt: Record<string, string>;
   locationPenaltyPoints: Record<string, number>;
   groupCompletionMembers: Record<string, string[]>;
@@ -139,6 +146,7 @@ const initialState: AppState = {
   },
   completedLocationIds: [],
   completedGameplayLocationIds: [],
+  activeMission: null,
   lastCompletedAt: {},
   locationPenaltyPoints: {},
   groupCompletionMembers: {},
@@ -243,6 +251,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             typeof (parsed as Partial<AppState>).profileRowId === "string"
               ? (parsed as Partial<AppState>).profileRowId || null
               : null,
+          activeMission: parsed.activeMission ?? null,
           locationPenaltyPoints: parsed.locationPenaltyPoints ?? {},
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           currentExpeditionId: parsed.currentExpeditionId ?? null,
@@ -420,6 +429,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             hasChildPin: false,
             completedLocationIds: [],
             completedGameplayLocationIds: [],
+            activeMission: null,
             lastCompletedAt: {},
             locationPenaltyPoints: {},
             groupCompletionMembers: {},
@@ -447,6 +457,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const completedLocationIds = Array.from(new Set(remoteRows.map((row) => row.location_id)));
         const lastCompletedAt: Record<string, string> = {};
         const locationPenaltyPoints: Record<string, number> = {};
+        const activeMission = pickLatestActiveMission(remoteRows);
 
         remoteRows.forEach((row) => {
           lastCompletedAt[row.location_id] = row.completed_at;
@@ -479,6 +490,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           completedGameplayLocationIds: Array.from(
             new Set(remoteRows.filter((row) => Boolean((row as { first_completed_at?: string | null }).first_completed_at)).map((row) => row.location_id))
           ),
+          activeMission,
           lastCompletedAt,
           locationPenaltyPoints
         };
@@ -546,6 +558,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         completedLocationIds: [],
         completedGameplayLocationIds: [],
+        activeMission: null,
         lastCompletedAt: {},
         locationPenaltyPoints: {},
         groupCompletionMembers: {},
@@ -797,6 +810,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           : current.completedGameplayLocationIds.includes(locationId)
             ? current.completedGameplayLocationIds
             : [...current.completedGameplayLocationIds, locationId],
+      activeMission: current.activeMission?.locationId === locationId ? null : current.activeMission,
       groupCompletionMembers: options?.participantIds?.length
         ? {
             ...current.groupCompletionMembers,

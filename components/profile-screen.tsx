@@ -268,6 +268,8 @@ export function ProfileScreen() {
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState("");
   const [avatarMessageTone, setAvatarMessageTone] = useState<MessageTone>("neutral");
+  const [gamesFilter, setGamesFilter] = useState<"all" | "active" | "completed">("all");
+  const [visibleGamesCount, setVisibleGamesCount] = useState(6);
   const avatarSaveTimeoutRef = useRef<number | null>(null);
   const avatarSaveRequestIdRef = useRef(0);
   const supabase = useMemo(() => {
@@ -281,12 +283,65 @@ export function ProfileScreen() {
     () => locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length,
     [isLocationUnlocked]
   );
-  const completedMissions = useMemo(
-    () => locations.filter((location) => state.completedLocationIds.includes(location.id)),
-    [state.completedLocationIds]
-  );
   const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
   const score = getPlayerScore();
+  const activeLocation = useMemo(
+    () => locations.find((location) => location.id === state.activeMission?.locationId) ?? null,
+    [state.activeMission]
+  );
+  const gameSummaries = useMemo(() => {
+    const completedIds = new Set(state.completedLocationIds);
+    const activeId = state.activeMission?.locationId ?? null;
+
+    const rows = locations
+      .filter((location) => completedIds.has(location.id) || location.id === activeId)
+      .map((location) => {
+        const maxPoints = 120;
+        const penalty = state.locationPenaltyPoints[location.id] ?? 0;
+        const earnedPoints = Math.max(0, maxPoints - penalty);
+        const isActive = location.id === activeId;
+        const isCompleted = completedIds.has(location.id);
+
+        return {
+          id: location.id,
+          name: location.name,
+          city: location.city,
+          status: isActive ? ("active" as const) : ("completed" as const),
+          statusLabel: isActive ? "Rozehráno" : "Dokončeno",
+          scoreLabel: isCompleted ? `${earnedPoints}/${maxPoints} bodů` : "Rozehráno",
+          actionLabel: isActive ? "Pokračovat" : "Zahrát znovu",
+          href: isActive ? `/play/${location.id}` : `/locations/${location.id}`,
+          updatedAt: isActive ? (state.activeMission?.updatedAt ?? "") : (state.lastCompletedAt[location.id] ?? ""),
+          isCompleted
+        };
+      })
+      .sort((a, b) => {
+        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+
+    return rows;
+  }, [state.activeMission, state.completedLocationIds, state.lastCompletedAt, state.locationPenaltyPoints]);
+  const completedGamesCount = useMemo(
+    () => gameSummaries.filter((game) => game.status === "completed").length,
+    [gameSummaries]
+  );
+  const activeGamesCount = useMemo(
+    () => gameSummaries.filter((game) => game.status === "active").length,
+    [gameSummaries]
+  );
+  const filteredGames = useMemo(() => {
+    if (gamesFilter === "active") {
+      return gameSummaries.filter((game) => game.status === "active");
+    }
+    if (gamesFilter === "completed") {
+      return gameSummaries.filter((game) => game.status === "completed");
+    }
+    return gameSummaries;
+  }, [gameSummaries, gamesFilter]);
+  const visibleGames = useMemo(() => filteredGames.slice(0, visibleGamesCount), [filteredGames, visibleGamesCount]);
+  const hasMoreGames = filteredGames.length > visibleGamesCount;
   const expeditionPlayersByCode = useMemo(() => {
     const map = new Map<string, ExpeditionPlayerStatus>();
     (activeExpedition?.players ?? []).forEach((player) => {
@@ -302,6 +357,10 @@ export function ProfileScreen() {
       ? "Jsi vedoucí výpravy"
       : "Jsi člen výpravy"
     : "Nemáš aktivní výpravu";
+
+  useEffect(() => {
+    setVisibleGamesCount(6);
+  }, [gamesFilter]);
 
   const ensureOwnCloudProfile = useCallback(async (providedAccessToken?: string) => {
     if (!supabase) {
@@ -1251,7 +1310,7 @@ export function ProfileScreen() {
         <div className="mt-5 grid grid-cols-3 gap-3">
           <div className="rounded-2xl bg-white/5 p-3">
             <div className="text-xl font-semibold">{unlockedCount}</div>
-            <div className="text-xs text-mist">Lokace</div>
+            <div className="text-xs text-mist">Hry</div>
           </div>
           <div className="rounded-2xl bg-white/5 p-3">
             <div className="text-xl font-semibold">{score}</div>
@@ -1481,31 +1540,106 @@ export function ProfileScreen() {
       </section>
 
       <section className="glass-card p-5">
-        <h2 className="section-title">Moje mise</h2>
-        {completedMissions.length === 0 ? (
-          <p className="mt-3 text-sm text-mist">Zatím nemáš dokončenou žádnou misi.</p>
+        <h2 className="section-title">Moje hry</h2>
+        {gameSummaries.length === 0 ? (
+          <p className="mt-3 text-sm text-mist">Zatím tady nemáš žádnou rozehranou ani dokončenou hru.</p>
         ) : (
-          <div className="mt-4 space-y-3">
-            {completedMissions.map((mission) => {
-              const maxPoints = 120;
-              const penalty = state.locationPenaltyPoints[mission.id] ?? 0;
-              const earnedPoints = Math.max(0, maxPoints - penalty);
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-mist">Dokončené hry</div>
+                <div className="mt-2 text-2xl font-bold text-white">{completedGamesCount}</div>
+              </div>
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-mist">Rozehrané hry</div>
+                <div className="mt-2 text-2xl font-bold text-white">{activeGamesCount}</div>
+              </div>
+              <div className="rounded-2xl bg-white/5 p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-mist">Celkové body</div>
+                <div className="mt-2 text-2xl font-bold text-lime">{score}</div>
+              </div>
+            </div>
 
-              return (
-                <div key={mission.id} className="rounded-2xl bg-white/5 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold">{mission.name}</div>
-                      <div className="mt-1 text-sm text-mist">{mission.city}</div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: "all" as const, label: "Všechny", count: gameSummaries.length },
+                { value: "active" as const, label: "Rozehrané", count: activeGamesCount },
+                { value: "completed" as const, label: "Dokončené", count: completedGamesCount }
+              ].map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setGamesFilter(tab.value)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    gamesFilter === tab.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                  }`}
+                >
+                  {tab.label} <span className="ml-1 text-xs opacity-80">{tab.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {filteredGames.length === 0 ? (
+              <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
+                {gamesFilter === "active"
+                  ? "Teď nemáš rozehranou žádnou hru."
+                  : gamesFilter === "completed"
+                    ? "Zatím nemáš dokončenou žádnou hru."
+                    : "Zatím tady nejsou žádné hry k zobrazení."}
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                  {visibleGames.map((game, index) => (
+                    <div
+                      key={game.id}
+                      className={`flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${
+                        index !== visibleGames.length - 1 ? "border-b border-white/10" : ""
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="truncate text-base font-semibold text-white">{game.name}</div>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                              game.status === "active" ? "bg-sky/15 text-sky" : "bg-lime/15 text-lime"
+                            }`}
+                          >
+                            {game.statusLabel}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-mist">
+                          <span>{game.city}</span>
+                          <span>{game.scoreLabel}</span>
+                          {game.status === "completed" ? <span>Nejlepší uložený výsledek</span> : null}
+                        </div>
+                        {game.status === "active" && activeLocation?.id === game.id ? (
+                          <div className="mt-2 text-xs text-mist">
+                            Pokračuješ ve hře <span className="font-semibold text-white">{activeLocation.subtitle}</span>.
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={() => router.push(game.href)}
+                        className={`rounded-[18px] px-4 py-3 text-sm font-semibold ${
+                          game.status === "active" ? "bg-lime text-night" : "bg-white/10 text-white"
+                        }`}
+                      >
+                        {game.actionLabel}
+                      </button>
                     </div>
-                    <div className="rounded-full bg-lime/12 px-3 py-1 text-sm font-semibold text-lime">
-                      {earnedPoints}/{maxPoints} bodů
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-mist">Zobrazuje se nejlepší uložený výsledek této mise.</div>
+                  ))}
                 </div>
-              );
-            })}
+
+                {hasMoreGames ? (
+                  <button
+                    onClick={() => setVisibleGamesCount((current) => current + 6)}
+                    className="rounded-[18px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+                  >
+                    Zobrazit další
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         )}
       </section>

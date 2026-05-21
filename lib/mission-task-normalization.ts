@@ -189,6 +189,8 @@ export function validateAndCanonicalizeCorrectAnswer(row: MissionTaskAnswerRow):
   } as const;
 }
 
+// Používej jen v explicitní admin/save nebo maintenance cestě.
+// Nikdy nevolej z runtime read pathu hry ani z běžného načtení mise.
 export async function normalizeMissionTaskAnswersInDatabase(
   supabase: any,
   rows: MissionTaskAnswerRow[]

@@ -91,20 +91,6 @@ on public.child_expedition_invites (invitee_child_profile_id, status, created_at
 create index if not exists child_expedition_invites_inviter_status_idx
 on public.child_expedition_invites (inviter_child_profile_id, status, created_at desc);
 
-create table if not exists public.child_push_subscriptions (
-  id uuid primary key default gen_random_uuid(),
-  profile_code text not null,
-  endpoint text not null unique,
-  p256dh text not null,
-  auth text not null,
-  user_agent text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists child_push_subscriptions_profile_code_idx
-on public.child_push_subscriptions(profile_code);
-
 create table if not exists public.child_profile_blocks (
   id uuid primary key default gen_random_uuid(),
   blocker_profile_code text not null,
@@ -382,11 +368,6 @@ $$;
 drop trigger if exists trg_child_profiles_touch_updated_at on public.child_profiles;
 create trigger trg_child_profiles_touch_updated_at
 before update on public.child_profiles
-for each row execute function public.touch_updated_at();
-
-drop trigger if exists trg_child_push_subscriptions_touch_updated_at on public.child_push_subscriptions;
-create trigger trg_child_push_subscriptions_touch_updated_at
-before update on public.child_push_subscriptions
 for each row execute function public.touch_updated_at();
 
 drop trigger if exists trg_rate_limits_touch_updated_at on public.rate_limits;

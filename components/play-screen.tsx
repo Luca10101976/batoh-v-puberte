@@ -465,7 +465,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
         <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Místo je zamčené</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Hra je zamčená</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-3 text-sm leading-6 text-mist">{location.shortDescription ?? location.teaser}</p>
           <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/90">
@@ -483,7 +483,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
         <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky">Načítám rozehranou misi</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-sky">Načítám rozehranou hru</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-3 text-sm text-mist">Obnovuju poslední uložený krok hry.</p>
         </section>
@@ -495,10 +495,10 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
         <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Mise ještě není připravená</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Hra ještě není připravená</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-3 text-sm leading-6 text-mist">
-            Tahle mise zatím nemá žádné aktivní úkoly. Otevřete ji v Mozku a doplňte zastavení nebo úkoly.
+            Tahle hra zatím není připravená. Zkus si zatím vybrat jinou hru.
           </p>
         </section>
         <Link href={`/locations/${location.id}`} className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">
@@ -537,15 +537,21 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           </div>
         </section>
 
+        <Link href="/" className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">
+          Vybrat další hru
+        </Link>
         <div className="grid grid-cols-2 gap-3">
-          <Link href="/" className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 text-center font-semibold">
-            Zpět na mapu
-          </Link>
           <button
             onClick={() => router.push("/leaderboard")}
-            className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night"
+            className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 text-center font-semibold"
           >
-            Zobrazit žebříček
+            Žebříček
+          </button>
+          <button
+            onClick={() => router.push("/profile")}
+            className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 text-center font-semibold"
+          >
+            Profil
           </button>
         </div>
       </main>
@@ -585,10 +591,10 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
-      <section className="glass-card p-5">
+      <section className="glass-card p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Aktivní mise</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-lime">Rozehraná hra</p>
             <h1 className="mt-2 text-2xl font-bold">{location.name}</h1>
             <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
           </div>
@@ -596,34 +602,34 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             Sólový režim
           </div>
         </div>
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-3 flex items-center justify-between">
           <div className="text-sm text-mist">
             Zastavení {episodeIndex + 1}/{location.episodes.length} • Úkol {taskIndex + 1}/{activeEpisode.tasks.length}
           </div>
           <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{progress}% hotovo</div>
         </div>
-        <div className="mt-3 h-2 rounded-full bg-white/10">
+        <div className="mt-2 h-2 rounded-full bg-white/10">
           <div className="h-2 rounded-full bg-lime" style={{ width: `${progress}%` }} />
         </div>
-        <div className="mt-4 rounded-2xl border border-sky/20 bg-sky/10 px-4 py-3">
+        <div className="mt-3 rounded-2xl border border-sky/20 bg-sky/10 px-4 py-3">
           <p className="text-xs uppercase tracking-[0.18em] text-sky">Aktuální zastavení</p>
           <p className="mt-1 text-sm font-semibold text-white">
             {activeEpisode.name}
           </p>
           <p className="mt-1 text-xs text-mist">
-            {isLastTask && !isLastEpisode ? "Po tomhle úkolu se přesuneš na další zastavení." : "Jsi ve správném bodě mise."}
+            {isLastTask && !isLastEpisode ? "Po tomhle úkolu se přesuneš na další zastavení." : "Jsi na správném místě ve hře."}
           </p>
         </div>
 
-        <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+        <div className="mt-3 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <div className="min-w-0 flex-1">
               <p className="text-xs uppercase tracking-[0.24em] text-sky">O tomhle zastavení</p>
-              <h2 className="mt-3 text-xl font-semibold text-white">{activeEpisode.name}</h2>
-              <p className="mt-3 text-sm leading-7 text-white/90">{activeEpisode.intro}</p>
+              <h2 className="mt-2 text-lg font-semibold text-white sm:text-xl">{activeEpisode.name}</h2>
+              <p className="mt-2 text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
 
               {activeEpisode.background ? (
-                <div className="mt-4 rounded-[24px] border border-white/10 bg-night/35 p-4">
+                <div className="mt-3 rounded-[24px] border border-white/10 bg-night/35 p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
                   <p className="mt-3 text-sm leading-6 text-mist">{activeEpisode.background}</p>
                 </div>
@@ -631,7 +637,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             </div>
 
             {activeEpisode.illustrationImage ? (
-              <figure className="mx-auto w-full max-w-[220px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:mx-0 lg:w-[220px] lg:flex-none">
+              <figure className="mx-auto w-full max-w-[168px] overflow-hidden rounded-[24px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:max-w-[220px] lg:mx-0 lg:w-[220px] lg:flex-none">
                 {isExternalImage(activeEpisode.illustrationImage) ? (
                   <img
                     src={activeEpisode.illustrationImage}
@@ -758,7 +764,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
               className="rounded-[24px] bg-lime px-4 py-4 text-sm font-semibold text-night"
             >
               {isLastTask && isLastEpisode
-                ? "Potvrdit a dokončit misi"
+                ? "Potvrdit a dokončit hru"
                 : isLastTask && !isLastEpisode
                   ? "Potvrdit a přejít na další zastavení"
                   : "Potvrdit a pokračovat"}
@@ -795,7 +801,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 } disabled:cursor-not-allowed`}
               >
                 {isLastTask && isLastEpisode
-                  ? "Dokončit misi"
+                  ? "Dokončit hru"
                   : isLastTask && !isLastEpisode
                     ? "Další zastavení"
                     : "Další stopa"}
@@ -807,7 +813,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
       {alreadyUnlocked ? (
         <div className="rounded-[24px] border border-lime/20 bg-lime/10 p-4 text-sm text-mist">
-          Tuhle lokaci už máš jednou dokončenou. Klidně si ji projdi znovu, ale nejlepší výsledek už si tím nezhoršíš.
+          Tuhle hru už máš jednou dokončenou. Klidně si ji projdi znovu, ale nejlepší výsledek už si tím nezhoršíš.
         </div>
       ) : null}
 

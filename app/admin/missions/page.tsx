@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { deleteMissionAction, deleteStopAction, enableMozekEditingAction, toggleMissionPublishAction } from "@/app/admin/missions/actions";
 import type { MissionRow, MissionStopRow } from "@/app/admin/types";
-import { normalizeMissionTaskAnswersInDatabase } from "@/lib/mission-task-normalization";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions } from "@/lib/mock-data";
 
@@ -128,23 +127,6 @@ export default async function AdminMissionsPage({
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
-  await (async () => {
-    const { data: tasks } = await supabase
-      .from("mission_tasks")
-      .select("id, type, question, correct_answer, options");
-
-    if (!tasks?.length) {
-      return;
-    }
-
-    await normalizeMissionTaskAnswersInDatabase(supabase, tasks as Array<{
-      id: string;
-      type: "otevrena" | "vyber" | "ano-ne";
-      question: string;
-      correct_answer: string;
-      options: unknown;
-    }>);
-  })().catch(() => undefined);
 
   const [{ data, error }, { data: stopsData, error: stopsError }] = await Promise.all([
     supabase

@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: LocationDetailPageProps): Pro
 
   if (!location) {
     return {
-      title: "Lokace nenalezena"
+      title: "Hra nenalezena"
     };
   }
 

@@ -1,6 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib/mock-data";
-import { normalizeMissionTaskAnswersInDatabase } from "@/lib/mission-task-normalization";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { taskAnswers } from "@/lib/task-answers";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
@@ -368,18 +367,11 @@ function getLegacyEpisode(location: MapLocation, stopOrder: number) {
   return location.episodes[stopOrder - 1] ?? null;
 }
 
-function buildTaskFromDb(
-  location: MapLocation | null,
-  stop: MissionStopDbRow,
-  task: MissionTaskDbRow
-): GameplayTask {
-  const legacyEpisode = location ? getLegacyEpisode(location, stop.order) : null;
-  const legacyTask = legacyEpisode?.tasks[task.order - 1];
+function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): GameplayTask {
   const questionParts = splitQuestion(task.question);
   const correctnessRule = parseTaskCorrectnessRule(task.question, task.correct_answer);
   const correctAnswers = correctnessRule.correctAnswers;
   const options = parseTaskOptions(task.type, task.options);
-  const legacyFallbackAnswers = legacyTask ? taskAnswers[legacyTask.id] ?? [] : [];
   const canonicalDbAnswer =
     task.type === "otevrena"
       ? null
@@ -390,26 +382,12 @@ function buildTaskFromDb(
           correct_answer: task.correct_answer,
           options: task.options
         });
-  const canonicalLegacyFallbackAnswer =
-    task.type === "otevrena" || !legacyTask
-      ? null
-      : getCanonicalCorrectAnswer({
-          id: legacyTask.id,
-          type: task.type,
-          question: task.question,
-          correct_answer: legacyFallbackAnswers.join("\n"),
-          options
-        });
   const finalCorrectAnswers =
     task.type === "otevrena"
-      ? correctAnswers.length > 0
-        ? correctAnswers
-        : legacyFallbackAnswers
+      ? correctAnswers
       : canonicalDbAnswer
         ? [canonicalDbAnswer]
-        : canonicalLegacyFallbackAnswer
-          ? [canonicalLegacyFallbackAnswer]
-          : [];
+        : [];
 
   return {
     id: task.id,
@@ -418,19 +396,12 @@ function buildTaskFromDb(
     title: questionParts.title,
     content: questionParts.content,
     options,
-    illustrationImage: legacyTask?.illustrationImage,
-    illustrationImageAlt: legacyTask?.illustrationImageAlt,
     correctAnswers: finalCorrectAnswers,
-    minCorrectMatches: correctnessRule.minCorrectMatches,
-    legacyTaskId: legacyTask?.id
+    minCorrectMatches: correctnessRule.minCorrectMatches
   };
 }
 
-function buildEpisodesFromDb(
-  location: MapLocation | null,
-  stops: MissionStopDbRow[],
-  tasks: MissionTaskDbRow[]
-): GameplayEpisode[] {
+function buildEpisodesFromDb(stops: MissionStopDbRow[], tasks: MissionTaskDbRow[]): GameplayEpisode[] {
   const tasksByStopId = new Map<string, MissionTaskDbRow[]>();
   tasks.forEach((task) => {
     const current = tasksByStopId.get(task.stop_id) ?? [];
@@ -439,20 +410,18 @@ function buildEpisodesFromDb(
   });
 
   return stops.map((stop) => {
-    const legacyEpisode = location ? getLegacyEpisode(location, stop.order) : null;
     const [intro = "", ...backgroundParts] = splitParagraphs(stop.description);
 
     return {
       id: stop.id,
       name: stop.title,
-      intro: intro || legacyEpisode?.intro || "",
-      background: backgroundParts.join("\n\n") || legacyEpisode?.background || "",
-      illustrationImage: stop.image_url || legacyEpisode?.illustrationImage,
-      illustrationImageAlt: legacyEpisode?.illustrationImageAlt,
-      clue: legacyEpisode?.clue ?? [],
+      intro,
+      background: backgroundParts.join("\n\n"),
+      illustrationImage: stop.image_url || undefined,
+      clue: [],
       tasks: (tasksByStopId.get(stop.id) ?? [])
         .sort((a, b) => a.order - b.order)
-        .map((task) => buildTaskFromDb(location, stop, task))
+        .map((task) => buildTaskFromDb(stop, task))
     };
   });
 }
@@ -542,16 +511,8 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
   }
 
   const normalizedTasks = ((tasksData as MissionTaskDbRow[]) ?? []).map((task) => ({ ...task }));
-  await normalizeMissionTaskAnswersInDatabase(supabase, normalizedTasks).catch(() => ({
-    ok: false as const,
-    updated: 0
-  }));
 
-  return buildEpisodesFromDb(
-    canonical?.location ?? null,
-    (stopsData as MissionStopDbRow[]) ?? [],
-    normalizedTasks
-  );
+  return buildEpisodesFromDb((stopsData as MissionStopDbRow[]) ?? [], normalizedTasks);
 }
 
 export async function getPublishedLocationIds() {

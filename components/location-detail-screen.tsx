@@ -43,7 +43,7 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
           />
         )}
         <div className="absolute inset-0 flex h-full flex-col justify-end bg-gradient-to-t from-night via-night/40 to-transparent p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky">Lokace</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-sky">Hra</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-2 text-sm font-medium text-lime">{location.subtitle}</p>
           <p className="mt-2 max-w-[28ch] text-sm leading-6 text-mist">{location.teaser}</p>
@@ -51,8 +51,26 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       </div>
 
       <section className="glass-card p-5">
+        <button
+          onClick={() => (unlocked ? startMission() : undefined)}
+          disabled={!unlocked}
+          className="w-full rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {canUsePlayerFeatures ? "Hrát" : "Přihlásit a hrát"}
+        </button>
+        {!canUsePlayerFeatures && unlocked ? (
+          <p className="mt-3 text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
+        ) : null}
+        {!unlocked ? (
+          <p className="mt-3 text-sm text-mist">
+            Tohle místo je zatím zamčené. Nejdřív dokonči: {unlockRequirement?.name ?? "předchozí místo"}.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="glass-card p-5">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Příběh mise</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">O hře</p>
           {unlocked ? (
             <span className="rounded-full bg-lime/12 px-3 py-2 text-xs font-semibold text-lime">
               {completed ? "Dokončeno" : "Odemčeno"}
@@ -71,7 +89,7 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       <section className="glass-card p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="section-title">Epizody výpravy</h2>
+            <h2 className="section-title">Zastavení ve hře</h2>
           </div>
           <div className="rounded-2xl bg-white/5 px-4 py-3 text-right">
             <div className="text-xl font-semibold">{location.episodes.length}</div>
@@ -113,10 +131,10 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       {canUsePlayerFeatures ? (
         <section className="glass-card p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
-          <h2 className="mt-2 text-xl font-semibold">Vytiskni si misi, ale vyhodnoť ji až v aplikaci</h2>
+          <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
           <p className="mt-2 text-sm leading-6 text-mist">
             Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
-            aplikace, aby vznikl skutečný výsledek, body i případné odemčení dalšího místa.
+            aplikace, aby vznikl skutečný výsledek, body i případné odemčení další hry.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <a
@@ -129,36 +147,21 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
               href={`/play/${location.id}?mode=solo`}
               className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime"
             >
-              Otevřít misi v aplikaci
+              Otevřít hru v aplikaci
             </Link>
           </div>
         </section>
       ) : (
         <section className="glass-card p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-coral">Jak to funguje</p>
-          <h2 className="mt-2 text-xl font-semibold">Místo si můžeš projít hned, hru spustíš až po přihlášení</h2>
+          <h2 className="mt-2 text-xl font-semibold">Místo si můžeš projít hned, hrát začneš až po přihlášení</h2>
           <p className="mt-2 text-sm leading-6 text-mist">
-            Jako návštěvník si můžeš prohlédnout trasu i detail mise. Body, progres a samotné hraní se odemknou až po
+            Jako návštěvník si můžeš prohlédnout trasu i detail hry. Body, progres a samotné hraní se odemknou až po
             přihlášení hráče.
           </p>
         </section>
       )}
 
-      <button
-        onClick={() => (unlocked ? startMission() : undefined)}
-        disabled={!unlocked}
-        className="rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {canUsePlayerFeatures ? "Hrát misi" : "Přihlásit a hrát"}
-      </button>
-      {!canUsePlayerFeatures && unlocked ? (
-        <p className="text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
-      ) : null}
-      {!unlocked ? (
-        <p className="text-sm text-mist">
-          Tohle místo je zatím zamčené. Nejdřív dokonči: {unlockRequirement?.name ?? "předchozí místo"}.
-        </p>
-      ) : null}
     </main>
   );
 }

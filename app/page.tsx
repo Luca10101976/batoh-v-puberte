@@ -4,7 +4,7 @@ import { getGameplayLocation, getPublishedLocationIds } from "@/lib/gameplay-ser
 
 export const metadata: Metadata = {
   title: "Domů | Batoh v pubertě",
-  description: "Vyber lokaci, plň mise a sbírej body ve městské hře pro děti.",
+  description: "Vyber hru, plň úkoly a sbírej body v městské hře pro děti.",
   alternates: {
     canonical: "/"
   }

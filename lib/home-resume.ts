@@ -1,0 +1,117 @@
+type ActiveMissionRow = {
+  location_id: string;
+  completed_at: string;
+  status?: "in_progress" | "completed" | null;
+};
+
+type ActiveMissionSummary = {
+  locationId: string;
+  updatedAt: string;
+} | null;
+
+type ResumeTaskProgressRow = {
+  task_id: string;
+  status: "correct" | "wrong" | "unknown";
+  attempts: number;
+};
+
+type ResumeMissionLocation = {
+  id: string;
+  name: string;
+  episodes: Array<{
+    name: string;
+    tasks: Array<{
+      id: string;
+      title: string;
+    }>;
+  }>;
+};
+
+type ResumeMissionPayload = {
+  task_progress?: ResumeTaskProgressRow[];
+  location?: { status?: "in_progress" | "completed" | null };
+} | null;
+
+export type ResumeMissionCard = {
+  locationId: string;
+  missionName: string;
+  stopName: string;
+  taskLabel: string;
+  progressPercent: number;
+  progressText: string;
+  href: string;
+};
+
+export function pickLatestActiveMission(progressRows: ActiveMissionRow[]): ActiveMissionSummary {
+  const latestRow =
+    progressRows
+      .filter((row) => row.status === "in_progress" && row.location_id?.trim() && row.completed_at?.trim())
+      .slice()
+      .sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0] ?? null;
+
+  if (!latestRow) {
+    return null;
+  }
+
+  return {
+    locationId: latestRow.location_id,
+    updatedAt: latestRow.completed_at
+  };
+}
+
+export function buildResumeMissionCard(
+  location: ResumeMissionLocation,
+  payload: ResumeMissionPayload
+): ResumeMissionCard | null {
+  const taskRows = payload?.task_progress ?? [];
+  if (payload?.location?.status !== "in_progress" && taskRows.length === 0) {
+    return null;
+  }
+
+  const taskPositions = location.episodes.flatMap((episode, episodeIndex) =>
+    episode.tasks.map((task, taskIndex) => ({
+      task,
+      episode,
+      episodeIndex,
+      taskIndex
+    }))
+  );
+
+  if (taskPositions.length === 0) {
+    return null;
+  }
+
+  const lockedTaskIds = new Set(
+    taskRows.filter((row) => row.status === "correct" || row.status === "unknown").map((row) => row.task_id)
+  );
+  const firstOpenTask = taskPositions.find(({ task }) => !lockedTaskIds.has(task.id));
+  const currentPosition = firstOpenTask ?? taskPositions[taskPositions.length - 1] ?? null;
+
+  if (!currentPosition) {
+    return null;
+  }
+
+  const completedTasksBeforeCurrent = location.episodes
+    .slice(0, currentPosition.episodeIndex)
+    .reduce((sum, episode) => sum + episode.tasks.length, 0);
+  const totalTasks = taskPositions.length;
+  const progressPercent = Math.max(
+    5,
+    Math.round(((completedTasksBeforeCurrent + currentPosition.taskIndex + 1) / Math.max(1, totalTasks)) * 100)
+  );
+
+  return {
+    locationId: location.id,
+    missionName: location.name,
+    stopName: currentPosition.episode.name,
+    taskLabel:
+      firstOpenTask?.task.title?.trim() ||
+      (payload?.location?.status === "in_progress" && taskRows.length > 0 ? "Připraveno k dalšímu kroku" : "Pokračování ve hře"),
+    progressPercent,
+    progressText: `Zastavení ${currentPosition.episodeIndex + 1}/${location.episodes.length} • Úkol ${Math.min(
+      currentPosition.taskIndex + 1,
+      currentPosition.episode.tasks.length
+    )}/${currentPosition.episode.tasks.length}`,
+    href: `/play/${location.id}`
+  };
+}

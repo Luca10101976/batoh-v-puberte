@@ -124,16 +124,16 @@ export function getCanonicalCorrectAnswer(row: MissionTaskAnswerRow): string | n
     return null;
   }
 
+  const exactMatch = options.find((option) => normalizeForCompare(option) === normalizedCurrent);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
   if (/^\d+$/.test(normalizedCurrent)) {
     const index = Number.parseInt(normalizedCurrent, 10);
     if (index >= 1 && index <= options.length) {
       return options[index - 1];
     }
-  }
-
-  const exactMatch = options.find((option) => normalizeForCompare(option) === normalizedCurrent);
-  if (exactMatch) {
-    return exactMatch;
   }
 
   const containingMatches = options.filter((option) => {

@@ -42,7 +42,7 @@ test("když existuje jedna rozehraná mise, blok se zobrazí s jejím názvem", 
   assert.equal(card.missionName, "Park Klamovka");
   assert.equal(card.stopName, "Chrámek noci a poznání");
   assert.equal(card.taskLabel, "Hvězdy v nebi");
-  assert.equal(card.href, "/play/klamovka");
+  assert.equal(card.href, "/play/klamovka?episode=1&task=2");
 });
 
 test("když existují dvě rozehrané mise, vybere se ta naposledy aktivní", () => {
@@ -65,12 +65,12 @@ test("když existují dvě rozehrané mise, vybere se ta naposledy aktivní", ()
   });
 });
 
-test("CTA Pokračovat vždy vede na /play/[locationId]", () => {
+test("CTA Pokračovat vede na přesný rozehraný krok hry", () => {
   const card = buildResumeMissionCard(sampleLocation, {
     location: { status: "in_progress" },
-    task_progress: []
+    task_progress: [{ task_id: "t1", status: "correct", attempts: 1 }]
   });
 
   assert.ok(card);
-  assert.equal(card.href, "/play/klamovka");
+  assert.equal(card.href, "/play/klamovka?episode=1&task=2");
 });

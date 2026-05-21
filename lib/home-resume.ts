@@ -37,7 +37,6 @@ export type ResumeMissionCard = {
   missionName: string;
   stopName: string;
   taskLabel: string;
-  progressPercent: number;
   progressText: string;
   href: string;
 };
@@ -91,15 +90,6 @@ export function buildResumeMissionCard(
     return null;
   }
 
-  const completedTasksBeforeCurrent = location.episodes
-    .slice(0, currentPosition.episodeIndex)
-    .reduce((sum, episode) => sum + episode.tasks.length, 0);
-  const totalTasks = taskPositions.length;
-  const progressPercent = Math.max(
-    5,
-    Math.round(((completedTasksBeforeCurrent + currentPosition.taskIndex + 1) / Math.max(1, totalTasks)) * 100)
-  );
-
   return {
     locationId: location.id,
     missionName: location.name,
@@ -107,11 +97,10 @@ export function buildResumeMissionCard(
     taskLabel:
       firstOpenTask?.task.title?.trim() ||
       (payload?.location?.status === "in_progress" && taskRows.length > 0 ? "Připraveno k dalšímu kroku" : "Pokračování ve hře"),
-    progressPercent,
     progressText: `Zastavení ${currentPosition.episodeIndex + 1}/${location.episodes.length} • Úkol ${Math.min(
       currentPosition.taskIndex + 1,
       currentPosition.episode.tasks.length
     )}/${currentPosition.episode.tasks.length}`,
-    href: `/play/${location.id}`
+    href: `/play/${location.id}?episode=${currentPosition.episodeIndex + 1}&task=${currentPosition.taskIndex + 1}`
   };
 }

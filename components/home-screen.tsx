@@ -148,7 +148,6 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
               <p className="mt-1 text-sm leading-6 text-mist">{resumeCard.taskLabel}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-mist">
                 <span className="rounded-full bg-white/8 px-3 py-2">{resumeCard.progressText}</span>
-                <span className="rounded-full bg-lime/14 px-3 py-2 text-lime">{resumeCard.progressPercent}% hotovo</span>
               </div>
             </div>
             <Link

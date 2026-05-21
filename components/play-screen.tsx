@@ -42,6 +42,20 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
     return episodeNumber - 1;
   }, [location.episodes.length, searchParams]);
+  const requestedTaskIndex = useMemo(() => {
+    const taskParam = searchParams.get("task");
+    if (!taskParam || requestedEpisodeIndex === null) {
+      return null;
+    }
+
+    const taskNumber = Number(taskParam);
+    const requestedEpisode = location.episodes[requestedEpisodeIndex];
+    if (!requestedEpisode || !Number.isInteger(taskNumber) || taskNumber < 1 || taskNumber > requestedEpisode.tasks.length) {
+      return null;
+    }
+
+    return taskNumber - 1;
+  }, [location.episodes, requestedEpisodeIndex, searchParams]);
   const [episodeIndex, setEpisodeIndex] = useState(0);
   const [taskIndex, setTaskIndex] = useState(0);
   const [input, setInput] = useState("");
@@ -72,9 +86,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
     if (requestedEpisodeIndex !== null) {
       setEpisodeIndex(requestedEpisodeIndex);
-      setTaskIndex(0);
+      setTaskIndex(requestedTaskIndex ?? 0);
     }
-  }, [requestedEpisodeIndex, searchParams, setActiveMode]);
+  }, [requestedEpisodeIndex, requestedTaskIndex, searchParams, setActiveMode]);
 
   const locationUnlocked = isLocationUnlocked(location.id, location.unlocked);
   const unlockRequirement = getUnlockRequirement(location, locations);
@@ -145,7 +159,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
         if (requestedEpisodeIndex !== null) {
           setEpisodeIndex(requestedEpisodeIndex);
-          setTaskIndex(0);
+          setTaskIndex(requestedTaskIndex ?? 0);
         }
 
         setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
@@ -211,7 +225,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
       if (requestedEpisodeIndex !== null) {
         setEpisodeIndex(requestedEpisodeIndex);
-        setTaskIndex(0);
+        setTaskIndex(requestedTaskIndex ?? 0);
         setResuming(false);
         return;
       }
@@ -237,7 +251,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     }
 
     void hydrateInProgressMission();
-  }, [alreadyUnlocked, location.episodes, location.id, requestedEpisodeIndex, state.profileCode, supabase, taskPositionById]);
+  }, [alreadyUnlocked, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, state.profileCode, supabase, taskPositionById]);
 
   async function finishLocation() {
     const participants = [SELF_MEMBER_ID];

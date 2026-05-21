@@ -1072,23 +1072,14 @@ export function ProfileScreen() {
       return;
     }
 
-    const localAddResult = addFriendByCode({
-      friendCode: targetProfile.code,
-      nickname: nickname || targetProfile.name
-    });
-
-    if (!localAddResult.ok) {
-      setSavingFriend(false);
-      setFriendMessageTone("error");
-      setFriendMessage(localAddResult.message);
-      return;
-    }
-
+    // Cloud flow is authoritative. After successful server insert we refresh
+    // overview instead of trying to add the same friend locally again, because
+    // realtime/profile refresh may already have inserted the friend into state.
+    await fetchProfileOverview();
     setSavingFriend(false);
     setFriendMessageTone("success");
     setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
     setFriendCode("");
-    await fetchProfileOverview();
   }
 
   function normalizePublicCode(value: string) {

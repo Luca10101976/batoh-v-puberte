@@ -50,8 +50,8 @@ type ActiveExpedition = {
 
 const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
 const AVATAR_MASK_STYLE = {
-  maskImage: "linear-gradient(to bottom, black 0%, black 84%, transparent 96%)",
-  WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 84%, transparent 96%)"
+  maskImage: "linear-gradient(to bottom, black 0%, black 78%, rgba(0,0,0,0.9) 84%, transparent 92%)",
+  WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 78%, rgba(0,0,0,0.9) 84%, transparent 92%)"
 } as const;
 
 function isEmojiAvatar(value: string) {

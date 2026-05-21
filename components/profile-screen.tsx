@@ -49,6 +49,10 @@ type ActiveExpedition = {
 };
 
 const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
+const AVATAR_MASK_STYLE = {
+  maskImage: "linear-gradient(to bottom, black 0%, black 84%, transparent 96%)",
+  WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 84%, transparent 96%)"
+} as const;
 
 function isEmojiAvatar(value: string) {
   if (value.startsWith("batuzek-")) {
@@ -69,7 +73,7 @@ function AvatarPreview({ config, size = 80, emoji }: { config: AvatarConfig; siz
             className="absolute inset-0"
             style={{ background: "radial-gradient(circle at 50% 18%, rgba(255,255,255,0.09), rgba(0,0,0,0))" }}
           />
-          <div className="relative h-[90%] w-[90%]">
+          <div className="relative h-[90%] w-[90%]" style={AVATAR_MASK_STYLE}>
             <Image
               src={`/avatars/batuzek/${emoji}.png`}
               alt="Avatar batůžek"
@@ -1345,7 +1349,7 @@ export function ProfileScreen() {
                       aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
                     >
                       <div className="absolute inset-[10px] rounded-[18px] bg-night/40" />
-                      <div className="relative z-10 mx-auto h-16 w-16 sm:h-[72px] sm:w-[72px]">
+                      <div className="relative z-10 mx-auto h-16 w-16 sm:h-[72px] sm:w-[72px]" style={AVATAR_MASK_STYLE}>
                         <Image
                           src={`/avatars/batuzek/${option}.png`}
                           alt={`Emoji ${option.replace("batuzek-", "")}`}

@@ -62,14 +62,14 @@ function AvatarPreview({ config, size = 80, emoji }: { config: AvatarConfig; siz
     if (emoji.startsWith("batuzek-")) {
       return (
         <div
-          className="relative flex items-center justify-center overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
+          className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/8 bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
           style={{ width: size, height: size }}
         >
           <div
             className="absolute inset-0"
-            style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
+            style={{ background: "radial-gradient(circle at 50% 18%, rgba(255,255,255,0.09), rgba(0,0,0,0))" }}
           />
-          <div className="relative h-[86%] w-[86%]">
+          <div className="relative h-[90%] w-[90%]">
             <Image
               src={`/avatars/batuzek/${emoji}.png`}
               alt="Avatar batůžek"
@@ -1320,13 +1320,13 @@ export function ProfileScreen() {
             <p className="mt-2 text-sm text-mist">Vyber si jedno emoji. Každá změna se uloží automaticky.</p>
 
             <div className="mt-4 flex justify-center">
-              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={120} />
+              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={132} />
             </div>
 
             <div className="mt-5 space-y-4">
               <div>
-                <p className="mb-2 text-sm font-medium">Vyber emoji</p>
-                <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
+                <p className="mb-3 text-sm font-medium">Vyber emoji</p>
+                <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
                   {EMOJI_AVATAR_OPTIONS.map((option) => (
                     <button
                       key={option}
@@ -1337,19 +1337,20 @@ export function ProfileScreen() {
                           avatarConfig: avatarDraft
                         });
                       }}
-                      className={`rounded-2xl border px-2 py-2 ${
+                      className={`group relative aspect-square overflow-hidden rounded-[22px] border transition ${
                         avatarEmojiDraft === option
-                          ? "border-lime bg-lime/15"
-                          : "border-white/10 bg-white/5 hover:border-white/20"
+                          ? "border-lime bg-lime/12 shadow-[0_0_0_1px_rgba(192,255,96,0.18)]"
+                          : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
                       }`}
                       aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
                     >
-                      <div className="relative mx-auto h-14 w-14 sm:h-16 sm:w-16">
+                      <div className="absolute inset-[10px] rounded-[18px] bg-night/40" />
+                      <div className="relative z-10 mx-auto h-16 w-16 sm:h-[72px] sm:w-[72px]">
                         <Image
                           src={`/avatars/batuzek/${option}.png`}
                           alt={`Emoji ${option.replace("batuzek-", "")}`}
                           fill
-                          sizes="64px"
+                          sizes="72px"
                           className="object-contain"
                         />
                       </div>

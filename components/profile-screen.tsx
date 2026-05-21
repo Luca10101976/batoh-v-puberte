@@ -48,25 +48,6 @@ type ActiveExpedition = {
   }>;
 };
 
-const HEAD_OPTIONS: Array<{ value: AvatarConfig["head"]; label: string }> = [
-  { value: "round", label: "Kulatá" },
-  { value: "oval", label: "Oválná" },
-  { value: "square", label: "Hranatá" }
-];
-
-const EYE_OPTIONS: Array<{ value: AvatarConfig["eyes"]; label: string }> = [
-  { value: "dot", label: "Tečky" },
-  { value: "smile", label: "Úsměv" },
-  { value: "wide", label: "Velké" }
-];
-
-const HAIR_OPTIONS: Array<{ value: AvatarConfig["hair"]; label: string }> = [
-  { value: "short", label: "Krátké" },
-  { value: "long", label: "Dlouhé" },
-  { value: "spiky", label: "Rozcuch" }
-];
-
-const COLOR_OPTIONS = ["#7EC8FF", "#B6F07A", "#FFC27A", "#FF9FC3", "#D2B6FF", "#FFD95A"];
 const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
 
 function isEmojiAvatar(value: string) {
@@ -260,9 +241,6 @@ export function ProfileScreen() {
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
     isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]
-  );
-  const [avatarMode, setAvatarMode] = useState<"emoji" | "custom">(
-    isEmojiAvatar(state.profile.avatar) ? "emoji" : "custom"
   );
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -824,7 +802,6 @@ export function ProfileScreen() {
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
     setAvatarEmojiDraft(isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]);
-    setAvatarMode(isEmojiAvatar(state.profile.avatar) ? "emoji" : "custom");
   }, [state.profile.avatar, state.profile.avatarConfig]);
 
   useEffect(() => {
@@ -905,10 +882,6 @@ export function ProfileScreen() {
       cancelled = true;
     };
   }, [cloudReady, ensureOwnCloudProfile, fetchProfileOverview]);
-
-  function selectedLabel(options: Array<{ value: string; label: string }>, value: string) {
-    return options.find((option) => option.value === value)?.label ?? value;
-  }
 
   useEffect(() => {
     if (!supabase || !state.playerCode) {
@@ -1333,7 +1306,7 @@ export function ProfileScreen() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Profil</p>
-            <h2 className="mt-2 text-xl font-semibold">Avatar studio</h2>
+            <h2 className="mt-2 text-xl font-semibold">Moje emoji</h2>
           </div>
           <button
             onClick={() => setAvatarStudioOpen((current) => !current)}
@@ -1344,181 +1317,46 @@ export function ProfileScreen() {
         </div>
         {avatarStudioOpen ? (
           <>
-            <p className="mt-2 text-sm text-mist">Každá změna se ukládá automaticky.</p>
+            <p className="mt-2 text-sm text-mist">Vyber si jedno emoji. Každá změna se uloží automaticky.</p>
 
             <div className="mt-4 flex justify-center">
-              <AvatarPreview
-                config={avatarDraft}
-                emoji={avatarMode === "emoji" ? avatarEmojiDraft : undefined}
-                size={120}
-              />
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
-              <button
-                onClick={() => {
-                  setAvatarMode("emoji");
-                  saveAvatarDebounced({
-                    avatar: avatarEmojiDraft,
-                    avatarConfig: avatarDraft
-                  });
-                }}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                  avatarMode === "emoji" ? "bg-lime text-night" : "text-mist"
-                }`}
-              >
-                Emoji
-              </button>
-              <button
-                onClick={() => {
-                  setAvatarMode("custom");
-                  saveAvatarDebounced({
-                    avatar: "PB",
-                    avatarConfig: avatarDraft
-                  });
-                }}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                  avatarMode === "custom" ? "bg-lime text-night" : "text-mist"
-                }`}
-              >
-                Kreslený
-              </button>
+              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={120} />
             </div>
 
             <div className="mt-5 space-y-4">
-              {avatarMode === "emoji" ? (
-                <div>
-                  <p className="mb-2 text-sm font-medium">Vyber emoji</p>
-                  <div className="grid grid-cols-6 gap-2">
-                    {EMOJI_AVATAR_OPTIONS.map((option) => (
-                      <button
-                        key={option}
-                        onClick={() => {
-                          setAvatarEmojiDraft(option);
-                          saveAvatarDebounced({
-                            avatar: option,
-                            avatarConfig: avatarDraft
-                          });
-                        }}
-                        className={`rounded-xl border px-2 py-2 text-xl ${
-                          avatarEmojiDraft === option
-                            ? "border-lime bg-lime/15"
-                            : "border-white/10 bg-white/5 hover:border-white/20"
-                        }`}
-                        aria-label={`Vybrat avatar ${option.replace("batuzek-", "")}`}
-                      >
-                        <div className="relative mx-auto h-9 w-9">
-                          <Image
-                            src={`/avatars/batuzek/${option}.png`}
-                            alt={`Batůžek ${option.replace("batuzek-", "")}`}
-                            fill
-                            sizes="36px"
-                            className="object-contain"
-                          />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Hlava: {selectedLabel(HEAD_OPTIONS, avatarDraft.head)}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {HEAD_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            const next = { ...avatarDraft, head: option.value };
-                            setAvatarDraft(next);
-                            saveAvatarDebounced({
-                              avatar: "PB",
-                              avatarConfig: next
-                            });
-                          }}
-                          className={`rounded-xl px-3 py-2 text-sm ${
-                            avatarDraft.head === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Oči: {selectedLabel(EYE_OPTIONS, avatarDraft.eyes)}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {EYE_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            const next = { ...avatarDraft, eyes: option.value };
-                            setAvatarDraft(next);
-                            saveAvatarDebounced({
-                              avatar: "PB",
-                              avatarConfig: next
-                            });
-                          }}
-                          className={`rounded-xl px-3 py-2 text-sm ${
-                            avatarDraft.eyes === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Vlasy: {selectedLabel(HAIR_OPTIONS, avatarDraft.hair)}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {HAIR_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            const next = { ...avatarDraft, hair: option.value };
-                            setAvatarDraft(next);
-                            saveAvatarDebounced({
-                              avatar: "PB",
-                              avatarConfig: next
-                            });
-                          }}
-                          className={`rounded-xl px-3 py-2 text-sm ${
-                            avatarDraft.hair === option.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-medium">Barva</p>
-                    <div className="flex flex-wrap gap-2">
-                      {COLOR_OPTIONS.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => {
-                            const next = { ...avatarDraft, color };
-                            setAvatarDraft(next);
-                            saveAvatarDebounced({
-                              avatar: "PB",
-                              avatarConfig: next
-                            });
-                          }}
-                          className={`h-9 w-9 rounded-full border-2 ${
-                            avatarDraft.color === color ? "border-lime" : "border-white/20"
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label={`Barva ${color}`}
+              <div>
+                <p className="mb-2 text-sm font-medium">Vyber emoji</p>
+                <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
+                  {EMOJI_AVATAR_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => {
+                        setAvatarEmojiDraft(option);
+                        saveAvatarDebounced({
+                          avatar: option,
+                          avatarConfig: avatarDraft
+                        });
+                      }}
+                      className={`rounded-2xl border px-2 py-2 ${
+                        avatarEmojiDraft === option
+                          ? "border-lime bg-lime/15"
+                          : "border-white/10 bg-white/5 hover:border-white/20"
+                      }`}
+                      aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
+                    >
+                      <div className="relative mx-auto h-14 w-14 sm:h-16 sm:w-16">
+                        <Image
+                          src={`/avatars/batuzek/${option}.png`}
+                          alt={`Emoji ${option.replace("batuzek-", "")}`}
+                          fill
+                          sizes="64px"
+                          className="object-contain"
                         />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {savingAvatar ? <p className="text-center text-xs text-mist">Ukládám avatar…</p> : null}
               {avatarMessage ? (

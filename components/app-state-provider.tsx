@@ -137,7 +137,7 @@ const initialState: AppState = {
     name: "Hráč",
     age: 11,
     title: "Lovec městských tajemství",
-    avatar: "PB",
+    avatar: "batuzek-01",
     avatarConfig: {
       head: "round",
       eyes: "dot",

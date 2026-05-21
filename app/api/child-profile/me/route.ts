@@ -28,7 +28,7 @@ type PatchPayload = {
   avatar_config?: unknown;
 };
 
-const DEFAULT_AVATAR = "🕵️";
+const DEFAULT_AVATAR = "batuzek-01";
 const DEFAULT_AVATAR_CONFIG: ChildProfileDto["avatar_config"] = {
   head: "round",
   eyes: "dot",

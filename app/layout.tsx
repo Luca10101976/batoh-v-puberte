@@ -41,11 +41,9 @@ export const metadata: Metadata = {
     images: ["/images/panbatoh-og.jpg"]
   },
   icons: {
-    icon: [
-      { url: "/icons/mozek-favicon.svg", type: "image/svg+xml" }
-    ],
-    shortcut: "/icons/mozek-favicon.svg",
-    apple: [{ url: "/icons/mozek-favicon.svg", type: "image/svg+xml" }]
+    icon: [{ url: "/icon", type: "image/png", sizes: "512x512" }],
+    shortcut: "/icon",
+    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }]
   }
 };
 

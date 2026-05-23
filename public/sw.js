@@ -1,6 +1,6 @@
 const CACHE_NAME = "batoh-v-puberte-v4";
 const OFFLINE_URL = "/offline";
-const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icons/mozek-favicon.svg"];
+const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icon", "/apple-icon"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

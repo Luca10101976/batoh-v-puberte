@@ -15,9 +15,15 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["games", "education", "travel"],
     icons: [
       {
-        src: "/icons/mozek-favicon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/icon",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any"
+      },
+      {
+        src: "/apple-icon",
+        sizes: "180x180",
+        type: "image/png",
         purpose: "any"
       }
     ]

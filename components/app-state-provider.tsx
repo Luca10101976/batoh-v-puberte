@@ -15,6 +15,7 @@ import { pickLatestActiveMission } from "@/lib/home-resume";
 import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { locations } from "@/lib/mock-data";
 import { isLocationUnlockedByChain } from "@/lib/location-unlock";
+import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 
 type SquadMember = {
   id: string;
@@ -56,6 +57,8 @@ type AppState = {
   activeMission: ActiveMissionSummary;
   lastCompletedAt: Record<string, string>;
   locationPenaltyPoints: Record<string, number>;
+  locationBestScores: Record<string, number>;
+  locationMaxScores: Record<string, number>;
   groupCompletionMembers: Record<string, string[]>;
   currentExpeditionId: string | null;
   activeMode: "solo" | "group";
@@ -103,7 +106,7 @@ type AppStateContextValue = {
   }) => void;
   completeLocation: (
     locationId: string,
-    options?: { participantIds?: string[]; penaltyPoints?: number; source?: "gameplay" | "manual" | "expedition" }
+    options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => void;
   resetProgress: () => void;
   isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean) => boolean;
@@ -150,6 +153,8 @@ const initialState: AppState = {
   activeMission: null,
   lastCompletedAt: {},
   locationPenaltyPoints: {},
+  locationBestScores: {},
+  locationMaxScores: {},
   groupCompletionMembers: {},
   currentExpeditionId: null,
   activeMode: "solo",
@@ -254,6 +259,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               : null,
           activeMission: parsed.activeMission ?? null,
           locationPenaltyPoints: parsed.locationPenaltyPoints ?? {},
+          locationBestScores: (parsed as Partial<AppState>).locationBestScores ?? {},
+          locationMaxScores: (parsed as Partial<AppState>).locationMaxScores ?? {},
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           currentExpeditionId: parsed.currentExpeditionId ?? null,
           squadMembers: migratedMembers
@@ -368,6 +375,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         completed_at: string;
         updated_at?: string;
         penalty_points?: number | null;
+        best_score?: number | null;
         first_completed_at?: string | null;
         status?: "in_progress" | "completed" | null;
       }> = [];
@@ -403,6 +411,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   completed_at: string;
                   updated_at?: string;
                   penalty_points?: number | null;
+                  best_score?: number | null;
                   first_completed_at?: string | null;
                   status?: "in_progress" | "completed" | null;
                 }>;
@@ -435,6 +444,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             activeMission: null,
             lastCompletedAt: {},
             locationPenaltyPoints: {},
+            locationBestScores: {},
+            locationMaxScores: {},
             groupCompletionMembers: {},
             currentExpeditionId: null,
             activeMode: "solo",
@@ -460,12 +471,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const completedLocationIds = Array.from(new Set(remoteRows.filter((row) => hasHistoricalLocationCompletion(row)).map((row) => row.location_id)));
         const lastCompletedAt: Record<string, string> = {};
         const locationPenaltyPoints: Record<string, number> = {};
+        const locationBestScores: Record<string, number> = {};
+        const locationMaxScores: Record<string, number> = {};
         const activeMission = pickLatestActiveMission(remoteRows);
 
         remoteRows.forEach((row) => {
           lastCompletedAt[row.location_id] = row.completed_at;
           if (typeof row.penalty_points === "number" && row.penalty_points >= 0) {
             locationPenaltyPoints[row.location_id] = row.penalty_points;
+          }
+          if (typeof (row as { best_score?: number | null }).best_score === "number" && (row as { best_score?: number | null }).best_score! >= 0) {
+            locationBestScores[row.location_id] = Math.max(0, Math.floor((row as { best_score?: number | null }).best_score ?? 0));
+          }
+          const bestScore = locationBestScores[row.location_id];
+          const missingPoints = locationPenaltyPoints[row.location_id];
+          if (typeof bestScore === "number" && typeof missingPoints === "number") {
+            locationMaxScores[row.location_id] = bestScore + missingPoints;
+          } else if (typeof bestScore === "number") {
+            locationMaxScores[row.location_id] = Math.max(bestScore, getLocationMaxScore(getLocationTaskCount(row.location_id)));
+          } else {
+            locationMaxScores[row.location_id] = getLocationMaxScore(getLocationTaskCount(row.location_id));
           }
         });
 
@@ -495,7 +520,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ),
           activeMission,
           lastCompletedAt,
-          locationPenaltyPoints
+          locationPenaltyPoints,
+          locationBestScores,
+          locationMaxScores
         };
       });
 
@@ -564,6 +591,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         activeMission: null,
         lastCompletedAt: {},
         locationPenaltyPoints: {},
+        locationBestScores: {},
+        locationMaxScores: {},
         groupCompletionMembers: {},
         currentExpeditionId: null,
         activeMode: "solo",
@@ -785,14 +814,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const getPlayerScore = useCallback(() => {
-    const basePoints = state.completedLocationIds.length * 120;
-    const penaltyPoints = Object.values(state.locationPenaltyPoints).reduce((sum, value) => sum + value, 0);
-    return Math.max(0, basePoints - penaltyPoints);
-  }, [state.completedLocationIds.length, state.locationPenaltyPoints]);
+    return state.completedLocationIds.reduce((sum, locationId) => {
+      return sum + Math.max(0, state.locationBestScores[locationId] ?? 0);
+    }, 0);
+  }, [state.completedLocationIds, state.locationBestScores]);
 
   const completeLocation = useCallback((
     locationId: string,
-    options?: { participantIds?: string[]; penaltyPoints?: number; source?: "gameplay" | "manual" | "expedition" }
+    options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => {
     setState((current) => ({
       ...current,
@@ -803,6 +832,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           const existingPenalty = current.locationPenaltyPoints[locationId];
           return typeof existingPenalty === "number" ? Math.min(existingPenalty, incomingPenalty) : incomingPenalty;
         })()
+      },
+      locationBestScores: {
+        ...current.locationBestScores,
+        [locationId]: (() => {
+          const incomingScore = Math.max(0, options?.score ?? 0);
+          const existingScore = current.locationBestScores[locationId];
+          return typeof existingScore === "number" ? Math.max(existingScore, incomingScore) : incomingScore;
+        })()
+      },
+      locationMaxScores: {
+        ...current.locationMaxScores,
+        [locationId]: Math.max(
+          options?.maxScore ?? 0,
+          current.locationMaxScores[locationId] ?? 0,
+          getLocationMaxScore(getLocationTaskCount(locationId))
+        )
       },
       completedLocationIds: current.completedLocationIds.includes(locationId)
         ? current.completedLocationIds

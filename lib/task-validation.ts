@@ -1,8 +1,7 @@
+import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
 import { getGameplayTask, getGameplayTaskIds } from "@/lib/gameplay-server";
 import type { GameplayTask } from "@/lib/gameplay-types";
 
-export const MAX_TASK_ATTEMPTS = 3;
-export const UNKNOWN_TASK_PENALTY = 15;
 const MULTI_WORD_RULES: Record<string, { minMatches: number }> = {
   "klamovka-cassel-5": { minMatches: 3 }
 };
@@ -116,16 +115,19 @@ export async function isAnswerCorrect(locationId: string, taskId: string, answer
   return isTaskAnswerCorrect(task, answer);
 }
 
-export async function computePenaltyFromTaskProgress(locationId: string, rows: TaskProgressLike[]) {
+export async function computeScoreFromTaskProgress(locationId: string, rows: TaskProgressLike[]) {
   const taskIds = await getLocationTaskIds(locationId);
   const totalTasks = taskIds.length;
   if (totalTasks === 0) {
     return {
       totalTasks: 0,
       resolvedTasks: 0,
+      correctTasks: 0,
       unknownTasks: 0,
       missingTasks: 0,
-      penaltyPoints: 0
+      maxScore: 0,
+      score: 0,
+      missingPoints: 0
     };
   }
 
@@ -139,11 +141,13 @@ export async function computePenaltyFromTaskProgress(locationId: string, rows: T
   });
 
   let resolvedTasks = 0;
+  let correctTasks = 0;
   let unknownTasks = 0;
   for (const taskId of taskIds) {
     const status = finalByTask.get(taskId);
     if (status === "correct") {
       resolvedTasks += 1;
+      correctTasks += 1;
       continue;
     }
     if (status === "unknown") {
@@ -154,12 +158,17 @@ export async function computePenaltyFromTaskProgress(locationId: string, rows: T
 
   const missingTasks = Math.max(0, totalTasks - resolvedTasks);
   const finalUnknownTasks = unknownTasks + missingTasks;
+  const maxScore = getLocationMaxScore(totalTasks);
+  const score = correctTasks * POINTS_PER_TASK;
 
   return {
     totalTasks,
     resolvedTasks,
+    correctTasks,
     unknownTasks: finalUnknownTasks,
     missingTasks,
-    penaltyPoints: finalUnknownTasks * UNKNOWN_TASK_PENALTY
+    maxScore,
+    score,
+    missingPoints: Math.max(0, maxScore - score)
   };
 }

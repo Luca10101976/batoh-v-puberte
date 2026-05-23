@@ -101,11 +101,11 @@ export function LeaderboardScreen() {
         {
           name: state.profile.name,
           score: playerScore,
-          completed: Math.round(playerScore / 120),
+          completed: state.completedLocationIds.length,
           isYou: true
         }
       ].sort((a, b) => b.score - a.score),
-    [playerScore, state.profile.name]
+    [playerScore, state.completedLocationIds.length, state.profile.name]
   );
 
   const visibleFriendsBoard = friendsBoard.length > 0 ? friendsBoard : fallbackFriendsBoard;
@@ -186,7 +186,7 @@ export function LeaderboardScreen() {
                   </div>
                   <div>
                     <div className="font-semibold">{entry.name}</div>
-                    <div className="text-xs text-mist">{entry.completed} dokončených misí</div>
+                    <div className="text-xs text-mist">{entry.completed} dokončených her</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -217,7 +217,7 @@ export function LeaderboardScreen() {
                   </div>
                   <div>
                     <div className="font-semibold">{entry.name}</div>
-                    <div className="text-xs text-mist">{entry.completed} dokončených misí celkem</div>
+                    <div className="text-xs text-mist">{entry.completed} dokončených her celkem</div>
                   </div>
                 </div>
                 <div className="text-right">

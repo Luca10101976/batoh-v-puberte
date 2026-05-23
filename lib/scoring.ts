@@ -1,6 +1,7 @@
-import { locations } from "@/lib/mock-data";
+import { locations } from "./mock-data.ts";
+import { POINTS_PER_TASK, getLocationMaxScore } from "./game-rules.ts";
 
-export const UNKNOWN_PENALTY_POINTS = 15;
+export { getLocationMaxScore } from "./game-rules.ts";
 
 type ScoreInput = {
   unknownTaskIds?: string[];
@@ -10,8 +11,14 @@ type ScoreInput = {
 
 export type ComputedScore = {
   totalTasks: number;
+  correctCount: number;
   unknownCount: number;
-  penaltyPoints: number;
+  maxScore: number;
+  score: number;
+  // Legacy DB compatibility: child_location_progress.penalty_points keeps
+  // storing "lost points" (maxScore - score), even though the product/UI
+  // now talks only in positive points for correct answers.
+  missingPoints: number;
 };
 
 function toSafeInteger(value: unknown) {
@@ -22,7 +29,7 @@ function toSafeInteger(value: unknown) {
   return Math.max(0, Math.floor(numeric));
 }
 
-export function computeMissionPenalty(locationId: string, input: ScoreInput): ComputedScore {
+export function getLocationTaskCount(locationId: string) {
   const location = locations.find((item) => item.id === locationId);
   const taskIds = new Set<string>();
 
@@ -30,14 +37,28 @@ export function computeMissionPenalty(locationId: string, input: ScoreInput): Co
     episode.tasks.forEach((task) => taskIds.add(task.id));
   });
 
-  const totalTasks = taskIds.size;
+  return taskIds.size;
+}
+
+export function computeMissionScore(locationId: string, input: ScoreInput): ComputedScore {
+  const totalTasks = getLocationTaskCount(locationId);
+
   if (totalTasks <= 0) {
     return {
       totalTasks: 0,
+      correctCount: 0,
       unknownCount: 0,
-      penaltyPoints: 0
+      maxScore: 0,
+      score: 0,
+      missingPoints: 0
     };
   }
+
+  const location = locations.find((item) => item.id === locationId);
+  const taskIds = new Set<string>();
+  location?.episodes.forEach((episode) => {
+    episode.tasks.forEach((task) => taskIds.add(task.id));
+  });
 
   let unknownCount = 0;
   const rawUnknownTaskIds = Array.isArray(input.unknownTaskIds) ? input.unknownTaskIds : [];
@@ -53,16 +74,22 @@ export function computeMissionPenalty(locationId: string, input: ScoreInput): Co
   } else if (typeof input.unknownCount === "number") {
     unknownCount = toSafeInteger(input.unknownCount);
   } else if (typeof input.penaltyPoints === "number") {
-    // Legacy compatibility fallback: convert old client payload to task-based unknown count.
-    unknownCount = toSafeInteger(input.penaltyPoints) / UNKNOWN_PENALTY_POINTS;
+    // Legacy compatibility fallback: convert lost points back to unknown task count.
+    unknownCount = toSafeInteger(input.penaltyPoints) / POINTS_PER_TASK;
     unknownCount = Math.floor(unknownCount);
   }
 
   unknownCount = Math.min(totalTasks, Math.max(0, unknownCount));
+  const correctCount = Math.max(0, totalTasks - unknownCount);
+  const maxScore = getLocationMaxScore(totalTasks);
+  const score = correctCount * POINTS_PER_TASK;
 
   return {
     totalTasks,
+    correctCount,
     unknownCount,
-    penaltyPoints: unknownCount * UNKNOWN_PENALTY_POINTS
+    maxScore,
+    score,
+    missingPoints: Math.max(0, maxScore - score)
   };
 }

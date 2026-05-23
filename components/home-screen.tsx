@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { CitySelector } from "@/components/city-selector";
 import { useAppState } from "@/components/app-state-provider";
-import { buildResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
+import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
 import { locations, type MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement } from "@/lib/location-unlock";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
@@ -97,33 +97,11 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         return;
       }
 
-      const response = await fetch("/api/game/location-progress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          profileCode: state.profileCode,
-          locationId: location.id
-        })
-      }).catch(() => null);
-
-      if (!response?.ok) {
-        if (!cancelled) {
-          setResumeCard(null);
-        }
-        return;
-      }
-
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            task_progress?: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
-            location?: { status?: "in_progress" | "completed" | null };
-          }
-        | null;
-
-      const nextResumeCard = buildResumeMissionCard(location, payload);
+      const nextResumeCard = await resolveResumeMissionCard({
+        accessToken,
+        profileCode: state.profileCode,
+        location
+      });
       if (!cancelled) {
         setResumeCard(nextResumeCard);
       }

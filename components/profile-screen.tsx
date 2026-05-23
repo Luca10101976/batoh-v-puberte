@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
+import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
 import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
+import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type ChildProfileRow = {
@@ -252,6 +254,7 @@ export function ProfileScreen() {
   const [avatarMessageTone, setAvatarMessageTone] = useState<MessageTone>("neutral");
   const [gamesFilter, setGamesFilter] = useState<"all" | "active" | "completed">("all");
   const [visibleGamesCount, setVisibleGamesCount] = useState(6);
+  const [activeResumeCard, setActiveResumeCard] = useState<ResumeMissionCard | null>(null);
   const avatarSaveTimeoutRef = useRef<number | null>(null);
   const avatarSaveRequestIdRef = useRef(0);
   const supabase = useMemo(() => {
@@ -271,6 +274,44 @@ export function ProfileScreen() {
     () => locations.find((location) => location.id === state.activeMission?.locationId) ?? null,
     [state.activeMission]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateProfileResumeCard() {
+      if (!supabase || !state.registrationCompleted || !state.profileCode || !activeLocation) {
+        if (!cancelled) {
+          setActiveResumeCard(null);
+        }
+        return;
+      }
+
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (!accessToken) {
+        if (!cancelled) {
+          setActiveResumeCard(null);
+        }
+        return;
+      }
+
+      const nextResumeCard = await resolveResumeMissionCard({
+        accessToken,
+        profileCode: state.profileCode,
+        location: activeLocation
+      });
+
+      if (!cancelled) {
+        setActiveResumeCard(nextResumeCard);
+      }
+    }
+
+    void hydrateProfileResumeCard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLocation, state.profileCode, state.registrationCompleted, supabase]);
+
   const gameSummaries = useMemo(() => {
     const completedIds = new Set(state.completedLocationIds);
     const activeId = state.activeMission?.locationId ?? null;
@@ -278,9 +319,11 @@ export function ProfileScreen() {
     const rows = locations
       .filter((location) => completedIds.has(location.id) || location.id === activeId)
       .map((location) => {
-        const maxPoints = 120;
-        const penalty = state.locationPenaltyPoints[location.id] ?? 0;
-        const earnedPoints = Math.max(0, maxPoints - penalty);
+        const maxPoints = Math.max(
+          state.locationMaxScores[location.id] ?? 0,
+          getLocationMaxScore(getLocationTaskCount(location.id))
+        );
+        const earnedPoints = Math.max(0, state.locationBestScores[location.id] ?? 0);
         const isActive = location.id === activeId;
         const isCompleted = completedIds.has(location.id);
 
@@ -290,9 +333,9 @@ export function ProfileScreen() {
           city: location.city,
           status: isActive ? ("active" as const) : ("completed" as const),
           statusLabel: isActive ? "Rozehráno" : "Dokončeno",
-          scoreLabel: isCompleted ? `${earnedPoints}/${maxPoints} bodů` : "Rozehráno",
+          scoreLabel: isCompleted ? `${earnedPoints}/${maxPoints} bodů` : (activeResumeCard?.progressText ?? "Rozehráno"),
           actionLabel: isActive ? "Pokračovat" : "Zahrát znovu",
-          href: isActive ? `/play/${location.id}` : `/locations/${location.id}`,
+          href: isActive ? (activeResumeCard?.href ?? `/play/${location.id}`) : `/locations/${location.id}`,
           updatedAt: isActive ? (state.activeMission?.updatedAt ?? "") : (state.lastCompletedAt[location.id] ?? ""),
           isCompleted
         };
@@ -304,7 +347,7 @@ export function ProfileScreen() {
       });
 
     return rows;
-  }, [state.activeMission, state.completedLocationIds, state.lastCompletedAt, state.locationPenaltyPoints]);
+  }, [activeResumeCard, state.activeMission, state.completedLocationIds, state.lastCompletedAt, state.locationBestScores, state.locationMaxScores]);
   const completedGamesCount = useMemo(
     () => gameSummaries.filter((game) => game.status === "completed").length,
     [gameSummaries]

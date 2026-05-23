@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
-import { computeMissionPenalty } from "@/lib/scoring";
-import { computePenaltyFromTaskProgress } from "@/lib/task-validation";
+import { computeMissionScore } from "@/lib/scoring";
+import { computeScoreFromTaskProgress } from "@/lib/task-validation";
 import { deriveCompletionUpdate } from "@/lib/location-completion-state";
 
 type ChildProfileRow = {
@@ -117,13 +117,13 @@ export async function POST(request: NextRequest) {
   const source: "gameplay" | "manual" | "expedition" =
     body.source === "manual" || body.source === "expedition" ? body.source : "gameplay";
   const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
-  const scoring = computeMissionPenalty(locationId, {
+  const scoring = computeMissionScore(locationId, {
     unknownTaskIds: body.unknownTaskIds,
     unknownCount: body.unknownCount,
     penaltyPoints: body.penaltyPoints
   });
-  const penaltyPoints = scoring.penaltyPoints;
-  const bestScore = Math.max(0, 120 - penaltyPoints);
+  const missingPoints = scoring.missingPoints;
+  const bestScore = scoring.score;
 
   if (!profileCode || !locationId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -214,7 +214,8 @@ export async function POST(request: NextRequest) {
     .map((code) => childProfileIdByCanonicalCode.get(code))
     .filter((id): id is string => Boolean(id));
 
-  const penaltyByCode = new Map<string, number>(canonicalParticipants.map((code) => [code, penaltyPoints]));
+  const missingPointsByCode = new Map<string, number>(canonicalParticipants.map((code) => [code, missingPoints]));
+  const scoreByCode = new Map<string, number>(canonicalParticipants.map((code) => [code, bestScore]));
   if (canonicalParticipantChildIds.length > 0) {
     const { data: taskProgressRows, error: taskProgressError } = await admin
       .from("child_task_progress")
@@ -239,8 +240,9 @@ export async function POST(request: NextRequest) {
         if (rows.length === 0) {
           continue;
         }
-        const computed = await computePenaltyFromTaskProgress(locationId, rows);
-        penaltyByCode.set(code, computed.penaltyPoints);
+        const computed = await computeScoreFromTaskProgress(locationId, rows);
+        missingPointsByCode.set(code, computed.missingPoints);
+        scoreByCode.set(code, computed.score);
       }
     }
   }
@@ -276,10 +278,10 @@ export async function POST(request: NextRequest) {
       profile_code: code,
       location_id: locationId,
       completed_at: completedAt,
-      penalty_points: Math.max(0, penaltyByCode.get(code) ?? penaltyPoints),
+      penalty_points: Math.max(0, missingPointsByCode.get(code) ?? missingPoints),
       status: "completed",
       completion_source: source,
-      best_score: Math.max(0, 120 - Math.max(0, penaltyByCode.get(code) ?? penaltyPoints)),
+      best_score: Math.max(0, scoreByCode.get(code) ?? bestScore),
       first_completed_at: gameplayUnlockEligible ? completedAt : null
     }));
   if (gameplayUnlockEligible) {
@@ -292,10 +294,12 @@ export async function POST(request: NextRequest) {
       return false;
     }
 
-    const finalPenalty = Math.max(0, penaltyByCode.get(code) ?? penaltyPoints);
+    const finalMissingPoints = Math.max(0, missingPointsByCode.get(code) ?? missingPoints);
+    const finalScore = Math.max(0, scoreByCode.get(code) ?? bestScore);
     const decision = deriveCompletionUpdate({
       existing,
-      finalPenalty,
+      finalScore,
+      finalMissingPoints,
       source,
       hasExtendedProgressColumns
     });
@@ -345,11 +349,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const finalPenalty = Math.max(0, penaltyByCode.get(profile_code) ?? penaltyPoints);
-      const finalBestScore = Math.max(0, 120 - finalPenalty);
+      const finalMissingPoints = Math.max(0, missingPointsByCode.get(profile_code) ?? missingPoints);
+      const finalBestScore = Math.max(0, scoreByCode.get(profile_code) ?? bestScore);
       const decision = deriveCompletionUpdate({
         existing,
-        finalPenalty,
+        finalScore: finalBestScore,
+        finalMissingPoints,
         source,
         hasExtendedProgressColumns
       });
@@ -358,8 +363,8 @@ export async function POST(request: NextRequest) {
         completed_at: completedAt
       };
 
-      if (typeof existing.penalty_points !== "number" || existing.penalty_points > finalPenalty) {
-        nextPayload.penalty_points = finalPenalty;
+      if (typeof existing.penalty_points !== "number" || existing.penalty_points > finalMissingPoints) {
+        nextPayload.penalty_points = finalMissingPoints;
       }
       if (hasExtendedProgressColumns) {
         nextPayload.status = "completed";

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { locations } from "@/lib/mock-data";
+import { scoreRowsByProfile, type LeaderboardProgressRow } from "@/lib/leaderboard-scoring";
 
 type ChildProfileRow = {
   id: string;
@@ -22,37 +23,16 @@ type ChildProgressRow = {
   profile_code: string;
   location_id: string;
   penalty_points?: number | null;
+  best_score?: number | null;
+  first_completed_at?: string | null;
+  completed_at?: string | null;
+  status?: "in_progress" | "completed" | null;
 };
 
 type LeaderboardScope = "friends" | "global";
 
 function normalizeCode(value: string) {
   return value.trim().toUpperCase();
-}
-
-function scoreRowsByProfile(rows: ChildProgressRow[]) {
-  const map = new Map<string, { locations: Set<string>; score: number }>();
-
-  rows.forEach((row) => {
-    const code = normalizeCode(row.profile_code);
-    if (!map.has(code)) {
-      map.set(code, { locations: new Set<string>(), score: 0 });
-    }
-
-    const entry = map.get(code);
-    if (!entry) {
-      return;
-    }
-    if (entry.locations.has(row.location_id)) {
-      return;
-    }
-
-    entry.locations.add(row.location_id);
-    const penaltyPoints = Math.max(0, Number(row.penalty_points) || 0);
-    entry.score += Math.max(0, 120 - penaltyPoints);
-  });
-
-  return map;
 }
 
 function publicAlias(name: string) {
@@ -244,19 +224,19 @@ export async function POST(request: NextRequest) {
     let progressRows: ChildProgressRow[] = [];
     const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await admin
       .from("child_location_progress")
-      .select("profile_code, location_id, penalty_points")
+      .select("profile_code, location_id, penalty_points, best_score, first_completed_at, completed_at, status")
       .in("profile_code", profileCodes);
     if (progressRowsWithPenaltyError?.code === "42703") {
       const { data: progressRowsLegacy } = await admin
         .from("child_location_progress")
-        .select("profile_code, location_id")
+        .select("profile_code, location_id, penalty_points, best_score, first_completed_at, completed_at, status")
         .in("profile_code", profileCodes);
       progressRows = (progressRowsLegacy as ChildProgressRow[] | null) ?? [];
     } else {
       progressRows = (progressRowsWithPenalty as ChildProgressRow[] | null) ?? [];
     }
 
-    const scoreMap = scoreRowsByProfile(progressRows);
+    const scoreMap = scoreRowsByProfile(progressRows as LeaderboardProgressRow[]);
 
     const entries = typedProfiles
       .map((profile) => {
@@ -293,19 +273,19 @@ export async function POST(request: NextRequest) {
   let progressRows: ChildProgressRow[] = [];
   const { data: progressRowsWithPenalty, error: progressRowsWithPenaltyError } = await admin
     .from("child_location_progress")
-    .select("profile_code, location_id, penalty_points")
+    .select("profile_code, location_id, penalty_points, best_score, first_completed_at, completed_at, status")
     .in("location_id", allLocationIds);
   if (progressRowsWithPenaltyError?.code === "42703") {
     const { data: progressRowsLegacy } = await admin
       .from("child_location_progress")
-      .select("profile_code, location_id")
+      .select("profile_code, location_id, penalty_points, best_score, first_completed_at, completed_at, status")
       .in("location_id", allLocationIds);
     progressRows = (progressRowsLegacy as ChildProgressRow[] | null) ?? [];
   } else {
     progressRows = (progressRowsWithPenalty as ChildProgressRow[] | null) ?? [];
   }
 
-  const scoredByProfile = scoreRowsByProfile(progressRows);
+  const scoredByProfile = scoreRowsByProfile(progressRows as LeaderboardProgressRow[]);
 
   const entries = typedAllProfiles
     .map((profile) => {

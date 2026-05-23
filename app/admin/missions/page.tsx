@@ -3,6 +3,7 @@ import { deleteMissionAction, deleteStopAction, enableMozekEditingAction, toggle
 import type { MissionRow, MissionStopRow } from "@/app/admin/types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions } from "@/lib/mock-data";
+import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,7 @@ function getFallbackMissions(): MissionRow[] {
           .map((item) => Number(item))
           .filter((item) => Number.isFinite(item)) || [45])
       ),
-      points: Number(mission.boost.match(/\d+/)?.[0] ?? 120),
+      points: getLocationMaxScore(getLocationTaskCount(location.id)),
       is_published: true,
       created_at: new Date(Date.UTC(2024, 0, index + 1)).toISOString()
     };

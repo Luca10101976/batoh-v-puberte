@@ -160,15 +160,16 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm text-mist">Body</span>
+            <span className="text-sm text-mist">Max bodů (informativně)</span>
             <input
               name="points"
               type="number"
               min={0}
-              defaultValue={mission?.points ?? 120}
+              defaultValue={mission?.points ?? 0}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
               required
             />
+            <p className="text-xs text-mist">Ve veřejné hře se maximum počítá podle počtu úkolů krát 10. Tohle pole je jen doprovodná informace v Mozku.</p>
             {state.fieldErrors?.points ? <p className="text-xs text-coral">{state.fieldErrors.points}</p> : null}
           </label>
         </div>

@@ -58,7 +58,7 @@ export const nearbyMissions = [
     locationId: "klamovka",
     city: "Praha",
     distance: "Praha 5",
-    boost: "+120 bodů",
+    boost: "Až 180 bodů",
     status: "Městská mise"
   },
   {
@@ -66,7 +66,7 @@ export const nearbyMissions = [
     locationId: "budejovice-zaba",
     city: "České Budějovice",
     distance: "1-2 h v centru",
-    boost: "+180 bodů",
+    boost: "Až 130 bodů",
     status: "Výletová mise"
   }
 ];

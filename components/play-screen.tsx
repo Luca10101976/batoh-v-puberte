@@ -11,10 +11,10 @@ import { parseRequestedPlayStep } from "@/lib/play-resume";
 import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
+import { POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
-const UNKNOWN_PENALTY_POINTS = 15;
 const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
 type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
@@ -264,10 +264,14 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     const unknownTaskIds = Object.entries(taskOutcomes)
       .filter(([, outcome]) => outcome === "unknown")
       .map(([taskId]) => taskId);
-    const penaltyPoints = unknownCount * UNKNOWN_PENALTY_POINTS;
+    const maxScore = getLocationMaxScore(totalTasks);
+    const score = knownCount * POINTS_PER_TASK;
+    const missingPoints = Math.max(0, maxScore - score);
     completeLocation(location.id, {
       participantIds: participants,
-      penaltyPoints,
+      score,
+      maxScore,
+      penaltyPoints: missingPoints,
       source: "gameplay"
     });
 
@@ -299,7 +303,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           const payload = (await response.json()) as { participantCodes?: string[] };
           const participantIds = (payload.participantCodes ?? []).map((code) => code.trim().toUpperCase());
           if (participantIds.length > 0) {
-            completeLocation(location.id, { participantIds, penaltyPoints, source: "gameplay" });
+            completeLocation(location.id, { participantIds, score, maxScore, penaltyPoints: missingPoints, source: "gameplay" });
           }
         }
       }
@@ -347,7 +351,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       status: "correct" | "wrong" | "unknown";
       attempts: number;
       remainingAttempts: number;
-      penaltyPointsForTask: number;
+      awardedPointsForTask: number;
       locked: boolean;
     };
   }
@@ -404,14 +408,14 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: result.attempts }));
     if (result.status === "correct") {
       setStatus("correct");
-      setMessage("Správně.");
+      setMessage(`Správně. Za tenhle úkol máš ${POINTS_PER_TASK} bodů.`);
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
       return;
     }
 
     if (result.status === "unknown") {
       setStatus("unknown");
-      setMessage(`Třetí pokus nevyšel, bereme to jako Nevím (-${UNKNOWN_PENALTY_POINTS} bodů).`);
+      setMessage("Třetí pokus nevyšel. Tenhle úkol se uzavírá jako Nevím a je za 0 bodů.");
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
       return;
     }
@@ -432,7 +436,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       return;
     }
     setStatus("unknown");
-    setMessage(`Nevadí, jdeme dál. Odečítáme ${UNKNOWN_PENALTY_POINTS} bodů.`);
+    setMessage("Nevadí, jdeme dál. Za tenhle úkol je 0 bodů.");
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
   }
 
@@ -544,15 +548,15 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="rounded-2xl bg-white/5 p-3">
               <div className="text-xl font-semibold text-lime">{knownCount}</div>
-              <div className="text-xs text-mist">Vím</div>
+              <div className="text-xs text-mist">Správně</div>
             </div>
             <div className="rounded-2xl bg-white/5 p-3">
               <div className="text-xl font-semibold">{unknownCount}</div>
               <div className="text-xs text-mist">Nevím</div>
             </div>
             <div className="rounded-2xl bg-white/5 p-3">
-              <div className="text-xl font-semibold">{totalTasks}</div>
-              <div className="text-xs text-mist">Celkově</div>
+              <div className="text-xl font-semibold">{knownCount * POINTS_PER_TASK}/{getLocationMaxScore(totalTasks)}</div>
+              <div className="text-xs text-mist">Body</div>
             </div>
           </div>
         </section>
@@ -766,7 +770,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         ) : null}
 
         <p className="mt-3 text-xs text-mist/80">
-          Pravidlo: Na odpověď máš 2 pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím (−{UNKNOWN_PENALTY_POINTS} bodů).
+          Pravidlo: Správná odpověď = {POINTS_PER_TASK} bodů. Na odpověď máš 2 opravné pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím a je za 0 bodů.
         </p>
 
         {activeTask.type === "photo" ? (
@@ -809,7 +813,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 disabled={submittingAnswer || verificationFinished}
                 className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
               >
-                Přeskočit −{UNKNOWN_PENALTY_POINTS}
+                Nevím
               </button>
               <button
                 onClick={advance}

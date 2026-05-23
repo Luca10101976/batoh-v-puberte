@@ -1,5 +1,6 @@
 import { locations, nearbyMissions } from "@/lib/mock-data";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
+import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { taskAnswers } from "@/lib/task-answers";
 
@@ -25,12 +26,6 @@ function parseDurationMinutes(value: string) {
   }
 
   return Math.max(...parsed);
-}
-
-function parseMissionPoints(locationId: string) {
-  const nearby = nearbyMissions.find((mission) => mission.locationId === locationId);
-  const pointsMatch = nearby?.boost.match(/\d+/);
-  return pointsMatch ? Number(pointsMatch[0]) : 120;
 }
 
 function mapTaskType(value: string): "otevrena" | "vyber" | "ano-ne" {
@@ -195,7 +190,7 @@ export async function bootstrapMozekContent() {
       hero_image_url: location.image,
       difficulty: mapDifficulty(location.difficulty),
       duration_min: parseDurationMinutes(location.duration),
-      points: parseMissionPoints(location.id),
+      points: getLocationMaxScore(getLocationTaskCount(location.id)),
       is_published: true
     };
   });

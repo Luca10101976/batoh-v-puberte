@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import {
-  MAX_TASK_ATTEMPTS,
-  UNKNOWN_TASK_PENALTY,
   getTaskByLocationAndId,
   isTaskAnswerCorrect
 } from "@/lib/task-validation";
 import { isCompletedLocationProgress } from "@/lib/location-progress-state";
+import { resolveAnswerAttempt } from "@/lib/task-attempt";
+import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK } from "@/lib/game-rules";
 
 type ChildProfileRow = {
   id: string;
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       status: existingRow.status,
       attempts: existingRow.attempts,
       remainingAttempts: 0,
-      penaltyPointsForTask: existingRow.penalty_points,
+      awardedPointsForTask: existingRow.status === "correct" ? POINTS_PER_TASK : 0,
       locked: true
     });
   }
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     : Math.max(0, existingRow?.attempts ?? 0);
   let nextStatus: "correct" | "wrong" | "unknown" = "wrong";
   let nextAttempts = currentAttempts;
-  let penaltyPointsForTask = 0;
+  let missingPointsForTask = 0;
 
   if (action === "confirm_manual") {
     if (task.type !== "photo") {
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
   } else if (action === "mark_unknown") {
     nextStatus = "unknown";
     nextAttempts = Math.max(1, currentAttempts);
-    penaltyPointsForTask = UNKNOWN_TASK_PENALTY;
+    missingPointsForTask = POINTS_PER_TASK;
   } else {
     if (task.type === "photo") {
       return NextResponse.json({ ok: false, error: "photo_task_requires_manual_action" }, { status: 400 });
@@ -181,16 +181,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_answer" }, { status: 400 });
     }
 
-    nextAttempts = currentAttempts + 1;
-    if (isTaskAnswerCorrect(task, answer)) {
-      nextStatus = "correct";
-    } else if (nextAttempts >= MAX_TASK_ATTEMPTS) {
-      nextStatus = "unknown";
-      penaltyPointsForTask = UNKNOWN_TASK_PENALTY;
-      nextAttempts = MAX_TASK_ATTEMPTS;
-    } else {
-      nextStatus = "wrong";
-    }
+    const attemptOutcome = resolveAnswerAttempt({
+      currentAttempts,
+      isCorrect: isTaskAnswerCorrect(task, answer)
+    });
+    nextStatus = attemptOutcome.status;
+    nextAttempts = attemptOutcome.attempts;
+    missingPointsForTask = nextStatus === "unknown" ? POINTS_PER_TASK : 0;
   }
 
   if (nextAttempts > MAX_TASK_ATTEMPTS) {
@@ -206,7 +203,7 @@ export async function POST(request: NextRequest) {
       status: nextStatus,
       attempts: nextAttempts,
       remainingAttempts,
-      penaltyPointsForTask,
+      awardedPointsForTask: nextStatus === "correct" ? POINTS_PER_TASK : 0,
       locked: false,
       replay: true
     });
@@ -219,7 +216,7 @@ export async function POST(request: NextRequest) {
     task_id: taskId,
     status: nextStatus,
     attempts: nextAttempts,
-    penalty_points: penaltyPointsForTask,
+    penalty_points: missingPointsForTask,
     first_answered_at: existingRow ? undefined : new Date().toISOString(),
     last_answered_at: new Date().toISOString()
   };
@@ -302,7 +299,7 @@ export async function POST(request: NextRequest) {
     status: nextStatus,
     attempts: nextAttempts,
     remainingAttempts,
-    penaltyPointsForTask,
+    awardedPointsForTask: nextStatus === "correct" ? POINTS_PER_TASK : 0,
     locked: false
   });
 }

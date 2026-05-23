@@ -7,13 +7,14 @@ export type ExistingCompletionRow = {
 
 export function deriveCompletionUpdate(args: {
   existing: ExistingCompletionRow | null;
-  finalPenalty: number;
+  finalScore: number;
+  finalMissingPoints: number;
   source: "gameplay" | "manual" | "expedition";
   hasExtendedProgressColumns?: boolean;
 }) {
-  const { existing, finalPenalty, source, hasExtendedProgressColumns = true } = args;
+  const { existing, finalScore, finalMissingPoints, source, hasExtendedProgressColumns = true } = args;
   const gameplayUnlockEligible = source === "gameplay" || source === "expedition";
-  const finalBestScore = Math.max(0, 120 - Math.max(0, finalPenalty));
+  const finalBestScore = Math.max(0, finalScore);
 
   if (!existing) {
     return {
@@ -25,12 +26,14 @@ export function deriveCompletionUpdate(args: {
     };
   }
 
-  const shouldImprovePenalty =
-    typeof existing.penalty_points === "number" ? existing.penalty_points > finalPenalty : hasExtendedProgressColumns;
+  const shouldImproveMissingPoints =
+    typeof existing.penalty_points === "number"
+      ? existing.penalty_points > finalMissingPoints
+      : hasExtendedProgressColumns;
   const shouldSetFirstCompleted = gameplayUnlockEligible && !existing.first_completed_at;
   const shouldFinalizeStatus = hasExtendedProgressColumns && existing.status !== "completed";
   const bestScoreUpdated = typeof existing.best_score !== "number" || existing.best_score < finalBestScore;
-  const shouldUpdate = shouldImprovePenalty || shouldSetFirstCompleted || shouldFinalizeStatus;
+  const shouldUpdate = shouldImproveMissingPoints || shouldSetFirstCompleted || shouldFinalizeStatus || bestScoreUpdated;
 
   return {
     shouldInsert: false,

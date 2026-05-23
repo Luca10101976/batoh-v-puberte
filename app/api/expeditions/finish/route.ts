@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { locations } from "@/lib/mock-data";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
-import { computeMissionPenalty } from "@/lib/scoring";
-import { computePenaltyFromTaskProgress } from "@/lib/task-validation";
+import { computeMissionScore } from "@/lib/scoring";
+import { computeScoreFromTaskProgress } from "@/lib/task-validation";
+import { deriveCompletionUpdate } from "@/lib/location-completion-state";
 
 type SessionPlayerRow = {
   child_profile_id: string;
@@ -69,12 +70,13 @@ export async function POST(request: NextRequest) {
   const sessionId = (body.sessionId ?? "").trim();
   const missionId = (body.missionId ?? "").trim();
   const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
-  const scoring = computeMissionPenalty(missionId, {
+  const scoring = computeMissionScore(missionId, {
     unknownTaskIds: body.unknownTaskIds,
     unknownCount: body.unknownCount,
     penaltyPoints: body.penaltyPoints
   });
-  let penaltyPoints = scoring.penaltyPoints;
+  let missingPoints = scoring.missingPoints;
+  let bestScore = scoring.score;
 
   if (!sessionId || !missionId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -135,9 +137,10 @@ export async function POST(request: NextRequest) {
     .eq("location_id", missionId);
 
   if (!leaderTaskProgressError) {
-    const computed = await computePenaltyFromTaskProgress(missionId, (leaderTaskProgressRows as TaskProgressPenaltyRow[] | null) ?? []);
+    const computed = await computeScoreFromTaskProgress(missionId, (leaderTaskProgressRows as TaskProgressPenaltyRow[] | null) ?? []);
     if (computed.totalTasks > 0) {
-      penaltyPoints = computed.penaltyPoints;
+      missingPoints = computed.missingPoints;
+      bestScore = computed.score;
     }
   }
 
@@ -170,10 +173,10 @@ export async function POST(request: NextRequest) {
       profile_code: code,
       location_id: missionId,
       completed_at: completedAt,
-      penalty_points: penaltyPoints,
+      penalty_points: missingPoints,
       status: "completed" as const,
       completion_source: "expedition" as const,
-      best_score: Math.max(0, 120 - penaltyPoints),
+      best_score: bestScore,
       first_completed_at: completedAt
     }));
 
@@ -182,10 +185,14 @@ export async function POST(request: NextRequest) {
     if (!existing) {
       return false;
     }
-    if (typeof existing.penalty_points === "number") {
-      return existing.penalty_points > penaltyPoints;
-    }
-    return hasPenaltyColumn;
+    const decision = deriveCompletionUpdate({
+      existing,
+      finalScore: bestScore,
+      finalMissingPoints: missingPoints,
+      source: "expedition",
+      hasExtendedProgressColumns
+    });
+    return decision.shouldUpdate;
   });
 
   if (rowsToInsert.length > 0) {
@@ -220,14 +227,23 @@ export async function POST(request: NextRequest) {
       let updateError: { code?: string } | null = null;
       if (typeof existing.penalty_points === "number") {
         const updatePayload: Record<string, unknown> = {
-          penalty_points: penaltyPoints,
+          penalty_points: missingPoints,
           completed_at: completedAt
         };
         if (hasExtendedProgressColumns) {
+          const decision = deriveCompletionUpdate({
+            existing,
+            finalScore: bestScore,
+            finalMissingPoints: missingPoints,
+            source: "expedition",
+            hasExtendedProgressColumns
+          });
           updatePayload.status = "completed";
           updatePayload.completion_source = "expedition";
-          updatePayload.best_score = Math.max(0, 120 - penaltyPoints);
-          if (!existing.first_completed_at) {
+          if (decision.bestScoreUpdated) {
+            updatePayload.best_score = bestScore;
+          }
+          if (decision.firstCompletionTriggered) {
             updatePayload.first_completed_at = completedAt;
           }
         }
@@ -236,18 +252,27 @@ export async function POST(request: NextRequest) {
           .update(updatePayload)
           .eq("profile_code", profile_code)
           .eq("location_id", missionId)
-          .gt("penalty_points", penaltyPoints);
+          .gt("penalty_points", missingPoints);
         updateError = error;
       } else {
         const updatePayload: Record<string, unknown> = {
-          penalty_points: penaltyPoints,
+          penalty_points: missingPoints,
           completed_at: completedAt
         };
         if (hasExtendedProgressColumns) {
+          const decision = deriveCompletionUpdate({
+            existing,
+            finalScore: bestScore,
+            finalMissingPoints: missingPoints,
+            source: "expedition",
+            hasExtendedProgressColumns
+          });
           updatePayload.status = "completed";
           updatePayload.completion_source = "expedition";
-          updatePayload.best_score = Math.max(0, 120 - penaltyPoints);
-          if (!existing.first_completed_at) {
+          if (decision.bestScoreUpdated) {
+            updatePayload.best_score = bestScore;
+          }
+          if (decision.firstCompletionTriggered) {
             updatePayload.first_completed_at = completedAt;
           }
         }

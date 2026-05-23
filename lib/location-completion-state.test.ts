@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { deriveCompletionUpdate } from './location-completion-state.ts';
 
 test('first completion triggers unlock and completed status', () => {
-  const result = deriveCompletionUpdate({ existing: null, finalPenalty: 15, source: 'gameplay' });
+  const result = deriveCompletionUpdate({ existing: null, finalScore: 40, finalMissingPoints: 0, source: 'gameplay' });
   assert.equal(result.shouldInsert, true);
   assert.equal(result.firstCompletionTriggered, true);
   assert.equal(result.nextStatus, 'completed');
@@ -11,8 +11,9 @@ test('first completion triggers unlock and completed status', () => {
 
 test('replay in-progress row finalizes without second unlock', () => {
   const result = deriveCompletionUpdate({
-    existing: { status: 'in_progress', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 30, best_score: 90 },
-    finalPenalty: 15,
+    existing: { status: 'in_progress', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 10, best_score: 110 },
+    finalScore: 120,
+    finalMissingPoints: 0,
     source: 'gameplay'
   });
   assert.equal(result.shouldUpdate, true);
@@ -23,8 +24,9 @@ test('replay in-progress row finalizes without second unlock', () => {
 
 test('replay completion keeps better historical result when new score is worse', () => {
   const result = deriveCompletionUpdate({
-    existing: { status: 'completed', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 15, best_score: 105 },
-    finalPenalty: 30,
+    existing: { status: 'completed', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 0, best_score: 120 },
+    finalScore: 110,
+    finalMissingPoints: 10,
     source: 'gameplay'
   });
   assert.equal(result.firstCompletionTriggered, false);
@@ -33,8 +35,9 @@ test('replay completion keeps better historical result when new score is worse',
 
 test('replay never triggers second unlock', () => {
   const result = deriveCompletionUpdate({
-    existing: { status: 'completed', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 30, best_score: 90 },
-    finalPenalty: 10,
+    existing: { status: 'completed', first_completed_at: '2026-05-20T10:00:00.000Z', penalty_points: 10, best_score: 110 },
+    finalScore: 120,
+    finalMissingPoints: 0,
     source: 'gameplay'
   });
   assert.equal(result.firstCompletionTriggered, false);

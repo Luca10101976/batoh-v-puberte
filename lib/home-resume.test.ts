@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResumeMissionCard, pickLatestActiveMission } from "./home-resume.ts";
+import { buildResumeMissionCard, pickLatestActiveMission, resolveResumeMissionCard } from "./home-resume.ts";
 
 const sampleLocation = {
   id: "klamovka",
@@ -75,4 +75,24 @@ test("CTA Pokračovat vede na přesný rozehraný krok hry", () => {
 
   assert.ok(card);
   assert.equal(card.href, "/play/klamovka?episode=1&task=2");
+});
+
+test("sdílené resume načtení vrací stejný přesný href i pro další vstupní body", async () => {
+  const card = await resolveResumeMissionCard({
+    accessToken: "token",
+    profileCode: "BAT-TEST",
+    location: sampleLocation,
+    fetchImpl: (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          location: { status: "in_progress" },
+          task_progress: [{ task_id: "t1", status: "correct", attempts: 1 }]
+        })
+      })) as typeof fetch
+  });
+
+  assert.ok(card);
+  assert.equal(card.href, "/play/klamovka?episode=1&task=2");
+  assert.equal(card.progressText, "Zastavení 1/2 • Úkol 2/2");
 });

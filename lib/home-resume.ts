@@ -42,6 +42,11 @@ export type ResumeMissionCard = {
   href: string;
 };
 
+type ResumeFetchPayload = {
+  task_progress?: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
+  location?: { status?: "in_progress" | "completed" | null };
+} | null;
+
 export function pickLatestActiveMission(progressRows: ActiveMissionRow[]): ActiveMissionSummary {
   const getActivityAt = (row: ActiveMissionRow) => row.updated_at?.trim() || row.completed_at?.trim() || "";
   const latestRow =
@@ -105,4 +110,36 @@ export function buildResumeMissionCard(
     )}/${currentPosition.episode.tasks.length}`,
     href: `/play/${location.id}?episode=${currentPosition.episodeIndex + 1}&task=${currentPosition.taskIndex + 1}`
   };
+}
+
+export async function resolveResumeMissionCard(args: {
+  accessToken: string;
+  profileCode: string;
+  location: ResumeMissionLocation;
+  fetchImpl?: typeof fetch;
+}): Promise<ResumeMissionCard | null> {
+  const accessToken = args.accessToken.trim();
+  const profileCode = args.profileCode.trim();
+  if (!accessToken || !profileCode) {
+    return null;
+  }
+
+  const response = await (args.fetchImpl ?? fetch)("/api/game/location-progress", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      profileCode,
+      locationId: args.location.id
+    })
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return null;
+  }
+
+  const payload = (await response.json().catch(() => null)) as ResumeFetchPayload;
+  return buildResumeMissionCard(args.location, payload);
 }

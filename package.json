@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "score:migrate:dry-run": "node --experimental-strip-types scripts/recalculate-historical-scores.mjs --dry-run",
+    "score:migrate:apply": "node --experimental-strip-types scripts/recalculate-historical-scores.mjs --apply",
     "verify:runtime-readonly": "node scripts/verify-runtime-readonly.mjs",
     "test:home-resume": "node --test --experimental-strip-types lib/home-resume.test.ts"
   },

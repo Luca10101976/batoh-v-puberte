@@ -66,9 +66,10 @@ function canonicalizeProfiles(rows: ChildProfileRow[]) {
       return;
     }
 
-    const existingTs = Math.max(toTimestamp(existing.updated_at), toTimestamp(existing.created_at));
-    const rowTs = Math.max(toTimestamp(row.updated_at), toTimestamp(row.created_at));
-    if (rowTs >= existingTs) {
+    // Kanonický profil = nejstarší řádek (stejné pravidlo jako login a pin/verify).
+    const existingTs = toTimestamp(existing.created_at);
+    const rowTs = toTimestamp(row.created_at);
+    if (rowTs < existingTs || (rowTs === existingTs && row.id < existing.id)) {
       byParent.set(parentId, row);
     }
   });

@@ -82,7 +82,8 @@ export async function POST(request: Request) {
         .from("child_profiles")
         .select("id, profile_code, created_at")
         .eq("parent_user_id", user.id)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(1);
 
   const { data: profileRows, error: profileError } = await profileQuery;

@@ -362,15 +362,37 @@ async function buildPrintableHtml(locationId?: string) {
         font-size: 12px;
         color: #556b90;
       }
+      .sheet-footer {
+        border-radius: 16px;
+        padding: 14px 16px;
+        margin-top: 4px;
+        color: #fff;
+        background: linear-gradient(135deg, #0f2142 0%, #1f3a71 70%, #3a4f87 100%);
+        page-break-inside: avoid;
+      }
+      .sheet-footer .cta-title { font-size: 16px; font-weight: 800; }
+      .sheet-footer .cta-url {
+        margin-top: 6px;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: #b6f07a;
+      }
+      .sheet-footer .cta-sub { margin-top: 6px; font-size: 12px; color: rgba(255,255,255,0.88); }
     </style>
   </head>
   <body>
     <header class="sheet-header">
       <div class="sheet-title">Pan Batůžek - tisková hra</div>
-      <div class="sheet-sub">Vytiskni, hraj venku, doma přepiš výsledek do aplikace.</div>
+      <div class="sheet-sub">Vytiskni, hraj venku, doma přepiš výsledek do aplikace na www.postope.cz</div>
     </header>
     <p class="print-note">Tip: ideální je oboustranný tisk. Odpovědi piš přímo do listu.</p>
     ${locationSections}
+    <footer class="sheet-footer">
+      <div class="cta-title">Bavilo tě to? Zahraj si další hry v aplikaci</div>
+      <div class="cta-url">www.postope.cz</div>
+      <div class="cta-sub">Body za odpovědi, žebříček s kamarády a nové mise. Funguje na mobilu, bez instalace a zdarma.</div>
+    </footer>
   </body>
 </html>`;
 }

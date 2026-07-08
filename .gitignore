@@ -20,3 +20,5 @@ kdo_ukradl_hedvicin_recept_tisk.md
 back-office-app/
 exports/
 outputs/
+.env*.local
+.claude/

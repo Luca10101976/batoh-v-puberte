@@ -24,14 +24,10 @@ Mobile-first PWA pro mestskou hru pro deti 10+, postavena na Next.js 14, Tailwin
 - Pod rodicem se ulozi profil ditete do tabulky `child_profiles`
 - Na stejnem i novem zarizeni se po prihlaseni rodice nacte stejny profil ditete
 
-## Rodicovske e-maily pri registraci
+## Rodicovske e-maily
 
-Pro realne odesilani e-mailu je potreba nastavit ve Vercel environment variables:
-
-- `RESEND_API_KEY` - API klic z Resend
-- `PARENT_ALERT_FROM_EMAIL` - overena odesilaci adresa (napr. `postope@panbatoh.cz`)
-
-Po nastaveni promennych redeployni aplikaci. Bez toho registrace skonci chybou odeslani e-mailu.
+Odebrano (cervenec 2026). Od rodicovskeho rozhrani se ustoupilo - registrace zadny e-mail neposila.
+Env promenne `RESEND_API_KEY` a `PARENT_ALERT_FROM_EMAIL` uz aplikace nepouziva a lze je z Vercelu smazat.
 
 ## Navrzene dalsi iterace
 

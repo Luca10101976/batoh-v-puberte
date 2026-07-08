@@ -71,12 +71,6 @@ export const nearbyMissions = [
   }
 ];
 
-export const activityFeed = [
-  { friend: "Ema", action: "dokončila Klamovku", ago: "před 18 min" },
-  { friend: "Matěj", action: "založil výpravu Lovci stop", ago: "před 37 min" },
-  { friend: "Sofi", action: "předběhla tě v žebříčku", ago: "před 1 h" }
-];
-
 export const locations: MapLocation[] = [
   {
     id: "klamovka",
@@ -508,41 +502,4 @@ export const locations: MapLocation[] = [
       }
     ]
   }
-];
-
-export const leaderboard = [
-  { name: "Ema", city: "Praha", score: 31, squad: "Noční parta", delta: "+2 dnes" },
-  { name: "Matyáš", city: "Brno", score: 29, squad: "Mostaři", delta: "+1 dnes" },
-  { name: "Týna", city: "Praha", score: 24, squad: "Výprava 4A", delta: "Tvoje pozice" },
-  { name: "Sofi", city: "Olomouc", score: 21, squad: "Kamenné listy", delta: "+3 dnes" }
-];
-
-export const squads = [
-  { name: "Noční parta", members: 5, score: 82, city: "Praha" },
-  { name: "Mostaři", members: 4, score: 74, city: "Brno" },
-  { name: "Výprava 4A", members: 6, score: 68, city: "Praha" }
-];
-
-export const profileProgress = [
-  { label: "Lokace", value: "24" },
-  { label: "Body", value: "920" },
-  { label: "Top série", value: "8" }
-];
-
-export const friends = [
-  { initials: "EM", name: "Ema", unlocked: 31, streak: "5 dní v řadě", status: "Teď venku" },
-  { initials: "MA", name: "Matyáš", unlocked: 29, streak: "3 dny", status: "Připraven na výpravu" },
-  { initials: "SO", name: "Sofi", unlocked: 21, streak: "2 dny", status: "Hledá další lokaci" }
-];
-
-export const safetySteps = [
-  "Při startu mise odejde rodiči e-mail s lokací a časem.",
-  "Aplikace hlídá, jestli jsi poblíž doporučené oblasti.",
-  "Když hra skončí, rodič dostane potvrzení o dokončení."
-];
-
-export const squadMembers = [
-  { name: "Týna", state: "Potvrzeno" },
-  { name: "Ema", state: "Potvrzeno" },
-  { name: "Sofi", state: "Čeká na připojení" }
 ];

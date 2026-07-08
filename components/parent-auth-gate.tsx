@@ -363,27 +363,7 @@ export function ParentAuthGate() {
     const profileCode = profilePayload.profile.profile_code;
     const playerCode = profilePayload.profile.player_code || profileCode;
 
-    const parentAlertResponse = await fetch("/api/parent-alert", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-      },
-      body: JSON.stringify({
-        event: "registration",
-        childName: trimmedName,
-        childAge: numericAge
-      })
-    }).catch(() => null);
-
-    if (!parentAlertResponse?.ok) {
-      const responsePayload = await parentAlertResponse?.json().catch(() => null);
-      const responseMessage =
-        typeof responsePayload?.message === "string" ? responsePayload.message : "E-mail se nepodařilo odeslat.";
-      setInfo(`Profil hráče je uložený. Informační e-mail neodešel: ${responseMessage}`);
-    } else {
-      setInfo("Profil hráče je uložený a informační e-mail byl odeslaný.");
-    }
+    setInfo("Profil hráče je uložený.");
 
     registrationAppliedRef.current = true;
     completeRegistration({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { constantTimeEquals } from "@/lib/constant-time";
 
 function unauthorizedResponse() {
   return new NextResponse("Mozek vyžaduje přihlášení.", {
@@ -45,7 +46,7 @@ function isInternalNextAdminRequest(request: NextRequest) {
   );
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAdminPath = pathname.startsWith("/admin");
   const isMozekPath = pathname.startsWith("/mozek");
@@ -73,7 +74,11 @@ export function middleware(request: NextRequest) {
     return unauthorizedResponse();
   }
 
-  if (credentials.username !== expectedUser || credentials.password !== expectedPass) {
+  const [userMatches, passMatches] = await Promise.all([
+    constantTimeEquals(credentials.username, expectedUser),
+    constantTimeEquals(credentials.password, expectedPass)
+  ]);
+  if (!userMatches || !passMatches) {
     return unauthorizedResponse();
   }
 

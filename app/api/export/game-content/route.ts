@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { constantTimeEquals } from "@/lib/constant-time";
 import { locations } from "@/lib/mock-data";
 import { getGameplayLocation, getPublishedLocationIds } from "@/lib/gameplay-server";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
@@ -54,7 +55,7 @@ function parseBasicAuth(authorization: string) {
   }
 }
 
-function isAuthorizedForAdminExport(request: Request) {
+async function isAuthorizedForAdminExport(request: Request) {
   const expectedUser = process.env.ADMIN_BASIC_USER?.trim();
   const expectedPass = process.env.ADMIN_BASIC_PASS?.trim();
 
@@ -68,7 +69,11 @@ function isAuthorizedForAdminExport(request: Request) {
     return { ok: false as const, missingConfig: false as const };
   }
 
-  if (credentials.username !== expectedUser || credentials.password !== expectedPass) {
+  const [userMatches, passMatches] = await Promise.all([
+    constantTimeEquals(credentials.username, expectedUser),
+    constantTimeEquals(credentials.password, expectedPass)
+  ]);
+  if (!userMatches || !passMatches) {
     return { ok: false as const, missingConfig: false as const };
   }
 
@@ -513,7 +518,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const adminAccess = isAuthorizedForAdminExport(request);
+  const adminAccess = await isAuthorizedForAdminExport(request);
   if (!adminAccess.ok) {
     if (adminAccess.missingConfig) {
       return NextResponse.json({ ok: false, error: "missing_admin_basic_auth_env" }, { status: 503 });

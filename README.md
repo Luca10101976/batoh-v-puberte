@@ -1,4 +1,4 @@
-# Pan Batoh
+# Batoh v pubertě
 
 Mobile-first PWA pro mestskou hru pro deti 10+, postavena na Next.js 14, Tailwind CSS a Supabase.
 

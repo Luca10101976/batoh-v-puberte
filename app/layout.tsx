@@ -30,7 +30,7 @@ export const metadata: Metadata = {
         url: "/images/panbatoh-og.jpg",
         width: 683,
         height: 683,
-        alt: "Pan Batoh - logo"
+        alt: "Batoh v pubertě - logo"
       }
     ]
   },

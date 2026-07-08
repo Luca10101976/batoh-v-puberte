@@ -14,69 +14,6 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase();
 }
 
-const RESEND_API_URL = "https://api.resend.com/emails";
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-async function sendFriendAddedEmail({
-  to,
-  friendName,
-  friendCode
-}: {
-  to: string;
-  friendName: string;
-  friendCode: string;
-}) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.PARENT_ALERT_FROM_EMAIL ?? "postope@panbatoh.cz";
-
-  if (!resendApiKey || !to) {
-    return;
-  }
-
-  const subject = `Batoh v pubertě: nový kamarád ${friendName}`;
-  const safeName = escapeHtml(friendName);
-  const safeCode = escapeHtml(friendCode);
-  const text = [
-    "Ahoj,",
-    "",
-    `nově přidaný kamarád: ${friendName}`,
-    `hráčský kód: ${friendCode}`,
-    "",
-    "Tým Batoh v pubertě"
-  ].join("\n");
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-      <p>Ahoj,</p>
-      <p>nově přidaný kamarád: <strong>${safeName}</strong></p>
-      <p>hráčský kód: <strong>${safeCode}</strong></p>
-      <p style="margin-top: 18px;">Tým Batoh v pubertě</p>
-    </div>
-  `;
-
-  await fetch(RESEND_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [to],
-      subject,
-      text,
-      html
-    })
-  }).catch(() => undefined);
-}
-
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey =
@@ -244,21 +181,6 @@ export async function POST(request: NextRequest) {
 
   if (insertError) {
     return NextResponse.json({ ok: false, error: "friendship_insert_failed" }, { status: 500 });
-  }
-
-  if (targetProfile.contact_email?.trim()) {
-    await sendFriendAddedEmail({
-      to: targetProfile.contact_email.trim(),
-      friendName: ownProfile.child_name,
-      friendCode: ownPublicCode
-    });
-  }
-  if (ownProfile.contact_email?.trim()) {
-    await sendFriendAddedEmail({
-      to: ownProfile.contact_email.trim(),
-      friendName: targetProfile.child_name,
-      friendCode: targetResolvedPublicCode
-    });
   }
 
   return NextResponse.json({

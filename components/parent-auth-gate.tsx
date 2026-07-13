@@ -493,7 +493,7 @@ export function ParentAuthGate() {
       <section className="glass-card w-full max-w-md p-6">
         <div className="mb-5 text-center">
           <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
-          <p className="mt-1 text-sm text-mist">Choď městem, luště, objevuj.</p>
+          <p className="mt-1 text-sm text-mist">Tohle město něco skrývá.</p>
         </div>
         <div className="flex gap-2 rounded-2xl bg-white/5 p-2">
           <button

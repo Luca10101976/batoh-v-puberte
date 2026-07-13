@@ -136,9 +136,17 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
-      <header className="pt-1">
+      <header className="relative pt-1 pr-20">
         <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
         <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">Choď městem, luště, objevuj.</h1>
+        <Image
+          src="/icons/traki-transparent.png"
+          alt="Traki"
+          width={96}
+          height={96}
+          priority
+          className="pointer-events-none absolute -right-1 top-0 h-20 w-20 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
+        />
       </header>
 
       {resumeCard ? (

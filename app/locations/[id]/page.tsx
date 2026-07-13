@@ -18,13 +18,13 @@ export async function generateMetadata({ params }: LocationDetailPageProps): Pro
   }
 
   return {
-    title: `${location.name} | Batoh v pubertě`,
+    title: `${location.name} | Traki na stopě`,
     description: location.teaser,
     alternates: {
       canonical: `/locations/${location.id}`
     },
     openGraph: {
-      title: `${location.name} | Batoh v pubertě`,
+      title: `${location.name} | Traki na stopě`,
       description: location.teaser,
       url: `/locations/${location.id}`,
       images: [
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: LocationDetailPageProps): Pro
     },
     twitter: {
       card: "summary_large_image",
-      title: `${location.name} | Batoh v pubertě`,
+      title: `${location.name} | Traki na stopě`,
       description: location.teaser,
       images: [location.image]
     }

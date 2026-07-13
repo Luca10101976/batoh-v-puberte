@@ -3,7 +3,7 @@ import { PaperScoreScreen } from "@/components/paper-score-screen";
 import { getPublishedLocationIds } from "@/lib/gameplay-server";
 
 export const metadata: Metadata = {
-  title: "Papírová varianta | Batoh v pubertě",
+  title: "Papírová varianta | Traki na stopě",
   description: "Stáhni si tiskovou verzi mise a po návratu zadej stejné odpovědi do aplikace.",
   alternates: {
     canonical: "/paper-score"

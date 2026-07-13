@@ -3,7 +3,7 @@ import { HomeScreen } from "@/components/home-screen";
 import { getGameplayLocation, getPublishedLocationIds } from "@/lib/gameplay-server";
 
 export const metadata: Metadata = {
-  title: "Domů | Batoh v pubertě",
+  title: "Domů | Traki na stopě",
   description: "Vyber hru, plň úkoly a sbírej body v městské hře pro děti.",
   alternates: {
     canonical: "/"

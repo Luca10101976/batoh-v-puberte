@@ -70,7 +70,7 @@ export default function ResetPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Batoh v pubertě</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
         <h1 className="mt-3 text-2xl font-bold tracking-tight">Nastav si nové heslo</h1>
 
         {checking ? (

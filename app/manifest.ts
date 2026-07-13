@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Batoh v pubertě",
-    short_name: "Batoh",
+    name: "Traki na stopě",
+    short_name: "Traki",
     description: "Městská hra pro děti 10+ s fyzickými úkoly po městě.",
     start_url: "/",
     display: "standalone",
@@ -15,13 +15,13 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["games", "education", "travel"],
     icons: [
       {
-        src: "/icon",
+        src: "/icon.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any"
       },
       {
-        src: "/apple-icon",
+        src: "/apple-icon.png",
         sizes: "180x180",
         type: "image/png",
         purpose: "any"

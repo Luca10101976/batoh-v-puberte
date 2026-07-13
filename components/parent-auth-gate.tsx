@@ -457,7 +457,7 @@ export function ParentAuthGate() {
                 type="text"
                 value={childName}
                 onChange={(event) => setChildName(event.target.value)}
-                placeholder="Pan Batůžek"
+                placeholder="Traki"
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
               />
             </label>
@@ -492,7 +492,7 @@ export function ParentAuthGate() {
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
         <div className="mb-5 text-center">
-          <p className="text-xs uppercase tracking-[0.24em] text-lime">Batoh v pubertě</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
           <p className="mt-1 text-sm text-mist">Choď městem, luště, objevuj.</p>
         </div>
         <div className="flex gap-2 rounded-2xl bg-white/5 p-2">

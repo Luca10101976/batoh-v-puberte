@@ -234,7 +234,7 @@ async function buildPrintableHtml(locationId?: string) {
     episodes: location.episodes
   }));
 
-  const title = printableLocations.length === 1 ? printableLocations[0].name : "Batoh v pubertě - herní sešit";
+  const title = printableLocations.length === 1 ? printableLocations[0].name : "Traki na stopě - herní sešit";
 
   const locationSections =
     printableLocations.length > 0
@@ -388,7 +388,7 @@ async function buildPrintableHtml(locationId?: string) {
   </head>
   <body>
     <header class="sheet-header">
-      <div class="sheet-title">Batoh v pubertě - tisková hra</div>
+      <div class="sheet-title">Traki na stopě - tisková hra</div>
       <div class="sheet-sub">Vytiskni, hraj venku, doma přepiš výsledek do aplikace na www.postope.cz</div>
     </header>
     <p class="print-note">Tip: ideální je oboustranný tisk. Odpovědi piš přímo do listu.</p>

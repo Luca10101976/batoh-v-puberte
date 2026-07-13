@@ -137,7 +137,7 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
       <header className="pt-1">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Batoh v pubertě</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
         <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">Choď městem, luště, objevuj.</h1>
       </header>
 

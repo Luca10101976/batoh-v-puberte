@@ -343,7 +343,7 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 text-center">
         <section className="glass-card w-full p-6">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky">Batoh v pubertě</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-sky">Traki na stopě</p>
           <h1 className="mt-3 text-2xl font-bold">Načítám hru…</h1>
           <p className="mt-2 text-sm text-mist">Kontroluji přihlášení a připravuji výpravu.</p>
         </section>

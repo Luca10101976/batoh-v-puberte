@@ -7,9 +7,9 @@ import { getAppVersion } from "@/lib/app-version";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://batoh-v-puberte.vercel.app";
 
 export const metadata: Metadata = {
-  title: "Batoh v pubertě",
+  title: "Traki na stopě",
   description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-  applicationName: "Batoh v pubertě",
+  applicationName: "Traki na stopě",
   metadataBase: new URL(siteUrl),
   alternates: {
     canonical: "/"
@@ -22,28 +22,28 @@ export const metadata: Metadata = {
     type: "website",
     locale: "cs_CZ",
     url: "/",
-    title: "Batoh v pubertě",
+    title: "Traki na stopě",
     description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-    siteName: "Batoh v pubertě",
+    siteName: "Traki na stopě",
     images: [
       {
-        url: "/images/panbatoh-og.jpg",
-        width: 683,
-        height: 683,
-        alt: "Batoh v pubertě - logo"
+        url: "/images/og-traki.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Traki na stopě - logo"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Batoh v pubertě",
+    title: "Traki na stopě",
     description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-    images: ["/images/panbatoh-og.jpg"]
+    images: ["/images/og-traki.jpg"]
   },
   icons: {
-    icon: [{ url: "/icon", type: "image/png", sizes: "512x512" }],
-    shortcut: "/icon",
-    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }]
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }]
   }
 };
 

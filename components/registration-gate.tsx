@@ -57,7 +57,7 @@ export function RegistrationGate() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Pan Batůžek"
+              placeholder="Traki"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-lime/60 focus:bg-white/10"
             />
           </label>

@@ -140,8 +140,9 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
           <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">
-            V každém městě jsou skrytá tajemství, která je třeba odhalit. Které tajemství odhalíš dnes?
+            V každém městě jsou skrytá tajemství, která je třeba odhalit.
           </h1>
+          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-lime">Které tajemství odhalíš dnes?</p>
         </div>
         <Image
           src="/icons/traki-transparent.png"

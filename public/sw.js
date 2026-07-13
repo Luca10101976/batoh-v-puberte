@@ -1,6 +1,14 @@
-const CACHE_NAME = "batoh-v-puberte-v4";
+const CACHE_NAME = "batoh-v-puberte-v5-traki";
 const OFFLINE_URL = "/offline";
-const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icon", "/apple-icon"];
+const PRECACHE_URLS = [
+  "/",
+  "/offline",
+  "/manifest.webmanifest",
+  "/icons/traki-favicon-32.png",
+  "/icons/traki-icon-192.png",
+  "/icons/traki-icon-512.png",
+  "/icons/traki-apple-icon-180.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

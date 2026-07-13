@@ -8,7 +8,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://batoh-v-puberte.ver
 
 export const metadata: Metadata = {
   title: "Batoh v pubertě",
-  description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
+  description: "Městská hra s Trakim pro objevování města, úkoly a soutěž s kamarády.",
   applicationName: "Batoh v pubertě",
   metadataBase: new URL(siteUrl),
   alternates: {
@@ -23,27 +23,31 @@ export const metadata: Metadata = {
     locale: "cs_CZ",
     url: "/",
     title: "Batoh v pubertě",
-    description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
+    description: "Městská hra s Trakim pro objevování města, úkoly a soutěž s kamarády.",
     siteName: "Batoh v pubertě",
     images: [
       {
-        url: "/images/panbatoh-og.jpg",
-        width: 683,
-        height: 683,
-        alt: "Batoh v pubertě - logo"
+        url: "/images/traki-og.png",
+        width: 1200,
+        height: 630,
+        alt: "Traki - hlavní hrdina hry Batoh v pubertě"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
     title: "Batoh v pubertě",
-    description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-    images: ["/images/panbatoh-og.jpg"]
+    description: "Městská hra s Trakim pro objevování města, úkoly a soutěž s kamarády.",
+    images: ["/images/traki-og.png"]
   },
   icons: {
-    icon: [{ url: "/icon", type: "image/png", sizes: "512x512" }],
-    shortcut: "/icon",
-    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }]
+    icon: [
+      { url: "/icons/traki-favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/icons/traki-favicon-64.png", type: "image/png", sizes: "64x64" },
+      { url: "/icons/traki-icon-512.png", type: "image/png", sizes: "512x512" }
+    ],
+    shortcut: "/icons/traki-favicon-32.png",
+    apple: [{ url: "/icons/traki-apple-icon-180.png", type: "image/png", sizes: "180x180" }]
   }
 };
 

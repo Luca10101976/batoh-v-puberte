@@ -136,18 +136,20 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
-      <header className="relative pt-1 pr-20">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
-        <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">
-          V tomhle městě je schovaný kůň, peklo i tvůj bod navíc.
-        </h1>
+      <header className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
+          <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">
+            V každém městě jsou skrytá tajemství, která je třeba odhalit. Které tajemství odhalíš dnes?
+          </h1>
+        </div>
         <Image
           src="/icons/traki-transparent.png"
           alt="Traki"
-          width={96}
-          height={96}
+          width={112}
+          height={112}
           priority
-          className="pointer-events-none absolute -right-1 top-0 h-20 w-20 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
+          className="pointer-events-none h-24 w-24 flex-none -scale-x-100 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.35)] sm:h-28 sm:w-28"
         />
       </header>
 

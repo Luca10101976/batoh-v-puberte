@@ -42,11 +42,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/favicon.ico", type: "image/x-icon", sizes: "any" },
       { url: "/icons/traki-favicon-32.png", type: "image/png", sizes: "32x32" },
       { url: "/icons/traki-favicon-64.png", type: "image/png", sizes: "64x64" },
       { url: "/icons/traki-icon-512.png", type: "image/png", sizes: "512x512" }
     ],
-    shortcut: "/icons/traki-favicon-32.png",
+    shortcut: "/favicon.ico",
     apple: [{ url: "/icons/traki-apple-icon-180.png", type: "image/png", sizes: "180x180" }]
   }
 };

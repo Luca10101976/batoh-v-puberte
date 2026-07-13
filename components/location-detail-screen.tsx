@@ -14,6 +14,16 @@ function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
 }
 
+function formatTaskCount(count: number) {
+  if (count === 1) {
+    return "1 úkol";
+  }
+  if (count >= 2 && count <= 4) {
+    return `${count} úkoly`;
+  }
+  return `${count} úkolů`;
+}
+
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
   const router = useRouter();
@@ -110,7 +120,7 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
                   <div className="font-medium">{episode.name}</div>
                   <span className="text-xs text-lime">Otevřít</span>
                 </div>
-                <div className="mt-1 text-sm text-mist">{episode.tasks.length} úkolů a jedna stopa</div>
+                <div className="mt-1 text-sm text-mist">{formatTaskCount(episode.tasks.length)} a jedna stopa</div>
               </Link>
             ) : (
               <div key={episode.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 opacity-75">
@@ -121,46 +131,50 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
                     {unlocked ? "Otevře se po přihlášení" : "Zamčeno"}
                   </span>
                 </div>
-                <div className="mt-1 text-sm text-mist">{episode.tasks.length} úkolů a jedna stopa</div>
+                <div className="mt-1 text-sm text-mist">{formatTaskCount(episode.tasks.length)} a jedna stopa</div>
               </div>
             )
           ))}
         </div>
       </section>
 
-      {canUsePlayerFeatures ? (
-        <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
-          <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
-          <p className="mt-2 text-sm leading-6 text-mist">
-            Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
-            aplikace, aby vznikl skutečný výsledek, body i případné odemčení další hry.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <a
-              href={`/api/export/game-content?format=print&locationId=${location.id}`}
-              className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
-            >
-              Stáhnout tiskovou verzi
-            </a>
+      <section className="glass-card p-5">
+        <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
+        <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
+        <p className="mt-2 text-sm leading-6 text-mist">
+          Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
+          aplikace, aby vznikl skutečný výsledek, body i případné odemčení další hry.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <a
+            href={`/api/export/game-content?format=print&locationId=${location.id}`}
+            className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
+          >
+            Stáhnout tiskovou verzi
+          </a>
+          {canUsePlayerFeatures ? (
             <Link
               href={`/play/${location.id}?mode=solo`}
               className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime"
             >
               Otevřít hru v aplikaci
             </Link>
-          </div>
-        </section>
-      ) : (
-        <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Jak to funguje</p>
-          <h2 className="mt-2 text-xl font-semibold">Místo si můžeš projít hned, hrát začneš až po přihlášení</h2>
-          <p className="mt-2 text-sm leading-6 text-mist">
-            Jako návštěvník si můžeš prohlédnout trasu i detail hry. Body, progres a samotné hraní se odemknou až po
-            přihlášení hráče.
+          ) : (
+            <button
+              onClick={() => (unlocked ? startMission() : undefined)}
+              disabled={!unlocked}
+              className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Přihlásit a hrát
+            </button>
+          )}
+        </div>
+        {!canUsePlayerFeatures ? (
+          <p className="mt-3 text-sm leading-6 text-mist">
+            Tiskovku si stáhneš i bez přihlášení. Body, progres a hraní v appce se odemknou až po přihlášení hráče.
           </p>
-        </section>
-      )}
+        ) : null}
+      </section>
 
     </main>
   );

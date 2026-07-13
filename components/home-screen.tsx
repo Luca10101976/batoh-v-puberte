@@ -37,6 +37,26 @@ function formatTaskCount(count: number) {
   return `${count} úkolů`;
 }
 
+// Lokativ (6. pád) názvu města pro spojení „v <město>".
+// Známá města mají ruční tvar, ostatní se nechají beze změny.
+const CITY_LOCATIVE: Record<string, string> = {
+  Praha: "Praze",
+  Brno: "Brně",
+  Ostrava: "Ostravě",
+  Plzeň: "Plzni",
+  Olomouc: "Olomouci",
+  "České Budějovice": "Českých Budějovicích",
+  Liberec: "Liberci",
+  "Hradec Králové": "Hradci Králové",
+  "Ústí nad Labem": "Ústí nad Labem",
+  Pardubice: "Pardubicích",
+  Zlín: "Zlíně"
+};
+
+function cityLocative(city: string) {
+  return CITY_LOCATIVE[city] ?? city;
+}
+
 export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLocation[] }) {
   const { state, isLocationUnlocked, setCity } = useAppState();
   const [resumeCard, setResumeCard] = useState<ResumeMissionCard | null>(null);
@@ -116,6 +136,11 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
+      <header className="pt-1">
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Batoh v pubertě</p>
+        <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">Choď městem, luště, objevuj.</h1>
+      </header>
+
       {resumeCard ? (
         <section className="glass-card border-lime/30 bg-lime/10 p-4 sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -159,12 +184,12 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
             <p className="text-xs uppercase tracking-[0.24em] text-coral">Přehled všech her</p>
             <h2 className="mt-2 text-xl font-semibold">
               {cityLocations.length === 0
-                ? `Hry v ${state.city}`
+                ? `Hry v ${cityLocative(state.city)}`
                 : cityLocations.length === 1
-                  ? `1 hra v ${state.city}`
+                  ? `1 hra v ${cityLocative(state.city)}`
                   : cityLocations.length >= 2 && cityLocations.length <= 4
-                    ? `${cityLocations.length} hry v ${state.city}`
-                    : `${cityLocations.length} her v ${state.city}`}
+                    ? `${cityLocations.length} hry v ${cityLocative(state.city)}`
+                    : `${cityLocations.length} her v ${cityLocative(state.city)}`}
             </h2>
             <p className="mt-2 text-sm leading-6 text-mist">
               Tady je celý katalog her v tomhle městě. Nic dalšího není schované mimo tenhle výběr.

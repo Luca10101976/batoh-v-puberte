@@ -71,6 +71,19 @@ export default function AuthCallbackPage() {
           data: { session }
         } = await supabase.auth.getSession();
 
+        // Obnova hesla: po ověření odkazu vznikne dočasná session, ale uživatel
+        // musí nejdřív zadat nové heslo, teprve pak ho pustíme do hry.
+        if (type === "recovery") {
+          if (session?.user) {
+            setMessage("Odkaz je ověřený. Nastav si nové heslo…");
+            router.replace("/auth/reset");
+          } else {
+            setMessage("Odkaz na obnovu hesla vypršel. Požádej prosím o nový.");
+            router.replace("/");
+          }
+          return;
+        }
+
         if (session?.user) {
           setMessage("Účet je potvrzený. Přesměrovávám na dokončení profilu…");
           router.replace("/?auth=confirmed");

@@ -79,7 +79,7 @@ export function RegistrationGate() {
               type="email"
               value={parentEmail}
               onChange={(event) => setParentEmail(event.target.value)}
-              placeholder="postope@panbatoh.cz"
+              placeholder="tvuj@email.cz"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-lime/60 focus:bg-white/10"
             />
           </label>

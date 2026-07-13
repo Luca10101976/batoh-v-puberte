@@ -54,6 +54,33 @@ export function ParentAuthGate() {
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
 
+  async function handleForgotPassword() {
+    setError("");
+    setInfo("");
+
+    if (!supabase) {
+      setError("Chybí konfigurace přihlášení. Otevři aplikaci znovu.");
+      return;
+    }
+
+    const email = accountEmail.trim().toLowerCase();
+    if (!email.includes("@") || !email.includes(".")) {
+      setError("Napiš nejdřív svůj e-mail a pak klikni na Zapomenuté heslo.");
+      return;
+    }
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`
+    });
+
+    if (resetError) {
+      setError("Odeslání odkazu se nepodařilo. Zkus to prosím za chvíli.");
+      return;
+    }
+
+    setInfo("Poslali jsme ti e-mail s odkazem na obnovu hesla. Zkontroluj schránku i spam.");
+  }
+
   const hydrateFromCloud = useCallback(
     async (parentUserEmail: string, providedAccessToken?: string) => {
       if (!supabase || registrationAppliedRef.current) {
@@ -464,6 +491,10 @@ export function ParentAuthGate() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
+        <div className="mb-5 text-center">
+          <p className="text-xs uppercase tracking-[0.24em] text-lime">Batoh v pubertě</p>
+          <p className="mt-1 text-sm text-mist">Choď městem, luště, objevuj.</p>
+        </div>
         <div className="flex gap-2 rounded-2xl bg-white/5 p-2">
           <button
             onClick={() => setMode("login")}
@@ -496,7 +527,7 @@ export function ParentAuthGate() {
               type="email"
               value={accountEmail}
               onChange={(event) => setAccountEmail(event.target.value)}
-              placeholder="postope@panbatoh.cz"
+              placeholder="tvuj@email.cz"
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none"
             />
           </label>
@@ -525,6 +556,16 @@ export function ParentAuthGate() {
                 ? "Přihlásit"
                 : "Vytvořit účet"}
           </button>
+
+          {mode === "login" ? (
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="w-full pt-1 text-center text-sm text-mist underline underline-offset-4 transition hover:text-white"
+            >
+              Zapomenuté heslo?
+            </button>
+          ) : null}
         </form>
       </section>
     </main>

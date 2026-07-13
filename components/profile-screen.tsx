@@ -51,10 +51,6 @@ type ActiveExpedition = {
 };
 
 const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
-const AVATAR_MASK_STYLE = {
-  maskImage: "linear-gradient(to bottom, black 0%, black 78%, rgba(0,0,0,0.9) 84%, transparent 92%)",
-  WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 78%, rgba(0,0,0,0.9) 84%, transparent 92%)"
-} as const;
 
 function isEmojiAvatar(value: string) {
   if (value.startsWith("batuzek-")) {
@@ -68,14 +64,14 @@ function AvatarPreview({ config, size = 80, emoji }: { config: AvatarConfig; siz
     if (emoji.startsWith("batuzek-")) {
       return (
         <div
-          className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/8 bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+          className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/10 bg-[#8dded8] shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]"
           style={{ width: size, height: size }}
         >
           <div
             className="absolute inset-0"
-            style={{ background: "radial-gradient(circle at 50% 18%, rgba(255,255,255,0.09), rgba(0,0,0,0))" }}
+            style={{ background: "radial-gradient(circle at 50% 18%, rgba(235,255,251,0.9), rgba(97,204,198,0.38) 72%, rgba(38,117,126,0.18))" }}
           />
-          <div className="relative h-[90%] w-[90%]" style={AVATAR_MASK_STYLE}>
+          <div className="relative h-[90%] w-[90%]">
             <Image
               src={`/avatars/batuzek/${emoji}.png`}
               alt="Avatar batůžek"
@@ -1382,8 +1378,8 @@ export function ProfileScreen() {
                       }`}
                       aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
                     >
-                      <div className="absolute inset-[8px] rounded-[18px] bg-night/40" />
-                      <div className="relative z-10 mx-auto h-[76px] w-[76px] sm:h-[88px] sm:w-[88px]" style={AVATAR_MASK_STYLE}>
+                      <div className="absolute inset-[8px] rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,rgba(235,255,251,0.95),rgba(97,204,198,0.78)_72%,rgba(38,117,126,0.46))]" />
+                      <div className="relative z-10 mx-auto h-[76px] w-[76px] sm:h-[88px] sm:w-[88px]">
                         <Image
                           src={`/avatars/batuzek/${option}.png`}
                           alt={`Emoji ${option.replace("batuzek-", "")}`}

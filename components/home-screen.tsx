@@ -181,10 +181,6 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-sky">Vybrané město</p>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{state.city}</h2>
-            <p className="mt-2 text-sm font-semibold text-lime">
-              {state.city} · {cityLocations.length}{" "}
-              {cityLocations.length === 1 ? "hra" : cityLocations.length >= 2 && cityLocations.length <= 4 ? "hry" : "her"}
-            </p>
             <p className="mt-2 text-sm text-mist">Vyber si hru, která tě láká nejvíc. Zamčené hry se odemykají postupně.</p>
           </div>
           <CitySelector cities={publishedCities} />
@@ -192,31 +188,20 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
       </section>
 
       <section className="glass-card p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-coral">Přehled všech her</p>
-            <h2 className="mt-2 text-xl font-semibold">
-              {cityLocations.length === 0
-                ? `Hry v ${cityLocative(state.city)}`
-                : cityLocations.length === 1
-                  ? `1 hra v ${cityLocative(state.city)}`
-                  : cityLocations.length >= 2 && cityLocations.length <= 4
-                    ? `${cityLocations.length} hry v ${cityLocative(state.city)}`
-                    : `${cityLocations.length} her v ${cityLocative(state.city)}`}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-mist">
-              Tady je celý katalog her v tomhle městě. Nic dalšího není schované mimo tenhle výběr.
-            </p>
-          </div>
-          <div className="rounded-full bg-coral/12 px-3 py-2 text-xs font-semibold text-coral">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Přehled všech her</p>
+          <h2 className="mt-2 text-xl font-semibold">
             {cityLocations.length === 0
-              ? "0 her"
+              ? `Hry v ${cityLocative(state.city)}`
               : cityLocations.length === 1
-                ? "1 hra"
+                ? `1 hra v ${cityLocative(state.city)}`
                 : cityLocations.length >= 2 && cityLocations.length <= 4
-                  ? `${cityLocations.length} hry`
-                  : `${cityLocations.length} her`}
-          </div>
+                  ? `${cityLocations.length} hry v ${cityLocative(state.city)}`
+                  : `${cityLocations.length} her v ${cityLocative(state.city)}`}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-mist">
+            Tady je celý katalog her v tomhle městě. Nic dalšího není schované mimo tenhle výběr.
+          </p>
         </div>
 
         {!state.registrationCompleted ? (

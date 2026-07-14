@@ -87,40 +87,6 @@ function getFallbackStops(): MissionStopRow[] {
   });
 }
 
-function missionCanonicalKey(mission: { city: string; title: string }) {
-  return `${mission.city.trim().toLowerCase()}::${mission.title.trim().toLowerCase()}`;
-}
-
-function getCanonicalMissionKeys() {
-  return new Set(
-    nearbyMissions
-      .map((mission) => {
-        const location = locations.find((item) => item.id === mission.locationId);
-        if (!location) {
-          return null;
-        }
-
-        return missionCanonicalKey({ city: location.city, title: mission.name });
-      })
-      .filter((value): value is string => Boolean(value))
-  );
-}
-
-function getVisibleDatabaseMissions(missions: MissionRow[]) {
-  const canonicalKeys = getCanonicalMissionKeys();
-  const seenKeys = new Set<string>();
-
-  return missions.filter((mission) => {
-    const key = missionCanonicalKey(mission);
-    if (!canonicalKeys.has(key) || seenKeys.has(key)) {
-      return false;
-    }
-
-    seenKeys.add(key);
-    return true;
-  });
-}
-
 export default async function AdminMissionsPage({
   searchParams
 }: {
@@ -146,12 +112,8 @@ export default async function AdminMissionsPage({
   const status = statusText(resolvedSearchParams?.status);
 
   const isUsingFallbackContent = !error && !stopsError && dbMissions.length === 0;
-  const visibleDatabaseMissions = getVisibleDatabaseMissions(dbMissions);
-  const visibleDatabaseMissionIds = new Set(visibleDatabaseMissions.map((mission) => mission.id));
-  const missions = isUsingFallbackContent ? getFallbackMissions() : visibleDatabaseMissions;
-  const allStops = isUsingFallbackContent
-    ? getFallbackStops()
-    : dbStops.filter((stop) => visibleDatabaseMissionIds.has(stop.mission_id));
+  const missions = isUsingFallbackContent ? getFallbackMissions() : dbMissions;
+  const allStops = isUsingFallbackContent ? getFallbackStops() : dbStops;
 
   const stopsByMission = new Map<string, MissionStopRow[]>();
   allStops.forEach((stop) => {

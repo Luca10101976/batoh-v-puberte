@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: {
-    default: "Mozek | Traki na stopě",
+    default: "Mozek | Traki na stopě tajemství",
     template: "%s | Mozek"
   },
   icons: {

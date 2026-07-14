@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Traki na stopě",
+    name: "Traki na stopě tajemství",
     short_name: "Traki",
     description: "Městská hra pro děti 10+ s fyzickými úkoly po městě.",
     start_url: "/",

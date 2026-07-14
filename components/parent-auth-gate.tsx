@@ -492,7 +492,7 @@ export function ParentAuthGate() {
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
         <div className="mb-5 text-center">
-          <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě tajemství</p>
           <p className="mt-1 text-sm text-mist">Tohle město něco skrývá.</p>
         </div>
         <div className="flex gap-2 rounded-2xl bg-white/5 p-2">

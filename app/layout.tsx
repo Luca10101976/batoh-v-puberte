@@ -7,9 +7,9 @@ import { getAppVersion } from "@/lib/app-version";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://batoh-v-puberte.vercel.app";
 
 export const metadata: Metadata = {
-  title: "Traki na stopě",
+  title: "Traki na stopě tajemství",
   description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-  applicationName: "Traki na stopě",
+  applicationName: "Traki na stopě tajemství",
   metadataBase: new URL(siteUrl),
   alternates: {
     canonical: "/"
@@ -22,21 +22,21 @@ export const metadata: Metadata = {
     type: "website",
     locale: "cs_CZ",
     url: "/",
-    title: "Traki na stopě",
+    title: "Traki na stopě tajemství",
     description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
-    siteName: "Traki na stopě",
+    siteName: "Traki na stopě tajemství",
     images: [
       {
         url: "/images/og-traki.jpg",
         width: 1200,
         height: 630,
-        alt: "Traki na stopě - logo"
+        alt: "Traki na stopě tajemství - logo"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Traki na stopě",
+    title: "Traki na stopě tajemství",
     description: "Městská hra pro objevování města, úkoly a soutěž s kamarády.",
     images: ["/images/og-traki.jpg"]
   },

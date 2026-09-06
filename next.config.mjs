@@ -1,5 +1,18 @@
 const isDev = process.env.NODE_ENV === "development";
 
+// Hostname vlastniho Supabase projektu pro next/image (viz images.remotePatterns nize).
+const supabaseImageHostname = (() => {
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!rawUrl) {
+    return null;
+  }
+  try {
+    return new URL(rawUrl).hostname;
+  } catch {
+    return null;
+  }
+})();
+
 // CSP: skripty jen z vlastní domény ('unsafe-inline' vyžaduje Next.js hydratace,
 // 'unsafe-eval' jen v dev režimu kvůli hot reloadu). Obrázky povolují https:
 // kvůli externím ilustracím misí z Mozek editoru. connect-src omezen na Supabase.
@@ -24,12 +37,18 @@ const nextConfig = {
     }
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**"
-      }
-    ]
+    // Jen vlastni Supabase Storage. Wildcard "**" delal z image optimizeru
+    // otevrenou proxy - kdokoliv by pres nej mohl tahat a cachovat cizi
+    // obrazky na ucet tohoto projektu.
+    remotePatterns: supabaseImageHostname
+      ? [
+          {
+            protocol: "https",
+            hostname: supabaseImageHostname,
+            pathname: "/storage/v1/object/public/**"
+          }
+        ]
+      : []
   },
   async headers() {
     return [

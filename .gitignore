@@ -22,3 +22,4 @@ exports/
 outputs/
 .env*.local
 .claude/
+*.tsbuildinfo

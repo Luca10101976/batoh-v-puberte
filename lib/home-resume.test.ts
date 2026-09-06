@@ -89,7 +89,7 @@ test("sdílené resume načtení vrací stejný přesný href i pro další vstu
           location: { status: "in_progress" },
           task_progress: [{ task_id: "t1", status: "correct", attempts: 1 }]
         })
-      })) as typeof fetch
+      })) as unknown as typeof fetch
   });
 
   assert.ok(card);

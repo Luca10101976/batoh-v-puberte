@@ -5,7 +5,8 @@ Mobile-first PWA pro mestskou hru pro deti 10+, postavena na Next.js 15, Tailwin
 ## Zprovozneni
 
 1. `npm install`
-2. `cp .env.example .env.local` a doplnit hodnoty (viz nize)
+2. `npm run env:pull` - stahne `.env.local` z Vercelu (viz "Sprava ENV" nize);
+   `.env.example` slouzi jen jako prehled nazvu
 3. Jen pro **nove** prostredi: v Supabase SQL editoru pustit v poradi
    - `supabase/migrations/0001_baseline.sql` - 14 hernich tabulek, indexy, triggery
    - `supabase/migrations/0002_production_snapshot_2026-09-07.sql` - zbyle 2 tabulky
@@ -26,6 +27,18 @@ Oba soubory jsou idempotentni.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon klic, v aplikaci slouzi **jen** k prihlaseni rodice |
 | `SUPABASE_SERVICE_ROLE_KEY` | server-only klic, ctou a zapisuji jim vsechny API routy |
 | `ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS` | basic auth pro editor Mozek |
+
+### Sprava ENV: Vercel je zdroj, lokal se generuje
+
+- Spravovane ENV ziji **ve Vercelu** (projekt `batoh-v-puberte`). Tam se pridavaji
+  a meni - v dashboardu nebo `vercel env add NAZEV production preview development`.
+- `.env.local` je **generovany** soubor, neni v Gitu a **needituje se rucne**.
+- Obnova lokalnich Development ENV: `npm run env:pull`
+  (= `vercel env pull .env.local --environment=development`). Prepise `.env.local`
+  presne podle Vercelu a odstrani z nej promenne, ktere uz ve Vercelu nejsou.
+- Novy stroj: `vercel login`, `vercel link` na projekt `batoh-v-puberte`, `npm run env:pull`.
+- Development pouziva **stejne Supabase hodnoty jako Production** - vedome zachovany
+  soucasny stav, ne oddelene dev prostredi.
 
 ## Architektura dat
 

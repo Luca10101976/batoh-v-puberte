@@ -23,3 +23,5 @@ outputs/
 .env*.local
 .claude/
 *.tsbuildinfo
+.env.production
+.env.development

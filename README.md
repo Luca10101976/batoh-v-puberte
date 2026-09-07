@@ -6,12 +6,17 @@ Mobile-first PWA pro mestskou hru pro deti 10+, postavena na Next.js 15, Tailwin
 
 1. `npm install`
 2. `cp .env.example .env.local` a doplnit hodnoty (viz nize)
-3. V Supabase SQL editoru pustit migrace z `supabase/migrations/` v poradi:
-   - `0001_baseline.sql` - vsechny tabulky, indexy a triggery
-   - `0002_rls.sql` - Row Level Security
+3. Jen pro **nove** prostredi: v Supabase SQL editoru pustit v poradi
+   - `supabase/migrations/0001_baseline.sql` - 14 hernich tabulek, indexy, triggery
+   - `supabase/migrations/0002_production_snapshot_2026-09-07.sql` - zbyle 2 tabulky
+     (`panbatoh_content`, `child_push_subscriptions`), RLS na vsech 16 tabulkach
+     a vsech 23 policies presne podle produkce
 4. `npm run dev`
 
-Migrace jsou idempotentni, jde je pustit opakovane i na existujici databazi.
+Na **produkcni** databazi nic z `supabase/migrations/` nespoustet - tento stav
+uz ma (snapshot byl z ni zachycen read-only 2026-09-07). Kazda dalsi zmena DB
+vznika jako novy soubor v `supabase/migrations/` a jde pres samostatny precheck.
+Oba soubory jsou idempotentni.
 
 ### Povinne env promenne
 
@@ -26,9 +31,15 @@ Migrace jsou idempotentni, jde je pustit opakovane i na existujici databazi.
 
 Herni data necte prohlizec nikdy primo. Vsechno jde pres `app/api/*`
 a server actions se service-role klicem; anon klic v prohlizeci obsluhuje
-pouze Supabase Auth. Na tom stoji i RLS v `0002_rls.sql`: tabulky maji
-deny-by-default a vyjimku ma jen `child_profiles`, kterou pod session
-tokenem rodice cte prihlasovaci routa.
+pouze Supabase Auth.
+
+RLS v produkci (overeno read-only precheckem 2026-09-07): zapnuta na vsech
+tabulkach v `public`, `service_role` ji obchazi, anon nema zadnou policy
+a tedy zadny pristup. Policies pro `authenticated` jsou scopovane pres
+`child_profiles.parent_user_id = auth.uid()` - rodic vidi jen data svych
+deti; jedinou z nich pouziva kod pod session tokenem prihlasovaci routa
+(`child_profiles`). Vsechny policies jsou deklarovane 1:1 v
+`supabase/migrations/0002_production_snapshot_2026-09-07.sql`.
 
 Odpovedi na herni ukoly se vyhodnocuji vyhradne na serveru
 (`lib/task-validation.ts`), klient sve skore neurcuje.
@@ -59,7 +70,9 @@ Historicke SQL soubory, ktere uz **neodpovidaji** beznemu stavu aplikace
 a nemaji se poustet. `schema.sql` a `seed.sql` zakladaji tabulky
 (`cities`, `locations`, `tasks`, `profiles`, `user_progress`, `friendships`),
 na ktere v kodu nesaha nic; obsah misi zije v `missions` / `mission_stops` /
-`mission_tasks` a v `lib/mock-data.ts`. Slozka zustava jen kvuli dohledatelnosti.
+`mission_tasks` a v `lib/mock-data.ts`. `0002_rls_NEAPLIKOVAT.sql` je zavrzena
+migrace postavena na chybnem predpokladu, ze produkce nema RLS - nikdy ji
+nespoustet (duvod v hlavicce souboru). Slozka zustava jen kvuli dohledatelnosti.
 
 ## Rodicovske e-maily
 

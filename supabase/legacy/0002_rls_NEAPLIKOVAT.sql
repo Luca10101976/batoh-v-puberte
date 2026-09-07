@@ -1,21 +1,21 @@
--- 0002: Row Level Security pro vsechny tabulky.
+-- !!! NIKDY NESPOUSTET !!!
 --
--- KONTEXT (proc deny-by-default):
--- Aplikace cte a zapisuje data VYHRADNE pres /api/* a server actions,
--- ktere pouzivaji service-role klic. Service role RLS obchazi, takze
--- se pridanim techto pravidel nic v aplikaci nerozbije.
+-- Tento soubor vznikl 2026-09-06 na CHYBNEM predpokladu, ze produkcni
+-- Supabase nema zapnutou RLS. Read-only precheck 2026-09-07 primo
+-- v produkci prokazal opak:
+--   - RLS je zapnuta na vsech tabulkach v public,
+--   - existuje ~24 policies (vsechny authenticated scopovane pres
+--     child_profiles.parent_user_id = auth.uid(); rate_limits jen service_role),
+--   - anon nema na child_task_progress / pin_audit_log / rate_limits
+--     zadny pristup (SELECT/INSERT/UPDATE/DELETE = NE).
 --
--- Prohlizecovy klient (lib/supabase.ts) pouziva anon klic POUZE pro auth
--- (prihlaseni, obnova session). Neexistuje jediny .from() dotaz v components/.
+-- Spusteni tohoto souboru by nic nezabezpecilo a odstranilo by funkcni
+-- policy "parents read connected child profiles via friendships".
 --
--- Bez RLS je pritom kazda tabulka v public schematu ctena i zapisovatelna
--- kymkoliv, kdo ma anon klic - a ten je verejny, je v bundlu aplikace.
--- Tyka se to napr. child_task_progress, pin_audit_log nebo rate_limits
--- (smazanim radku v rate_limits jde vyradit cely rate limiter).
+-- Zustava v legacy/ jen kvuli dohledatelnosti. Skutecny stav produkce
+-- bude zachycen v supabase/migrations/ jako production snapshot.
 --
--- Vyjimka: child_profiles ma explicitni policies, protoze app/api/auth/login
--- cte a zaklada profil pod session tokenem rodice (fallback, kdyz neni
--- k dispozici service-role klic).
+-- Puvodni SQL (beze zmeny) nasleduje:
 
 begin;
 

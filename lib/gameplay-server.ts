@@ -552,7 +552,14 @@ function canonicalSlugByKey() {
  * úspěšně vygenerovanou verzi místo prázdného katalogu.
  */
 export async function getCatalog(): Promise<CatalogEntry[]> {
-  const supabase = getSupabaseServerClient();
+  let supabase: ReturnType<typeof getSupabaseServerClient>;
+  try {
+    supabase = getSupabaseServerClient();
+  } catch {
+    // Bez Supabase env (např. CI build bez secrets) = prázdný katalog.
+    // Záměrně žádný mock fallback: mock nesmí rozhodovat, co je v katalogu.
+    return [];
+  }
   let { data, error } = await supabase.from("missions").select(CATALOG_COLUMNS);
   if (error && /short_description|catalog_order|unlock_after_mission_id/i.test(error.message ?? "")) {
     ({ data, error } = await supabase.from("missions").select(CATALOG_COLUMNS_LEGACY));

@@ -4,33 +4,38 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
-import { locations, type MapLocation } from "@/lib/mock-data";
-import { getUnlockRequirement } from "@/lib/location-unlock";
+import type { MapLocation } from "@/lib/mock-data";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
+import { buildLocationDetailModel } from "@/lib/location-detail-model";
 
-type DetailLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
+// R21: zjednodušený detail hry – hero, název, krátký popis, „Začínáme“ (první zastávka), Hrát / zámek.
+// Data přicházejí z DB katalogu (R20); zastávky/úkoly zůstávají ve hře, jen se tu nevypisují.
+
+type DetailLocation = Omit<MapLocation, "episodes"> & {
+  episodes: GameplayEpisode[];
+  unlockRequirementName?: string | null;
+};
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
-}
-
-function formatTaskCount(count: number) {
-  if (count === 1) {
-    return "1 úkol";
-  }
-  if (count >= 2 && count <= 4) {
-    return `${count} úkoly`;
-  }
-  return `${count} úkolů`;
 }
 
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
   const router = useRouter();
   const unlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
-  const completed = state.completedLocationIds.includes(location.id);
-  const unlockRequirement = getUnlockRequirement(location, locations);
-  const canUsePlayerFeatures = state.registrationCompleted;
+  const model = buildLocationDetailModel({
+    name: location.name,
+    subtitle: location.subtitle,
+    image: location.image,
+    shortDescription: location.shortDescription,
+    teaser: location.teaser,
+    episodes: location.episodes,
+    unlockedByPlaceId: location.unlockedByPlaceId ?? null,
+    unlockRequirementName: location.unlockRequirementName ?? null,
+    unlocked,
+    registered: state.registrationCompleted
+  });
 
   function startMission() {
     setActiveMode("solo");
@@ -40,12 +45,12 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <div className="glass-card relative h-72 overflow-hidden rounded-[32px]">
-        {isExternalImage(location.image) ? (
-          <img src={location.image} alt={location.name} className="absolute inset-0 h-full w-full object-cover" />
+        {isExternalImage(model.image) ? (
+          <img src={model.image} alt={model.title} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <Image
-            src={location.image}
-            alt={location.name}
+            src={model.image}
+            alt={model.title}
             fill
             priority
             className="object-cover"
@@ -54,88 +59,37 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
         )}
         <div className="absolute inset-0 flex h-full flex-col justify-end bg-gradient-to-t from-night via-night/40 to-transparent p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-sky">Hra</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{location.name}</h1>
-          <p className="mt-2 text-sm font-medium text-lime">{location.subtitle}</p>
-          <p className="mt-2 max-w-[28ch] text-sm leading-6 text-mist">{location.teaser}</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">{model.title}</h1>
+          {model.subtitle ? <p className="mt-2 text-sm font-medium text-lime">{model.subtitle}</p> : null}
         </div>
       </div>
 
       <section className="glass-card p-5">
-        <button
-          onClick={() => (unlocked ? startMission() : undefined)}
-          disabled={!unlocked}
-          className="w-full rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {canUsePlayerFeatures ? "Hrát" : "Přihlásit a hrát"}
-        </button>
-        {!canUsePlayerFeatures && unlocked ? (
-          <p className="mt-3 text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
-        ) : null}
-        {!unlocked ? (
-          <p className="mt-3 text-sm text-mist">
-            Tohle místo je zatím zamčené. Nejdřív dokonči: {unlockRequirement?.name ?? "předchozí místo"}.
+        {model.description ? <p className="text-base leading-7 text-white/88">{model.description}</p> : null}
+
+        {model.startStopName ? (
+          <p className="mt-4 text-sm text-mist">
+            Začínáme: <span className="font-semibold text-white">{model.startStopName}</span>
           </p>
         ) : null}
-      </section>
 
-      <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">O hře</p>
-          {unlocked ? (
-            <span className="rounded-full bg-lime/12 px-3 py-2 text-xs font-semibold text-lime">
-              {completed ? "Dokončeno" : "Odemčeno"}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-3 text-base leading-7 text-white/88">{location.introStory}</p>
-        <p className="mt-3 text-base leading-7 text-white/88">{location.story}</p>
-        {!unlocked ? (
-          <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/90">
-            Odemkneš po dokončení: <span className="font-semibold">{unlockRequirement?.name ?? "předchozího místa"}</span>
+        {model.primaryAction === "locked" ? (
+          <p className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/90">
+            🔒 {model.lockMessage}
           </p>
-        ) : null}
-      </section>
-
-      <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="section-title">Zastavení ve hře</h2>
-          </div>
-          <div className="rounded-2xl bg-white/5 px-4 py-3 text-right">
-            <div className="text-xl font-semibold">{location.episodes.length}</div>
-            <div className="text-xs text-mist">zastavení</div>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {location.episodes.map((episode, index) => (
-            unlocked && canUsePlayerFeatures ? (
-              <Link
-                key={episode.id}
-                href={`/play/${location.id}?episode=${index + 1}`}
-                className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-lime/40 hover:bg-white/10"
-              >
-                <div className="text-xs uppercase tracking-[0.18em] text-mist">Zastavení {index + 1}</div>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <div className="font-medium">{episode.name}</div>
-                  <span className="text-xs text-lime">Otevřít</span>
-                </div>
-                <div className="mt-1 text-sm text-mist">{formatTaskCount(episode.tasks.length)} a jedna stopa</div>
-              </Link>
-            ) : (
-              <div key={episode.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 opacity-75">
-                <div className="text-xs uppercase tracking-[0.18em] text-mist">Zastavení {index + 1}</div>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <div className="font-medium">{episode.name}</div>
-                  <span className="text-xs text-mist">
-                    {unlocked ? "Otevře se po přihlášení" : "Zamčeno"}
-                  </span>
-                </div>
-                <div className="mt-1 text-sm text-mist">{formatTaskCount(episode.tasks.length)} a jedna stopa</div>
-              </div>
-            )
-          ))}
-        </div>
+        ) : (
+          <>
+            <button
+              onClick={startMission}
+              className="mt-5 w-full rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card"
+            >
+              {model.primaryAction === "play" ? "Hrát" : "Přihlásit a hrát"}
+            </button>
+            {model.primaryAction === "login_and_play" ? (
+              <p className="mt-3 text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
+            ) : null}
+          </>
+        )}
       </section>
 
       <section className="glass-card p-5">
@@ -143,7 +97,7 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
         <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
         <p className="mt-2 text-sm leading-6 text-mist">
           Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
-          aplikace, aby vznikl skutečný výsledek, body i případné odemčení další hry.
+          aplikace, aby vznikl skutečný výsledek a případné odemčení další hry.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <a
@@ -152,30 +106,21 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
           >
             Stáhnout tiskovou verzi
           </a>
-          {canUsePlayerFeatures ? (
+          {model.primaryAction === "play" ? (
             <Link
               href={`/play/${location.id}?mode=solo`}
               className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime"
             >
               Otevřít hru v aplikaci
             </Link>
-          ) : (
-            <button
-              onClick={() => (unlocked ? startMission() : undefined)}
-              disabled={!unlocked}
-              className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Přihlásit a hrát
-            </button>
-          )}
+          ) : null}
         </div>
-        {!canUsePlayerFeatures ? (
+        {model.primaryAction === "login_and_play" ? (
           <p className="mt-3 text-sm leading-6 text-mist">
-            Tiskovku si stáhneš i bez přihlášení. Body, progres a hraní v appce se odemknou až po přihlášení hráče.
+            Tiskovku si stáhneš i bez přihlášení. Hraní v appce se odemkne až po přihlášení hráče.
           </p>
         ) : null}
       </section>
-
     </main>
   );
 }

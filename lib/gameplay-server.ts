@@ -532,6 +532,18 @@ function resolveCatalogLocationId(row: CatalogMissionRow) {
   return canonicalSlugByKey().get(key) ?? row.id;
 }
 
+/** Uživatelský název hry pro dané locationId: název místa z mocku (karta), jinak titul mise z katalogu. */
+function resolveLocationDisplayName(locationId: string | null | undefined, catalog: CatalogEntry[]) {
+  if (!locationId) {
+    return null;
+  }
+  const mock = locations.find((item) => item.id === locationId);
+  if (mock) {
+    return mock.name;
+  }
+  return catalog.find((entry) => entry.locationId === locationId)?.title ?? null;
+}
+
 let canonicalSlugCache: Map<string, string> | null = null;
 function canonicalSlugByKey() {
   if (canonicalSlugCache) {
@@ -626,6 +638,8 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
     const fallbackImage = episodes.find((episode) => episode.illustrationImage)?.illustrationImage;
     return {
       ...buildDbBackedLocationSeed(mission, episodes, fallbackImage, catalogEntry),
+      // R21: název vyžadované hry pro detail („Nejdřív dokonči: …“)
+      unlockRequirementName: resolveLocationDisplayName(catalogEntry?.unlockAfterLocationId, catalogEntries),
       episodes
     };
   }
@@ -636,6 +650,10 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
     teaser: catalogEntry?.teaser ? truncateText(catalogEntry.teaser, 96) : location.teaser,
     shortDescription: catalogEntry?.teaser || location.shortDescription,
     unlockedByPlaceId: catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
+    unlockRequirementName: resolveLocationDisplayName(
+      catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
+      catalogEntries
+    ),
     catalogOrder: catalogEntry?.catalogOrder ?? 0,
     subtitle: mission?.title ?? location.subtitle,
     introStory: mission?.intro_text ?? location.introStory,

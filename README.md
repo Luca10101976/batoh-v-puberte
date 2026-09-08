@@ -27,6 +27,7 @@ Oba soubory jsou idempotentni.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon klic, v aplikaci slouzi **jen** k prihlaseni rodice |
 | `SUPABASE_SERVICE_ROLE_KEY` | server-only klic, ctou a zapisuji jim vsechny API routy |
 | `ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS` | basic auth pro editor Mozek |
+| `RECOVERY_KEY_PEPPER` | server-only pepper pro HMAC Traki klice; zmena zneplatni vsechny klice |
 
 ### Sprava ENV: Vercel je zdroj, lokal se generuje
 
@@ -70,12 +71,31 @@ Odpovedi na herni ukoly se vyhodnocuji vyhradne na serveru
 CI (`.github/workflows/ci.yml`) pousti typecheck, lint, testy a build
 nad kazdym pushem do `main` a nad kazdym pull requestem.
 
-## Rodicovsky ucet a profil ditete
+## Hracsky ucet a Traki klic (R17)
 
-- Pri prvnim vstupu se prihlasi nebo zalozi rodicovsky ucet (email + heslo)
-- Pod rodicem se ulozi profil ditete do tabulky `child_profiles`
-- Na stejnem i novem zarizeni se po prihlaseni rodice nacte stejny profil ditete
-- Detsky rezim je chraneny PINem (bcrypt, lockout po opakovanych pokusech)
+- Novy hrac zada jen prezdivku a avatara; na pozadi vznikne Supabase **anonymni** ucet
+  (stabilni `auth.users.id`) a k nemu radek `child_profiles` (`parent_user_id` = id uctu,
+  nazev sloupce je historicky). Zadny e-mail, heslo, rodicovsky ucet ani PIN.
+- Server vygeneruje **Traki klic** - 4 ruzna ceska ctyrpismenna slova
+  (`LAMA-MOST-KUFR-MRAK`) ze slovniku `lib/recovery-words-cs.ts`. V DB je jen
+  `HMAC-SHA256(klic, RECOVERY_KEY_PEPPER)` v `child_profiles.recovery_key_hash` (UNIQUE).
+  Plaintext drzi jen zarizeni hrace (`localStorage`), aby si ho mohl ukazat znovu.
+- **Uz mam Traki** na jinem zarizeni: klic -> `POST /api/recovery-key/redeem`
+  (10 pokusu / 15 min / IP) -> server najde profil podle hashe ->
+  `auth.admin.generateLink(magiclink)` na internim technickem e-mailu uctu
+  (`<uuid>@players.postope.invalid`, nikdy se nezobrazuje ani neposila) ->
+  klient `verifyOtp({ token_hash })` -> session PUVODNIHO uctu -> bezny sync
+  obnovi profil, postup, pratele i expedice.
+- Klic lze kdykoli v profilu vygenerovat znovu (stary prestane platit). Ztrata
+  zarizeni i klice = profil nelze obnovit (vedome prijato).
+- Zmena slovniku neovlivni vydane klice - redeem slova proti slovniku neoveruje.
+- Starsi hraci s e-mailem + heslem se prihlasi pres "Mam starsi ucet s e-mailem"
+  a mohou si v profilu vytvorit Traki klic (stejne auth user ID, stejny profil).
+- Traki klic NENI friend code (`BAT-XXXXXX`) - ten zustava verejny.
+- **Odhlasit** v profilu je jen lokalni (`signOut({ scope: "local" })`): ostatni
+  zarizeni stejneho hrace zustavaji prihlasena. Zaroven se z tohoto zarizeni smaze
+  lokalne ulozeny plaintext klice (`pan-batoh-recovery-key`) - pri refreshi, zavreni
+  aplikace ani expiraci session se nemaze.
 
 ## supabase/legacy
 

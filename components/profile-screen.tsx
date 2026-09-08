@@ -9,6 +9,7 @@ import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
 import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
 
 type ChildProfileRow = {
   id: string;
@@ -1256,9 +1257,127 @@ export function ProfileScreen() {
     setInviteMessage(`${friendName} byl odebrán/a z kamarádů.`);
   }
 
+  const [localRecoveryKey, setLocalRecoveryKey] = useState<string | null>(null);
+
+  const [recoveryKeyVisible, setRecoveryKeyVisible] = useState(false);
+
+  const [recoveryKeyBusy, setRecoveryKeyBusy] = useState(false);
+
+  const [recoveryKeyMessage, setRecoveryKeyMessage] = useState("");
+
+  const [recoveryKeyCopied, setRecoveryKeyCopied] = useState(false);
+
+
+  useEffect(() => {
+
+    setLocalRecoveryKey(readRecoveryKeyLocally());
+
+  }, []);
+
+
+  async function handleCreateRecoveryKey() {
+
+    if (!supabase) {
+
+      return;
+
+    }
+
+    if (localRecoveryKey && !window.confirm("Vytvořit nový Traki klíč? Ten starý přestane fungovat.")) {
+
+      return;
+
+    }
+
+    setRecoveryKeyBusy(true);
+
+    setRecoveryKeyMessage("");
+
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+    const response = await fetch("/api/recovery-key/create", {
+
+      method: "POST",
+
+      headers: { Authorization: `Bearer ${accessToken}` }
+
+    }).catch(() => null);
+
+    const payload = (await response?.json().catch(() => null)) as
+
+      | { ok?: boolean; code?: string; retry_after?: number; recovery_key?: string; replaced?: boolean }
+
+      | null;
+
+    setRecoveryKeyBusy(false);
+
+    if (!response?.ok || !payload?.ok || !payload.recovery_key) {
+
+      setRecoveryKeyMessage(
+
+        payload?.code === "rate_limited"
+
+          ? `Nový klíč jde vytvořit jen párkrát za hodinu. Zkus to za ${Math.ceil((payload.retry_after ?? 60) / 60)} min.`
+
+          : "Klíč se teď nepodařilo vytvořit. Zkus to prosím znovu."
+
+      );
+
+      return;
+
+    }
+
+    saveRecoveryKeyLocally(payload.recovery_key);
+
+    setLocalRecoveryKey(payload.recovery_key);
+
+    setRecoveryKeyVisible(true);
+
+    setRecoveryKeyMessage(
+      payload.replaced
+        ? "Máš nový Traki klíč. Ulož si ho – starý už neplatí."
+        : "Máš svůj Traki klíč. Ulož si ho – budeš ho potřebovat na jiném zařízení."
+    );
+
+  }
+
+
+  async function handleCopyRecoveryKey() {
+
+    if (!localRecoveryKey) {
+
+      return;
+
+    }
+
+    try {
+
+      await navigator.clipboard.writeText(localRecoveryKey);
+
+      setRecoveryKeyCopied(true);
+
+      window.setTimeout(() => setRecoveryKeyCopied(false), 2500);
+
+    } catch {
+
+      setRecoveryKeyCopied(false);
+
+    }
+
+  }
+
+
   async function handleLogout() {
+    // Explicitní odhlášení hráče = jen TOTO zařízení (scope "local"): ostatní zařízení
+    // stejného hráče zůstávají přihlášená (multi-device). Zároveň z tohoto zařízení
+    // odstraníme lokálně uložený plaintext Traki klíče, aby na sdíleném/cizím zařízení
+    // nezůstal okamžitý návrat do účtu. Klíč se NEmaže při refreshi, zavření aplikace
+    // ani expiraci session – pouze zde.
+    clearRecoveryKeyLocally();
+    setLocalRecoveryKey(null);
+    setRecoveryKeyVisible(false);
     if (supabase) {
-      await supabase.auth.signOut().catch(() => null);
+      await supabase.auth.signOut({ scope: "local" }).catch(() => null);
     }
     openParentAuthGate();
     router.replace("/");
@@ -1536,6 +1655,97 @@ export function ProfileScreen() {
           </p>
         </div>
       </section>
+
+      <section id="traki-key" className="glass-card p-5">
+
+        <h2 className="section-title">Můj Traki klíč</h2>
+
+        <p className="mt-2 text-sm leading-6 text-mist">
+
+          Čtyři tajná slova, kterými si otevřeš svůj profil na jiném telefonu nebo tabletu. Nikomu je neukazuj –
+
+          není to kód pro kamarády.
+
+        </p>
+
+        {localRecoveryKey ? (
+
+          <div className="mt-4 space-y-3">
+
+            <div className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-center">
+
+              <p className="select-all text-lg font-bold tracking-[0.12em] text-white">
+
+                {recoveryKeyVisible ? localRecoveryKey : "••••-••••-••••-••••"}
+
+              </p>
+
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+
+              <button
+
+                type="button"
+
+                onClick={() => setRecoveryKeyVisible((value) => !value)}
+
+                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
+
+              >
+
+                {recoveryKeyVisible ? "Skrýt" : "Ukázat"}
+
+              </button>
+
+              <button
+
+                type="button"
+
+                onClick={() => void handleCopyRecoveryKey()}
+
+                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
+
+              >
+
+                {recoveryKeyCopied ? "Zkopírováno ✓" : "Zkopírovat"}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        ) : (
+
+          <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-mist">
+
+            Na tomto zařízení klíč uložený není. Když si ho nepamatuješ, vytvoř si nový – starý pak přestane platit.
+
+          </p>
+
+        )}
+
+        <button
+
+          type="button"
+
+          onClick={() => void handleCreateRecoveryKey()}
+
+          disabled={recoveryKeyBusy}
+
+          className="mt-3 w-full rounded-[20px] bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+
+        >
+
+          {recoveryKeyBusy ? "Vytvářím…" : localRecoveryKey ? "Vytvořit nový klíč" : "Vytvořit Traki klíč"}
+
+        </button>
+
+        {recoveryKeyMessage ? <p className="mt-3 text-sm text-mist">{recoveryKeyMessage}</p> : null}
+
+      </section>
+
 
       <section id="add-friend" className="glass-card p-5">
         <h2 className="section-title">Přidat kamaráda</h2>

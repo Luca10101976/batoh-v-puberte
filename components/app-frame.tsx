@@ -7,7 +7,7 @@ import { BottomNav } from "@/components/bottom-nav";
 import { useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-const ParentAuthGate = dynamic(() => import("@/components/parent-auth-gate").then((mod) => mod.ParentAuthGate), {
+const ParentAuthGate = dynamic(() => import("@/components/player-auth-gate").then((mod) => mod.PlayerAuthGate), {
   ssr: false,
   loading: () => (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 text-center">

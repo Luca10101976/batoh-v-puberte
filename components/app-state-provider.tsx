@@ -46,7 +46,6 @@ type ActiveMissionSummary = {
 type AppState = {
   registrationCompleted: boolean;
   parentEmail: string;
-  hasChildPin: boolean;
   playerCode: string;
   profileCode: string;
   profileRowId: string | null;
@@ -71,16 +70,14 @@ type AppState = {
 type AppStateContextValue = {
   state: AppState;
   hydrated: boolean;
-  pinUnlocked: boolean;
   openParentAuthGate: () => void;
   completeRegistration: (payload: {
     name: string;
     age: number;
-    parentEmail: string;
+    parentEmail?: string;
     playerCode?: string;
     profileCode?: string;
     profileRowId?: string | null;
-    hasChildPin?: boolean;
     avatar?: string;
     avatarConfig?: AvatarConfig;
   }) => void;
@@ -91,7 +88,6 @@ type AppStateContextValue = {
   setCity: (city: string) => void;
   setActiveMode: (mode: "solo" | "group") => void;
   setCurrentExpeditionId: (expeditionId: string | null) => void;
-  unlockWithPin: (pin: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   toggleMember: (memberId: string) => void;
   updateProfile: (profile: Partial<PlayerProfile>) => void;
   syncCloudProfile: (payload: {
@@ -114,8 +110,6 @@ type AppStateContextValue = {
 };
 
 const STORAGE_KEY = "pan-batoh-state";
-const PIN_UNLOCKED_AT_KEY = "pan-batoh-pin-unlocked-at";
-const PIN_UNLOCK_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const SELF_MEMBER_ID = "self";
 const INITIAL_PUBLIC_CODE = generateProfileCode();
 
@@ -131,7 +125,6 @@ function normalizeCode(value: string) {
 const initialState: AppState = {
   registrationCompleted: false,
   parentEmail: "",
-  hasChildPin: false,
   playerCode: INITIAL_PUBLIC_CODE,
   profileCode: INITIAL_PUBLIC_CODE,
   profileRowId: null,
@@ -171,7 +164,6 @@ const AppStateContext = createContext<AppStateContextValue | null>(null);
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
-  const [pinUnlocked, setPinUnlocked] = useState(false);
   const [cloudRetryTick, setCloudRetryTick] = useState(0);
   const stateRef = useRef<AppState>(initialState);
   const cloudHydratedForUserRef = useRef<string | null>(null);
@@ -217,7 +209,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               }
             : current
         );
-        setPinUnlocked(false);
         cloudHydratedForUserRef.current = null;
       }
     });
@@ -243,10 +234,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setState({
           ...initialState,
           ...parsed,
-          hasChildPin:
-            typeof (parsed as Partial<AppState>).hasChildPin === "boolean"
-              ? Boolean((parsed as Partial<AppState>).hasChildPin)
-              : Boolean((parsed as unknown as { childPinHash?: string | null }).childPinHash),
           profile: {
             ...initialState.profile,
             ...(parsed.profile ?? {})
@@ -274,26 +261,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-
-    if (!state.hasChildPin) {
-      setPinUnlocked(true);
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(PIN_UNLOCKED_AT_KEY);
-      const unlockedAt = raw ? Number(raw) : 0;
-      const stillValid = Number.isFinite(unlockedAt) && unlockedAt > 0 && Date.now() - unlockedAt < PIN_UNLOCK_TTL_MS;
-      setPinUnlocked(stillValid);
-    } catch {
-      setPinUnlocked(false);
-    }
-  }, [hydrated, state.hasChildPin]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -351,7 +318,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           parentEmail: session.user.email?.trim() ?? "",
           city: current.city
         }));
-        setPinUnlocked(false);
         cloudHydratedForUserRef.current = null;
         return;
       }
@@ -438,7 +404,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           return {
             ...current,
             registrationCompleted: false,
-            hasChildPin: false,
             completedLocationIds: [],
             completedGameplayLocationIds: [],
             activeMission: null,
@@ -504,7 +469,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           playerCode: canonicalPlayerCode,
           profileCode: canonicalProfileCode,
           profileRowId: childProfile.profile_id || current.profileRowId,
-          hasChildPin: false,
           profile: {
             ...current.profile,
             name: shouldApplyRemoteProfile ? childProfile.child_name || current.profile.name : current.profile.name,
@@ -555,27 +519,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       playerCode,
       profileCode,
       profileRowId,
-      hasChildPin,
       avatar,
       avatarConfig
     }: {
       name: string;
       age: number;
-      parentEmail: string;
+      parentEmail?: string;
       playerCode?: string;
       profileCode?: string;
       profileRowId?: string | null;
-      hasChildPin?: boolean;
       avatar?: string;
       avatarConfig?: AvatarConfig;
     }) => {
       const trimmedName = name.trim();
 
-      setState((current) => ({
+      // Kritický přechod: dokončení registrace se musí do localStorage zapsat SYNCHRONNĚ,
+      // ne až přes 150ms debounce níže. Jinak může reload stránky (např. auto-refresh
+      // po aktualizaci service workeru) proběhnout dřív, než se stav uloží, a hráč
+      // s platnou session i profilem znovu uvidí PlayerAuthGate.
+      // Stav se odvozuje z stateRef.current (poslední commitnutý stav) a zapisuje se
+      // jako celek; běžný debounce zůstává beze změny.
+      const current = stateRef.current;
+      const nextState: AppState = {
         ...current,
         registrationCompleted: true,
-        parentEmail: parentEmail.trim(),
-        hasChildPin: false,
+        parentEmail: (parentEmail ?? "").trim() || current.parentEmail,
         playerCode: playerCode || current.playerCode || profileCode || current.profileCode || generateProfileCode(),
         profileCode: profileCode || current.profileCode || generateProfileCode(),
         profileRowId: profileRowId || current.profileRowId || null,
@@ -598,75 +566,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         activeMode: "solo",
         squadName: `${trimmedName || current.profile.name} a parta`,
         squadMembers: [{ id: SELF_MEMBER_ID, name: trimmedName || current.profile.name, joined: true }]
-      }));
-      setPinUnlocked(true);
+      };
+
+      stateRef.current = nextState;
       try {
-        window.localStorage.setItem(PIN_UNLOCKED_AT_KEY, String(Date.now()));
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
       } catch {
-        // ignore local storage write errors
+        // localStorage nemusí být dostupný – zůstane aspoň stav v paměti + debounce
       }
+      setState(nextState);
     },
     []
-  );
-
-  const unlockWithPin = useCallback(
-    async (pin: string) => {
-      if (!state.hasChildPin) {
-        setPinUnlocked(true);
-        return { ok: true };
-      }
-
-      if (!supabase) {
-        return { ok: false, code: "config_error", message: "Supabase klient není dostupný." };
-      }
-
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-
-      const accessToken = session?.access_token ?? "";
-      if (!accessToken) {
-        return { ok: false, code: "unauthorized", message: "Účet není přihlášený." };
-      }
-
-      const response = await fetch("/api/pin/verify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          pin,
-          profileCode: state.profileCode
-        })
-      }).catch(() => null);
-
-      if (!response) {
-        return { ok: false, code: "network_error", message: "Ověření PINu se nepodařilo." };
-      }
-
-      const payload = (await response.json().catch(() => null)) as
-        | { ok?: boolean; code?: string; message?: string }
-        | null;
-
-      if (!response.ok || !payload?.ok) {
-        return {
-          ok: false,
-          code: payload?.code ?? "pin_verify_failed",
-          message: payload?.message ?? "PIN nesedí."
-        };
-      }
-
-      setPinUnlocked(true);
-      try {
-        window.localStorage.setItem(PIN_UNLOCKED_AT_KEY, String(Date.now()));
-      } catch {
-        // ignore local storage write errors
-      }
-
-      return { ok: true };
-    },
-    [state.hasChildPin, state.profileCode, supabase]
   );
 
   const addFriendByCode = useCallback(
@@ -800,7 +710,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         playerCode: payload.playerCode || current.playerCode,
         profileCode: payload.profileCode || current.profileCode,
         profileRowId: payload.profileRowId || current.profileRowId || null,
-        hasChildPin: false,
         profile: {
           ...current.profile,
           name: payload.childName || current.profile.name,
@@ -895,7 +804,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...initialState,
         registrationCompleted: current.registrationCompleted,
         parentEmail: current.parentEmail,
-        hasChildPin: current.hasChildPin,
         playerCode: current.playerCode,
         profileCode: current.profileCode,
         profileRowId: current.profileRowId,
@@ -916,13 +824,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       profileRowId: null,
       city: current.city
     }));
-    setPinUnlocked(false);
     cloudHydratedForUserRef.current = null;
-    try {
-      window.localStorage.removeItem(PIN_UNLOCKED_AT_KEY);
-    } catch {
-      // ignore local storage write errors
-    }
   }, []);
 
   const isLocationUnlocked = useCallback(
@@ -940,7 +842,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       hydrated,
-      pinUnlocked,
       openParentAuthGate,
       completeRegistration,
       addFriendByCode,
@@ -950,7 +851,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setCity,
       setActiveMode,
       setCurrentExpeditionId,
-      unlockWithPin,
       toggleMember,
       updateProfile,
       syncCloudProfile,
@@ -967,7 +867,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setFriendsFromCloud,
       setTrustedContacts,
       hydrated,
-      pinUnlocked,
       openParentAuthGate,
       isLocationUnlocked,
       getPlayerScore,
@@ -976,7 +875,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setCurrentExpeditionId,
       setCity,
       state,
-      unlockWithPin,
       toggleMember,
       updateProfile,
       syncCloudProfile

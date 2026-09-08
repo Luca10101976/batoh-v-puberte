@@ -109,6 +109,20 @@ export function buildCatalog(
   );
 }
 
+/**
+ * Najde katalogový záznam pro ID z URL. Hra má jedinou kanonickou adresu (locationId);
+ * když ID odpovídá jen UUID mise, která má kanonický slug, jde o alias – vrací se
+ * `isAlias: true`, aby volající mohl alias odmítnout (jinak by šel obejít katalogový zámek).
+ */
+export function resolveCatalogEntryForLocation(entries: CatalogEntry[], locationId: string) {
+  const canonical = entries.find((entry) => entry.locationId === locationId) ?? null;
+  if (canonical) {
+    return { entry: canonical, isAlias: false };
+  }
+  const byMission = entries.find((entry) => entry.missionId === locationId) ?? null;
+  return { entry: byMission, isAlias: Boolean(byMission) };
+}
+
 /** Města s aspoň jednou publikovanou hrou, abecedně (cs). */
 export function getCatalogCities(entries: CatalogEntry[]) {
   return Array.from(new Set(entries.map((entry) => entry.city))).sort(compareCs);

@@ -3,7 +3,7 @@ import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { taskAnswers } from "@/lib/task-answers";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
-import { buildCatalog, firstSentence, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
+import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 
 type MissionStopDbRow = {
   id: string;
@@ -607,7 +607,13 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
       catalogEntries = [];
     }
   }
-  const catalogEntry = catalogEntries.find((entry) => entry.locationId === locationId) ?? null;
+  const resolvedEntry = resolveCatalogEntryForLocation(catalogEntries, locationId);
+  if (resolvedEntry.isAlias) {
+    // R21: UUID mise, která má kanonický slug, není samostatná adresa – jinak by šel
+    // obejít katalogový zámek (unlock_after_mission_id) přes druhou URL.
+    return null;
+  }
+  const catalogEntry = resolvedEntry.entry;
   if (canonical) {
     const publishedLocationIds = catalog
       ? catalogEntries.map((entry) => entry.locationId)

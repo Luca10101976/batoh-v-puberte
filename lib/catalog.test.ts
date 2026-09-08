@@ -7,6 +7,7 @@ import {
   getCatalogEntriesForCity,
   resolveCatalogCity,
   resolveCatalogTeaser,
+  resolveCatalogEntryForLocation,
   type CatalogMissionRow
 } from "./catalog.ts";
 
@@ -105,4 +106,14 @@ test("karta bere DB hodnoty: hero (trim/null), obtížnost, délka, pořadí", (
   assert.equal(entry.catalogOrder, 3);
   const [empty] = buildCatalog([mission({ id: "b", hero_image_url: "   " })]);
   assert.equal(empty.heroImageUrl, null);
+});
+
+test("UUID alias mise s kanonickým slugem se rozpozná (zámek nejde obejít druhou URL)", () => {
+  const catalog = buildCatalog([mission({ id: "c81ee324", title: "Budějovický kód" }), mission({ id: "uuid-only", title: "Nová hra" })], (row) => (row.id === "c81ee324" ? "budejovice-zaba" : row.id));
+  assert.deepEqual(resolveCatalogEntryForLocation(catalog, "budejovice-zaba").isAlias, false);
+  const alias = resolveCatalogEntryForLocation(catalog, "c81ee324");
+  assert.equal(alias.isAlias, true);
+  assert.equal(alias.entry?.locationId, "budejovice-zaba");
+  assert.equal(resolveCatalogEntryForLocation(catalog, "uuid-only").isAlias, false, "DB-only hra bez slugu má UUID jako kanonické ID");
+  assert.equal(resolveCatalogEntryForLocation(catalog, "nezname").entry, null);
 });

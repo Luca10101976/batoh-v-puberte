@@ -10,6 +10,7 @@ import type { MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-unlock";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { illustrationSrc } from "@/lib/illustrations";
 
 type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[]; catalogOrder?: number };
 
@@ -158,13 +159,22 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
       {resumeCard ? (
         <section className="glass-card border-lime/30 bg-lime/10 p-4 sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-3xl">
+            <div className="flex max-w-3xl items-start gap-4">
+              <Image
+                src={illustrationSrc("bezici")}
+                alt=""
+                width={88}
+                height={88}
+                className="h-16 w-16 shrink-0 object-contain sm:h-[88px] sm:w-[88px]"
+              />
+              <div>
               <p className="text-xs uppercase tracking-[0.24em] text-lime">Pokračovat ve hře</p>
               <h2 className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">{resumeCard.missionName}</h2>
               <p className="mt-2 text-base font-semibold text-white">{resumeCard.stopName}</p>
               <p className="mt-1 text-sm leading-6 text-mist">{resumeCard.taskLabel}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-mist">
                 <span className="rounded-full bg-white/8 px-3 py-2">{resumeCard.progressText}</span>
+              </div>
               </div>
             </div>
             <Link
@@ -179,10 +189,19 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
 
       <section className="glass-card p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
+          <div className="flex items-start gap-4">
+            <Image
+              src={illustrationSrc("mapa")}
+              alt=""
+              width={80}
+              height={80}
+              className="h-14 w-14 shrink-0 object-contain sm:h-20 sm:w-20"
+            />
+            <div>
             <p className="text-xs uppercase tracking-[0.24em] text-sky">Vybrané město</p>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{state.city}</h2>
             <p className="mt-2 text-sm text-mist">Vyber si hru, která tě láká nejvíc. Zamčené hry se odemykají postupně.</p>
+            </div>
           </div>
           <CitySelector cities={publishedCities} />
         </div>
@@ -212,8 +231,15 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         ) : null}
 
         {cityLocations.length === 0 ? (
-          <div className="mt-5 rounded-2xl bg-white/5 p-4 text-sm text-mist">
-            Pro tohle město zatím nemáme připravenou žádnou hru.
+          <div className="mt-5 flex items-center gap-4 rounded-2xl bg-white/5 p-4">
+            <Image
+              src={illustrationSrc("pin")}
+              alt=""
+              width={80}
+              height={80}
+              className="h-20 w-20 shrink-0 object-contain"
+            />
+            <p className="text-sm text-mist">Pro tohle město zatím nemáme připravenou žádnou hru.</p>
           </div>
         ) : (
           <div className="mt-5 grid gap-4">

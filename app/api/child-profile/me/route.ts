@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DEFAULT_AVATAR_ID, isStorableAvatarValue } from "@/lib/avatars";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 
@@ -26,7 +27,7 @@ type PatchPayload = {
   avatar_config?: unknown;
 };
 
-const DEFAULT_AVATAR = "batuzek-01";
+const DEFAULT_AVATAR = DEFAULT_AVATAR_ID;
 const DEFAULT_AVATAR_CONFIG: ChildProfileDto["avatar_config"] = {
   head: "round",
   eyes: "dot",
@@ -40,10 +41,6 @@ function generateProfileCode() {
 
 function isEmojiAvatar(value: string) {
   return /[\p{Extended_Pictographic}]/u.test(value);
-}
-
-function isBackpackAvatarId(value: string) {
-  return /^batuzek-\d{2}$/.test(value);
 }
 
 function normalizeAvatarConfig(input: unknown): ChildProfileDto["avatar_config"] | null {
@@ -379,7 +376,7 @@ export async function PATCH(request: Request) {
   }
   if (
     hasAvatarUpdate &&
-    (!avatar || avatar.length > 24 || (!isEmojiAvatar(avatar) && !isBackpackAvatarId(avatar) && avatar.length > 2))
+    (!avatar || avatar.length > 24 || (!isEmojiAvatar(avatar) && !isStorableAvatarValue(avatar) && avatar.length > 2))
   ) {
     return jsonNoStore({ ok: false, code: "invalid_avatar" }, 400);
   }

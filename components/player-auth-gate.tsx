@@ -6,6 +6,7 @@ import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { formatRecoveryKey, normalizeRecoveryKey } from "@/lib/recovery-key";
+import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc } from "@/lib/avatars";
 
 // Přihlášení hráče (R17):
 //   NOVÝ HRÁČ    -> přezdívka + avatar -> Supabase anonymní účet -> profil -> Traki klíč
@@ -28,7 +29,6 @@ type ChildProfileRow = {
   avatar_config?: AvatarConfig | null;
 };
 
-const AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
 
 const inputClass =
   "w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none placeholder:text-mist/60";
@@ -80,7 +80,7 @@ export function PlayerAuthGate() {
   const [info, setInfo] = useState("");
 
   const [nickname, setNickname] = useState("");
-  const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0]);
+  const [avatar, setAvatar] = useState(DEFAULT_AVATAR_ID);
 
   const [issuedKey, setIssuedKey] = useState("");
   const [copied, setCopied] = useState(false);
@@ -395,19 +395,19 @@ export function PlayerAuthGate() {
         </label>
         <div className="mt-4">
           <span className="text-sm text-mist">Vyber si avatara</span>
-          <div className="mt-2 grid grid-cols-5 gap-2">
-            {AVATAR_OPTIONS.map((option) => (
+          <div className="mt-2 grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+            {AVATAR_IDS.map((option, index) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setAvatar(option)}
-                aria-label={`Avatar ${option.replace("batuzek-", "")}`}
+                aria-label={`Avatar ${index + 1}`}
                 aria-pressed={avatar === option}
-                className={`relative aspect-square overflow-hidden rounded-2xl border-2 ${
+                className={`relative aspect-square overflow-hidden rounded-2xl border-2 bg-white/5 ${
                   avatar === option ? "border-lime" : "border-white/10"
                 }`}
               >
-                <Image src={`/avatars/batuzek/${option}.png`} alt="" fill sizes="64px" className="object-cover" />
+                <Image src={avatarSrc(option)} alt="" fill sizes="64px" className="object-contain p-1" />
               </button>
             ))}
           </div>

@@ -7,6 +7,7 @@ import { useAppState } from "@/components/app-state-provider";
 import type { MapLocation } from "@/lib/mock-data";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
 import { buildLocationDetailModel } from "@/lib/location-detail-model";
+import { illustrationSrc } from "@/lib/illustrations";
 
 // R21: zjednodušený detail hry – hero, název, krátký popis, „Začínáme“ (první zastávka), Hrát / zámek.
 // Data přicházejí z DB katalogu (R20); zastávky/úkoly zůstávají ve hře, jen se tu nevypisují.
@@ -74,9 +75,16 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
         ) : null}
 
         {model.primaryAction === "locked" ? (
-          <p className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/90">
-            🔒 {model.lockMessage}
-          </p>
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <Image
+              src={illustrationSrc("zamek")}
+              alt=""
+              width={72}
+              height={72}
+              className="h-[72px] w-[72px] shrink-0 object-contain"
+            />
+            <p className="text-sm text-white/90">{model.lockMessage}</p>
+          </div>
         ) : (
           <>
             <button
@@ -93,8 +101,19 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       </section>
 
       <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
-        <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
+        <div className="flex items-start gap-4">
+          <Image
+            src={illustrationSrc("blok")}
+            alt=""
+            width={72}
+            height={72}
+            className="h-14 w-14 shrink-0 object-contain sm:h-[72px] sm:w-[72px]"
+          />
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
+            <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
+          </div>
+        </div>
         <p className="mt-2 text-sm leading-6 text-mist">
           Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
           aplikace, aby vznikl skutečný výsledek a případné odemčení další hry.

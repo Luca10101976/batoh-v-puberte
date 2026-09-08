@@ -8,6 +8,8 @@ import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-res
 import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
 import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
+import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib/avatars";
+import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
 
@@ -50,162 +52,21 @@ type ActiveExpedition = {
   }>;
 };
 
-const EMOJI_AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
 
-function isEmojiAvatar(value: string) {
-  if (value.startsWith("batuzek-")) {
-    return true;
-  }
-  return /[\p{Extended_Pictographic}]/u.test(value);
-}
-
-function AvatarPreview({ config, size = 80, emoji }: { config: AvatarConfig; size?: number; emoji?: string }) {
-  if (emoji && isEmojiAvatar(emoji)) {
-    if (emoji.startsWith("batuzek-")) {
-      return (
-        <div
-          className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/10 bg-[#8dded8] shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]"
-          style={{ width: size, height: size }}
-        >
-          <div
-            className="absolute inset-0"
-            style={{ background: "radial-gradient(circle at 50% 18%, rgba(235,255,251,0.9), rgba(97,204,198,0.38) 72%, rgba(38,117,126,0.18))" }}
-          />
-          <div className="relative h-[90%] w-[90%]">
-            <Image
-              src={`/avatars/batuzek/${emoji}.png`}
-              alt="Avatar batůžek"
-              fill
-              sizes={`${size}px`}
-              className="object-contain"
-            />
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div
-        className="relative flex items-center justify-center overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
-        style={{ width: size, height: size }}
-      >
-        <div
-          className="absolute inset-0"
-          style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
-        />
-        <span style={{ fontSize: size * 0.56, lineHeight: 1 }} aria-label="Emoji avatar">
-          {emoji}
-        </span>
-      </div>
-    );
-  }
-
-  const headShapeClass =
-    config.head === "round" ? "rounded-[44%]" : config.head === "oval" ? "rounded-[40%]" : "rounded-[18px]";
-  const hairColor = "#243249";
-  const eyeSize = size * 0.22;
-  const eyeTop = size * 0.45;
-  const eyeInset = size * 0.27;
-  const pupilSize = eyeSize * 0.38;
+// Avatar hráče = jedna samolepka Traki (jediný avatarový systém, R18/R21 navazující UI).
+function AvatarPreview({ size = 80, avatar }: { size?: number; avatar?: string }) {
   return (
     <div
-      className="relative overflow-hidden rounded-[28px] border border-white/10 bg-night/40"
+      className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/10 bg-[#8dded8] shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]"
       style={{ width: size, height: size }}
     >
       <div
         className="absolute inset-0"
-        style={{ background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.12), rgba(0,0,0,0))" }}
+        style={{ background: "radial-gradient(circle at 50% 18%, rgba(235,255,251,0.9), rgba(97,204,198,0.38) 72%, rgba(38,117,126,0.18))" }}
       />
-      <div
-        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[35%] border-[3px] border-night ${headShapeClass}`}
-        style={{ width: size * 0.64, height: size * 0.62, backgroundColor: config.color }}
-      />
-      <div
-        className="absolute left-1/2 top-1/2 -translate-x-[42%] -translate-y-[44%] rounded-full bg-white/30"
-        style={{ width: size * 0.18, height: size * 0.1 }}
-      />
-
-      {config.hair === "short" ? (
-        <div
-          className="absolute left-1/2 top-[12%] -translate-x-1/2 rounded-[16px] border-[3px] border-night"
-          style={{ width: size * 0.66, height: size * 0.18, backgroundColor: hairColor }}
-        />
-      ) : null}
-
-      {config.hair === "long" ? (
-        <>
-          <div
-            className="absolute left-1/2 top-[11%] -translate-x-1/2 rounded-[18px] border-[3px] border-night"
-            style={{ width: size * 0.68, height: size * 0.2, backgroundColor: hairColor }}
-          />
-          <div
-            className="absolute left-[18%] top-[24%] rounded-b-full border-x-[3px] border-b-[3px] border-night"
-            style={{ width: size * 0.14, height: size * 0.28, backgroundColor: hairColor }}
-          />
-          <div
-            className="absolute right-[18%] top-[24%] rounded-b-full border-x-[3px] border-b-[3px] border-night"
-            style={{ width: size * 0.14, height: size * 0.28, backgroundColor: hairColor }}
-          />
-        </>
-      ) : null}
-
-      {config.hair === "spiky" ? (
-        <>
-          <div
-            className="absolute left-1/2 top-[13%] -translate-x-1/2 rounded-[14px] border-[3px] border-night"
-            style={{ width: size * 0.68, height: size * 0.16, backgroundColor: hairColor }}
-          />
-          <div
-            className="absolute left-[29%] top-[3%] h-0 w-0 border-x-[7px] border-b-[11px] border-x-transparent border-b-night"
-          />
-          <div
-            className="absolute left-[46%] top-[0%] h-0 w-0 border-x-[7px] border-b-[11px] border-x-transparent border-b-night"
-          />
-          <div
-            className="absolute right-[29%] top-[3%] h-0 w-0 border-x-[7px] border-b-[11px] border-x-transparent border-b-night"
-          />
-        </>
-      ) : null}
-
-      <div
-        className="absolute rounded-full border-[3px] border-night bg-white"
-        style={{ left: eyeInset, top: eyeTop, width: eyeSize, height: eyeSize }}
-      >
-        <div
-          className="absolute top-1/2 -translate-y-1/2 rounded-full bg-night"
-          style={{
-            width: pupilSize,
-            height: pupilSize,
-            left: config.eyes === "dot" ? "34%" : config.eyes === "smile" ? "42%" : "28%"
-          }}
-        />
+      <div className="relative h-[90%] w-[90%]">
+        <Image src={avatarSrc(avatar)} alt="Avatar hráče" fill sizes={`${size}px`} className="object-contain" />
       </div>
-      <div
-        className="absolute rounded-full border-[3px] border-night bg-white"
-        style={{ right: eyeInset, top: eyeTop, width: eyeSize, height: eyeSize }}
-      >
-        <div
-          className="absolute top-1/2 -translate-y-1/2 rounded-full bg-night"
-          style={{
-            width: pupilSize,
-            height: pupilSize,
-            right: config.eyes === "dot" ? "34%" : config.eyes === "smile" ? "42%" : "28%"
-          }}
-        />
-      </div>
-
-      <div
-        className="absolute left-[30%] border-t-[3px] border-night"
-        style={{ top: `${size * 0.4}px`, width: size * 0.14, transform: "rotate(-8deg)" }}
-      />
-      <div
-        className="absolute right-[30%] border-t-[3px] border-night"
-        style={{ top: `${size * 0.4}px`, width: size * 0.14, transform: "rotate(8deg)" }}
-      />
-
-      <div
-        className="absolute left-1/2 top-[71%] -translate-x-1/2 rounded-b-full border-b-[4px] border-night"
-        style={{ width: config.eyes === "smile" ? size * 0.24 : size * 0.19, height: size * 0.1 }}
-      />
     </div>
   );
 }
@@ -242,7 +103,7 @@ export function ProfileScreen() {
   const [invitingFriends, setInvitingFriends] = useState(false);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
-    isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]
+    resolveAvatarId(state.profile.avatar)
   );
   const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -835,7 +696,7 @@ export function ProfileScreen() {
 
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
-    setAvatarEmojiDraft(isEmojiAvatar(state.profile.avatar) ? state.profile.avatar : EMOJI_AVATAR_OPTIONS[0]);
+    setAvatarEmojiDraft(resolveAvatarId(state.profile.avatar));
   }, [state.profile.avatar, state.profile.avatarConfig]);
 
   useEffect(() => {
@@ -1377,7 +1238,7 @@ export function ProfileScreen() {
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card overflow-hidden p-5">
         <div className="flex items-center gap-4">
-          <AvatarPreview config={state.profile.avatarConfig} emoji={state.profile.avatar} size={80} />
+          <AvatarPreview avatar={state.profile.avatar} size={80} />
           <div className="flex-1">
             <p className="text-xs uppercase tracking-[0.24em] text-mist">Profil hráče</p>
             <input
@@ -1449,7 +1310,7 @@ export function ProfileScreen() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Profil</p>
-            <h2 className="mt-2 text-xl font-semibold">Moje emoji</h2>
+            <h2 className="mt-2 text-xl font-semibold">Můj avatar</h2>
           </div>
           <button
             onClick={() => setAvatarStudioOpen((current) => !current)}
@@ -1460,17 +1321,17 @@ export function ProfileScreen() {
         </div>
         {avatarStudioOpen ? (
           <>
-            <p className="mt-2 text-sm text-mist">Vyber si jedno emoji. Každá změna se uloží automaticky.</p>
+            <p className="mt-2 text-sm text-mist">Vyber si Trakiho, který ti sedí. Změna se uloží sama.</p>
 
             <div className="mt-4 flex justify-center">
-              <AvatarPreview config={avatarDraft} emoji={avatarEmojiDraft} size={148} />
+              <AvatarPreview avatar={avatarEmojiDraft} size={148} />
             </div>
 
             <div className="mt-5 space-y-4">
               <div>
-                <p className="mb-3 text-sm font-medium">Vyber emoji</p>
-                <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
-                  {EMOJI_AVATAR_OPTIONS.map((option) => (
+                <p className="mb-3 text-sm font-medium">Vyber si avatara</p>
+                <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+                  {AVATAR_IDS.map((option, index) => (
                     <button
                       key={option}
                       onClick={() => {
@@ -1485,13 +1346,13 @@ export function ProfileScreen() {
                           ? "border-lime bg-lime/12 shadow-[0_0_0_1px_rgba(192,255,96,0.18)]"
                           : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
                       }`}
-                      aria-label={`Vybrat emoji ${option.replace("batuzek-", "")}`}
+                      aria-label={`Vybrat avatara ${index + 1}`}
                     >
                       <div className="absolute inset-[8px] rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,rgba(235,255,251,0.95),rgba(97,204,198,0.78)_72%,rgba(38,117,126,0.46))]" />
                       <div className="relative z-10 mx-auto h-[76px] w-[76px] sm:h-[88px] sm:w-[88px]">
                         <Image
-                          src={`/avatars/batuzek/${option}.png`}
-                          alt={`Emoji ${option.replace("batuzek-", "")}`}
+                          src={avatarSrc(option)}
+                          alt={`Avatar ${index + 1}`}
                           fill
                           sizes="88px"
                           className="object-contain"
@@ -1524,7 +1385,16 @@ export function ProfileScreen() {
       <section className="glass-card p-5">
         <h2 className="section-title">Moje hry</h2>
         {gameSummaries.length === 0 ? (
-          <p className="mt-3 text-sm text-mist">Zatím tady nemáš žádnou rozehranou ani dokončenou hru.</p>
+          <div className="mt-3 flex items-center gap-4">
+            <Image
+              src={illustrationSrc("batoh")}
+              alt=""
+              width={80}
+              height={80}
+              className="h-20 w-20 shrink-0 object-contain"
+            />
+            <p className="text-sm text-mist">Zatím tady nemáš žádnou rozehranou ani dokončenou hru. Vyber si hru a vyraž.</p>
+          </div>
         ) : (
           <div className="mt-4 space-y-4">
             <div className="grid gap-2 sm:grid-cols-3">

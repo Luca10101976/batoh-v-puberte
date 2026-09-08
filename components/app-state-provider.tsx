@@ -16,6 +16,7 @@ import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { locations } from "@/lib/mock-data";
 import { isLocationUnlockedByChain } from "@/lib/location-unlock";
 import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
+import { DEFAULT_AVATAR_ID } from "@/lib/avatars";
 
 type SquadMember = {
   id: string;
@@ -129,7 +130,7 @@ const initialState: AppState = {
   profile: {
     name: "Hráč",
     title: "Lovec městských tajemství",
-    avatar: "batuzek-01",
+    avatar: DEFAULT_AVATAR_ID,
     avatarConfig: {
       head: "round",
       eyes: "dot",

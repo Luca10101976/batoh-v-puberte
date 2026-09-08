@@ -13,6 +13,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 import { POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
 import { fetchWithSessionRecovery } from "@/lib/session-recovery";
+import { illustrationSrc, type IllustrationName } from "@/lib/illustrations";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
@@ -107,6 +108,15 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     status === "unknown" ||
     status === "manual";
   const verificationFinished = status === "correct" || status === "unknown" || status === "manual";
+  // Ilustrace stavu odpovědi (schválené mapování samolepek Traki)
+  const statusIllustration: IllustrationName | null =
+    status === "correct" || status === "manual"
+      ? "hvezda"
+      : status === "wrong"
+        ? "otaznik"
+        : status === "unknown"
+          ? "pokrceni"
+          : null;
 
   const completionLabel = useMemo(() => `Body se připíšou hráči ${state.profile.name}.`, [state.profile.name]);
   const hasAnyTasks = totalTasks > 0;
@@ -549,7 +559,16 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
         <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Závěrečné odhalení</p>
+          <div className="flex justify-center">
+            <Image
+              src={illustrationSrc("konfety")}
+              alt=""
+              width={140}
+              height={140}
+              className="h-[140px] w-[140px] object-contain"
+            />
+          </div>
+          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-coral">Závěrečné odhalení</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{location.endingTitle}</h1>
           <p className="mt-4 text-sm leading-7 text-mist">{location.endingStory}</p>
         </section>
@@ -608,7 +627,13 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             <p className="mt-1 text-xl font-bold text-white">{pendingEpisodeTransition.fromName}</p>
           </div>
           <div className="mt-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-lime text-2xl font-bold text-night">→</div>
+            <Image
+              src={illustrationSrc("rozcestnik")}
+              alt=""
+              width={72}
+              height={72}
+              className="h-[72px] w-[72px] shrink-0 object-contain"
+            />
             <p className="text-base font-semibold text-white">Přechod na další zastavení</p>
           </div>
           <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
@@ -765,21 +790,32 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         </div>
 
         {message ? (
-          <p
-            className={`mt-4 text-sm ${
-              status === "correct"
-                ? "text-lime"
-                : status === "wrong"
-                  ? "text-coral"
-                : status === "unknown"
-                  ? "text-mist"
-                  : status === "manual"
-                    ? "text-sky"
-                    : "text-mist"
-            }`}
-          >
-            {message}
-          </p>
+          <div className="mt-4 flex items-center gap-3">
+            {statusIllustration ? (
+              <Image
+                src={illustrationSrc(statusIllustration)}
+                alt=""
+                width={64}
+                height={64}
+                className="h-16 w-16 shrink-0 object-contain"
+              />
+            ) : null}
+            <p
+              className={`text-sm ${
+                status === "correct"
+                  ? "text-lime"
+                  : status === "wrong"
+                    ? "text-coral"
+                  : status === "unknown"
+                    ? "text-mist"
+                    : status === "manual"
+                      ? "text-sky"
+                      : "text-mist"
+              }`}
+            >
+              {message}
+            </p>
+          </div>
         ) : null}
 
         <p className="mt-3 text-xs text-mist/80">

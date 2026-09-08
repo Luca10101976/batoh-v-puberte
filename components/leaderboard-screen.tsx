@@ -1,4 +1,6 @@
 "use client";
+import Image from "next/image";
+import { illustrationSrc } from "@/lib/illustrations";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -113,12 +115,21 @@ export function LeaderboardScreen() {
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
-      <section className="glass-card p-5">
+      <section className="glass-card flex items-start gap-4 p-5">
+        <Image
+          src={illustrationSrc("pohar")}
+          alt=""
+          width={92}
+          height={92}
+          className="h-16 w-16 shrink-0 object-contain sm:h-[92px] sm:w-[92px]"
+        />
+        <div>
         <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
         <p className="mt-2 text-sm leading-6 text-mist">
           Můžeš si přepnout soutěž mezi kamarády nebo plošným žebříčkem všech hráčů.
         </p>
+        </div>
       </section>
 
       <section className="glass-card p-2">

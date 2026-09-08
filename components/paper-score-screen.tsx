@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { locations } from "@/lib/mock-data";
+import { illustrationSrc } from "@/lib/illustrations";
 
 export function PaperScoreScreen({ availableLocationIds }: { availableLocationIds: string[] }) {
   const searchParams = useSearchParams();
@@ -43,8 +45,19 @@ export function PaperScoreScreen({ availableLocationIds }: { availableLocationId
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-coral">Papírová hra</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Vytiskni ven, vyhodnoť v aplikaci</h1>
+        <div className="flex items-start gap-4">
+          <Image
+            src={illustrationSrc("blok")}
+            alt=""
+            width={84}
+            height={84}
+            className="h-16 w-16 shrink-0 object-contain sm:h-[84px] sm:w-[84px]"
+          />
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Papírová hra</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Vytiskni ven, vyhodnoť v aplikaci</h1>
+          </div>
+        </div>
         <p className="mt-3 text-sm leading-6 text-mist">
           Tisková verze je jen pracovní sešit do terénu. Skutečný výsledek, body i odemčení dalších míst vzniknou až ve
           chvíli, kdy stejné odpovědi zadáš do aplikace.

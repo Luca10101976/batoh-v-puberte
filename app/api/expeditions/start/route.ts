@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
 import { locations } from "@/lib/mock-data";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
@@ -48,6 +49,16 @@ export async function POST(request: NextRequest) {
   if (!ownProfile?.id) {
     return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
+
+  // R22: i skupinová výprava se řídí serverovým herním zámkem (fail-closed).
+  const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId);
+  if (!access.allowed) {
+    return NextResponse.json(
+      { ok: false, error: access.reason === "not_published" ? "unknown_mission" : "mission_locked" },
+      { status: gameAccessHttpStatus(access.reason) }
+    );
+  }
+
 
   const session = await getSession(auth.admin, sessionId);
   if (!session?.id) {

@@ -46,6 +46,12 @@ export type CatalogEntry = {
    * dokončený progress, hra tedy zůstane zamčená místo omylem odemčená.
    */
   unlockAfterLocationId: string | null;
+  /**
+   * Vazba je nastavená, ale neplatná: odkazovaná mise neexistuje nebo je z jiného města.
+   * Herní odemykání smí probíhat pouze v rámci jednoho města (R22), proto se taková
+   * hra chová jako trvale zamčená (fail-closed), dokud vydavatel vazbu neopraví.
+   */
+  unlockPrerequisiteInvalid: boolean;
 };
 
 export function firstSentence(value: string | null | undefined) {
@@ -85,6 +91,8 @@ export function buildCatalog(
     .filter((row) => row.is_published === true)
     .map<CatalogEntry>((row) => {
       const requiredRow = row.unlock_after_mission_id ? byId.get(row.unlock_after_mission_id) ?? null : null;
+      const sameCity =
+        requiredRow !== null && String(requiredRow.city ?? "").trim() === String(row.city ?? "").trim();
       return {
         missionId: row.id,
         locationId: resolveLocationId(row),
@@ -100,7 +108,8 @@ export function buildCatalog(
           ? requiredRow
             ? resolveLocationId(requiredRow)
             : String(row.unlock_after_mission_id)
-          : null
+          : null,
+        unlockPrerequisiteInvalid: Boolean(row.unlock_after_mission_id) && !sameCity
       };
     });
 

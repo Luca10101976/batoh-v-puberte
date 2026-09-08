@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
 import { createClient } from "@supabase/supabase-js";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
@@ -158,6 +159,15 @@ export async function POST(request: NextRequest) {
     // Security hard stop: never auto-create profile from client-supplied profileCode.
     // Profile must already belong to the authenticated parent account.
     return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
+  }
+
+  // R22: herní zámek se vynucuje na serveru (fail-closed), ne jen v UI.
+  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId);
+  if (!access.allowed) {
+    return NextResponse.json(
+      { ok: false, error: access.reason === "not_published" ? "unknown_location" : "location_locked" },
+      { status: gameAccessHttpStatus(access.reason) }
+    );
   }
 
   const participantCodes = new Set<string>([profileCode]);

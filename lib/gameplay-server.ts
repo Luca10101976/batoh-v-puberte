@@ -262,8 +262,8 @@ function buildDbBackedLocationSeed(
     name: mission.title,
     teaser,
     shortDescription: teaser,
-    // R20: katalogový zámek pochází z DB (unlock_after_mission_id), ne z mocku
-    unlockedByPlaceId: catalogEntry?.unlockAfterLocationId ?? null,
+    // R20/R22: katalogový zámek z DB; neplatná vazba = trvale zamčeno
+    unlockedByPlaceId: catalogUnlockedByPlaceId(catalogEntry ?? null),
     subtitle: "Městská mise",
     story: introStory,
     image,
@@ -533,6 +533,20 @@ function resolveCatalogLocationId(row: CatalogMissionRow) {
 }
 
 /** Uživatelský název hry pro dané locationId: název místa z mocku (karta), jinak titul mise z katalogu. */
+/**
+ * R22: hodnota, kterou nikdy nemůže mít dokončená hra. Používá se, když je vazba
+ * unlock_after_mission_id nastavená, ale neplatná (jiné město / nedohledatelná hra),
+ * aby se hra i v UI chovala jako trvale zamčená (fail-closed).
+ */
+const INVALID_PREREQUISITE = "__neplatny_prerequisite__";
+
+function catalogUnlockedByPlaceId(entry: CatalogEntry | null) {
+  if (!entry?.unlockAfterLocationId) {
+    return null;
+  }
+  return entry.unlockPrerequisiteInvalid ? INVALID_PREREQUISITE : entry.unlockAfterLocationId;
+}
+
 function resolveLocationDisplayName(locationId: string | null | undefined, catalog: CatalogEntry[]) {
   if (!locationId) {
     return null;
@@ -655,7 +669,7 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
     // R20: katalogová pole z DB (popis karty, zámek, pořadí); hero fallback = stávající obrázek
     teaser: catalogEntry?.teaser ? truncateText(catalogEntry.teaser, 96) : location.teaser,
     shortDescription: catalogEntry?.teaser || location.shortDescription,
-    unlockedByPlaceId: catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
+    unlockedByPlaceId: catalogEntry ? catalogUnlockedByPlaceId(catalogEntry) : location.unlockedByPlaceId ?? null,
     unlockRequirementName: resolveLocationDisplayName(
       catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
       catalogEntries

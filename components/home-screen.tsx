@@ -6,12 +6,12 @@ import Image from "next/image";
 import { CitySelector } from "@/components/city-selector";
 import { useAppState } from "@/components/app-state-provider";
 import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
-import { locations, type MapLocation } from "@/lib/mock-data";
-import { getUnlockRequirement } from "@/lib/location-unlock";
+import type { MapLocation } from "@/lib/mock-data";
+import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-unlock";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
+type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[]; catalogOrder?: number };
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
@@ -58,7 +58,7 @@ function cityLocative(city: string) {
 }
 
 export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLocation[] }) {
-  const { state, isLocationUnlocked, setCity } = useAppState();
+  const { state, setCity } = useAppState();
   const [resumeCard, setResumeCard] = useState<ResumeMissionCard | null>(null);
   const publishedCities = useMemo(
     () => Array.from(new Set(publishedLocations.map((location) => location.city))).sort((a, b) => a.localeCompare(b, "cs")),
@@ -69,7 +69,8 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
       publishedLocations
         .filter((location) => location.city === state.city)
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "cs")),
+        // R20: pořadí v katalogu = catalog_order z DB, při shodě název
+        .sort((a, b) => (a.catalogOrder ?? 0) - (b.catalogOrder ?? 0) || a.name.localeCompare(b.name, "cs")),
     [publishedLocations, state.city]
   );
   const supabase = useMemo(() => {
@@ -217,8 +218,14 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         ) : (
           <div className="mt-5 grid gap-4">
             {cityLocations.map((missionLocation) => {
-              const missionUnlocked = isLocationUnlocked(missionLocation.id, missionLocation.unlocked);
-              const unlockRequirement = getUnlockRequirement(missionLocation, locations);
+              // R20: zámek podle DB (unlock_after_mission_id) nad publikovaným katalogem, ne podle mocku
+              const missionUnlocked = isLocationUnlockedByChain(
+                missionLocation,
+                state.completedGameplayLocationIds,
+                publishedLocations,
+                missionLocation.unlocked
+              );
+              const unlockRequirement = getUnlockRequirement(missionLocation, publishedLocations);
               const taskCount = missionLocation.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
 
               return (

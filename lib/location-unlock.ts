@@ -19,10 +19,13 @@ export function isLocationUnlockedByChain(
     return true;
   }
 
-  const requirement = getUnlockRequirement(location, allLocations);
-  if (!requirement) {
+  // FAIL-CLOSED (R20): je-li vazba nastavená, odemyká výhradně dokončení vyžadované hry.
+  // Když vyžadovanou hru nelze najít v seznamu (nepublikovaná, smazaná, neplatné ID),
+  // hra zůstává zamčená – nikdy se neodemkne omylem.
+  const requiredId = location.unlockedByPlaceId;
+  if (!requiredId) {
     return true;
   }
 
-  return completedGameplayLocationIds.includes(requirement.id);
+  return completedGameplayLocationIds.includes(requiredId);
 }

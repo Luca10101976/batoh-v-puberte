@@ -3,6 +3,7 @@ import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { taskAnswers } from "@/lib/task-answers";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
+import { buildCatalog, firstSentence, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 
 type MissionStopDbRow = {
   id: string;
@@ -33,6 +34,9 @@ type MissionDbRow = {
   duration_min?: number;
   points?: number;
   is_published?: boolean;
+  short_description?: string | null;
+  catalog_order?: number | null;
+  unlock_after_mission_id?: string | null;
 };
 
 type DbBackedLocationSeed = {
@@ -62,6 +66,7 @@ type DbBackedLocationSeed = {
   endingStory: string;
   playerMessage: string;
   interludes: string[];
+  catalogOrder: number;
 };
 
 function mapDifficultyLabel(value?: "lehka" | "stredni" | "tezka") {
@@ -218,16 +223,6 @@ function parseTaskCorrectnessRule(question: string, rawCorrectAnswer: string | n
   };
 }
 
-function firstSentence(value: string | undefined) {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const sentenceMatch = trimmed.match(/^.+?[.!?](?:\s|$)/);
-  return sentenceMatch ? sentenceMatch[0].trim() : trimmed;
-}
-
 function truncateText(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value;
@@ -247,11 +242,13 @@ function getCityAnchor(city: string) {
 function buildDbBackedLocationSeed(
   mission: MissionDbRow,
   episodes: GameplayEpisode[],
-  fallbackImage?: string
+  fallbackImage?: string,
+  catalogEntry?: CatalogEntry | null
 ): DbBackedLocationSeed {
   const anchor = getCityAnchor(mission.city);
   const introStory = (mission.intro_text ?? "").trim();
-  const teaserSource = firstSentence(introStory) || `${mission.city} městská mise`;
+  // R20: popis karty = short_description, jinak první věta intro (katalogová vrstva)
+  const teaserSource = catalogEntry?.teaser || firstSentence(introStory) || `${mission.city} městská mise`;
   const teaser = truncateText(teaserSource, 96);
   const image =
     mission.hero_image_url?.trim() ||
@@ -265,7 +262,8 @@ function buildDbBackedLocationSeed(
     name: mission.title,
     teaser,
     shortDescription: teaser,
-    unlockedByPlaceId: null,
+    // R20: katalogový zámek pochází z DB (unlock_after_mission_id), ne z mocku
+    unlockedByPlaceId: catalogEntry?.unlockAfterLocationId ?? null,
     subtitle: "Městská mise",
     story: introStory,
     image,
@@ -285,7 +283,8 @@ function buildDbBackedLocationSeed(
     endingTitle: "Mise dokončena",
     endingStory: "Projdi všechna zastavení, posbírej stopy a zadej odpovědi přímo v aplikaci.",
     playerMessage: "Skvělá práce. Tohle je oficiální výsledek tvé mise v aplikaci.",
-    interludes: []
+    interludes: [],
+    catalogOrder: catalogEntry?.catalogOrder ?? 0
   };
 }
 
@@ -515,48 +514,84 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
   return buildEpisodesFromDb((stopsData as MissionStopDbRow[]) ?? [], normalizedTasks);
 }
 
-export async function getPublishedLocationIds() {
-  const canonicalByKey = nearbyMissions.reduce((map, mission) => {
+// ---------------------------------------------------------------------------
+// R20: katalog měst a her – jediný zdroj pravdy je tabulka `missions`.
+// mock-data.ts už nerozhoduje, zda se hra/město v katalogu objeví, o publikaci
+// ani o pořadí; slouží jen k mapování historických slugů (klamovka, …) a k runtime
+// gameplay (viz R38/R39).
+// ---------------------------------------------------------------------------
+
+const CATALOG_COLUMNS =
+  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, points, catalog_order, is_published, unlock_after_mission_id";
+const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published";
+
+/** Historický slug hry (mock) podle dvojice město::název; jinak UUID mise. */
+function resolveCatalogLocationId(row: CatalogMissionRow) {
+  const key = `${String(row.city).trim().toLowerCase()}::${String(row.title).trim().toLowerCase()}`;
+  return canonicalSlugByKey().get(key) ?? row.id;
+}
+
+let canonicalSlugCache: Map<string, string> | null = null;
+function canonicalSlugByKey() {
+  if (canonicalSlugCache) {
+    return canonicalSlugCache;
+  }
+  canonicalSlugCache = nearbyMissions.reduce((map, mission) => {
     const location = locations.find((item) => item.id === mission.locationId);
-    if (!location) {
-      return map;
+    if (location) {
+      map.set(`${location.city.trim().toLowerCase()}::${mission.name.trim().toLowerCase()}`, mission.locationId);
     }
-    map.set(`${location.city.trim().toLowerCase()}::${mission.name.trim().toLowerCase()}`, mission.locationId);
     return map;
   }, new Map<string, string>());
+  return canonicalSlugCache;
+}
 
-  let supabase;
+/**
+ * Katalog z DB (pouze publikované hry, seřazené město → catalog_order → název).
+ * Při nedostupné DB vyhodí chybu – stránka Domů (ISR) pak dál servíruje poslední
+ * úspěšně vygenerovanou verzi místo prázdného katalogu.
+ */
+export async function getCatalog(): Promise<CatalogEntry[]> {
+  const supabase = getSupabaseServerClient();
+  let { data, error } = await supabase.from("missions").select(CATALOG_COLUMNS);
+  if (error && /short_description|catalog_order|unlock_after_mission_id/i.test(error.message ?? "")) {
+    ({ data, error } = await supabase.from("missions").select(CATALOG_COLUMNS_LEGACY));
+  }
+  if (error || !data) {
+    throw new Error(`catalog_unavailable: ${error?.message ?? "no data"}`);
+  }
+  return buildCatalog(data as CatalogMissionRow[], resolveCatalogLocationId);
+}
+
+/**
+ * Publikované hry pro gameplay gating. Zdrojem je katalog (DB); při nedostupné DB
+ * se zachovává dosavadní chování (mock ID), aby výpadek DB nezablokoval rozehranou hru.
+ */
+export async function getPublishedLocationIds() {
   try {
-    supabase = getSupabaseServerClient();
+    const catalog = await getCatalog();
+    return Array.from(new Set(catalog.map((entry) => entry.locationId)));
   } catch {
     return nearbyMissions.map((mission) => mission.locationId);
   }
-
-  const { data, error } = await supabase
-    .from("missions")
-    .select("id, title, city, is_published")
-    .eq("is_published", true);
-
-  if (error || !data) {
-    return nearbyMissions.map((mission) => mission.locationId);
-  }
-
-  const ids = new Set<string>();
-  data.forEach((mission) => {
-    const locationId = canonicalByKey.get(
-      `${String(mission.city).trim().toLowerCase()}::${String(mission.title).trim().toLowerCase()}`
-    );
-    ids.add(locationId ?? String((mission as { id?: string }).id ?? ""));
-  });
-
-  return Array.from(ids).filter(Boolean);
 }
 
-export async function getGameplayLocation(locationId: string) {
+export async function getGameplayLocation(locationId: string, catalog?: CatalogEntry[]) {
   const location = locations.find((item) => item.id === locationId) ?? null;
   const canonical = getCanonicalMission(locationId);
+  let catalogEntries: CatalogEntry[] = catalog ?? [];
+  if (!catalog) {
+    try {
+      catalogEntries = await getCatalog();
+    } catch {
+      catalogEntries = [];
+    }
+  }
+  const catalogEntry = catalogEntries.find((entry) => entry.locationId === locationId) ?? null;
   if (canonical) {
-    const publishedLocationIds = await getPublishedLocationIds();
+    const publishedLocationIds = catalog
+      ? catalogEntries.map((entry) => entry.locationId)
+      : await getPublishedLocationIds();
     if (!publishedLocationIds.includes(locationId)) {
       return null;
     }
@@ -582,13 +617,18 @@ export async function getGameplayLocation(locationId: string) {
 
     const fallbackImage = episodes.find((episode) => episode.illustrationImage)?.illustrationImage;
     return {
-      ...buildDbBackedLocationSeed(mission, episodes, fallbackImage),
+      ...buildDbBackedLocationSeed(mission, episodes, fallbackImage, catalogEntry),
       episodes
     };
   }
 
   return {
     ...location,
+    // R20: katalogová pole z DB (popis karty, zámek, pořadí); hero fallback = stávající obrázek
+    teaser: catalogEntry?.teaser ? truncateText(catalogEntry.teaser, 96) : location.teaser,
+    shortDescription: catalogEntry?.teaser || location.shortDescription,
+    unlockedByPlaceId: catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
+    catalogOrder: catalogEntry?.catalogOrder ?? 0,
     subtitle: mission?.title ?? location.subtitle,
     introStory: mission?.intro_text ?? location.introStory,
     story: mission?.intro_text ? "" : location.story,

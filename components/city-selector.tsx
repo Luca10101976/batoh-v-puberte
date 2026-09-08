@@ -2,14 +2,11 @@
 
 import { useMemo } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { locations } from "@/lib/mock-data";
 
 export function CitySelector({ cities: allowedCities }: { cities?: string[] }) {
   const { state, setCity } = useAppState();
-  const cities = useMemo(
-    () => allowedCities && allowedCities.length > 0 ? allowedCities : Array.from(new Set(locations.map((location) => location.city))),
-    [allowedCities]
-  );
+  // R20: seznam měst přichází výhradně z DB katalogu (jen města s publikovanou hrou)
+  const cities = useMemo(() => allowedCities ?? [], [allowedCities]);
 
   return (
     <select

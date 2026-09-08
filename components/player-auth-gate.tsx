@@ -22,7 +22,6 @@ type Screen = "start" | "new" | "key" | "recover" | "email";
 type ChildProfileRow = {
   id?: string | null;
   child_name: string;
-  child_age: number;
   profile_code: string;
   player_code?: string | null;
   avatar?: string | null;
@@ -30,7 +29,6 @@ type ChildProfileRow = {
 };
 
 const AVATAR_OPTIONS = Array.from({ length: 20 }, (_, index) => `batuzek-${String(index + 1).padStart(2, "0")}`);
-const AGE_OPTIONS = [8, 9, 10, 11, 12, 13, 14, 15];
 
 const inputClass =
   "w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none placeholder:text-mist/60";
@@ -82,7 +80,6 @@ export function PlayerAuthGate() {
   const [info, setInfo] = useState("");
 
   const [nickname, setNickname] = useState("");
-  const [age, setAge] = useState(11);
   const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0]);
 
   const [issuedKey, setIssuedKey] = useState("");
@@ -122,7 +119,6 @@ export function PlayerAuthGate() {
       registrationAppliedRef.current = true;
       completeRegistration({
         name: profile.child_name,
-        age: profile.child_age,
         playerCode: profile.player_code || profile.profile_code,
         profileCode: profile.profile_code,
         profileRowId: profile.id ?? null,
@@ -163,7 +159,7 @@ export function PlayerAuthGate() {
     const profileResponse = await fetch("/api/child-profile/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ child_name: trimmed, child_age: age, avatar })
+      body: JSON.stringify({ child_name: trimmed, avatar })
     }).catch(() => null);
     if (!profileResponse?.ok) {
       setBusy(false);
@@ -396,16 +392,6 @@ export function PlayerAuthGate() {
             autoComplete="off"
             className={inputClass}
           />
-        </label>
-        <label className="mt-4 block space-y-2">
-          <span className="text-sm text-mist">Kolik ti je?</span>
-          <select value={age} onChange={(event) => setAge(Number(event.target.value))} className={inputClass}>
-            {AGE_OPTIONS.map((value) => (
-              <option key={value} value={value} className="text-night">
-                {value} let
-              </option>
-            ))}
-          </select>
         </label>
         <div className="mt-4">
           <span className="text-sm text-mist">Vyber si avatara</span>

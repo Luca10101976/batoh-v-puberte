@@ -17,7 +17,6 @@ type IncomingFriendshipRow = {
 type ChildProfileBasicRow = {
   id: string;
   child_name: string;
-  child_age?: number | null;
   profile_code: string;
   player_code?: string | null;
   avatar?: string | null;
@@ -96,7 +95,7 @@ export async function GET(request: NextRequest) {
   const ownPublicCodes = new Set(ownProfiles.map((profile) => normalizeCode(profile.player_code || profile.profile_code)));
   const { data: canonicalProfileData } = await auth.admin
     .from("child_profiles")
-    .select("id, child_name, child_age, profile_code, player_code, avatar, avatar_config, pin_hash")
+    .select("id, child_name, profile_code, player_code, avatar, avatar_config, pin_hash")
     .eq("id", ownProfile.id)
     .limit(1)
     .maybeSingle();
@@ -197,7 +196,6 @@ export async function GET(request: NextRequest) {
       profile: canonicalProfile
         ? {
             child_name: canonicalProfile.child_name,
-            child_age: canonicalProfile.child_age ?? 11,
             profile_code: canonicalProfile.profile_code,
             player_code: canonicalProfile.player_code || canonicalProfile.profile_code,
             avatar: canonicalProfile.avatar ?? "PB",
@@ -253,7 +251,6 @@ export async function GET(request: NextRequest) {
     profile: canonicalProfile
       ? {
           child_name: canonicalProfile.child_name,
-          child_age: canonicalProfile.child_age ?? 11,
           profile_code: canonicalProfile.profile_code,
           player_code: canonicalProfile.player_code || canonicalProfile.profile_code,
           avatar: canonicalProfile.avatar ?? "PB",

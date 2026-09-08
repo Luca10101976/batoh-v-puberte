@@ -100,7 +100,6 @@ export async function POST(request: NextRequest) {
   let profile:
     | {
         child_name: string;
-        child_age: number;
         profile_code: string;
         player_code: string;
         contact_email: string | null;
@@ -123,14 +122,13 @@ export async function POST(request: NextRequest) {
     // Newer schema path.
     const modernByUpdated = await sessionClient
       .from("child_profiles")
-      .select("child_name, child_age, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
+      .select("child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
       .eq("parent_user_id", user.id)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(1)
       .maybeSingle<{
         child_name: string;
-        child_age: number;
         profile_code: string;
         player_code: string | null;
         contact_email: string | null;
@@ -144,14 +142,13 @@ export async function POST(request: NextRequest) {
       modernByUpdated.error?.code === "42703"
         ? await sessionClient
             .from("child_profiles")
-            .select("child_name, child_age, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
+            .select("child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
             .eq("parent_user_id", user.id)
             .order("created_at", { ascending: true })
             .order("id", { ascending: true })
             .limit(1)
             .maybeSingle<{
               child_name: string;
-              child_age: number;
               profile_code: string;
               player_code: string | null;
               contact_email: string | null;
@@ -165,7 +162,6 @@ export async function POST(request: NextRequest) {
     if (!modern.error && modern.data) {
       return {
         child_name: modern.data.child_name,
-        child_age: modern.data.child_age,
         profile_code: modern.data.profile_code,
         player_code: modern.data.player_code || modern.data.profile_code,
         contact_email: modern.data.contact_email ?? null,
@@ -179,14 +175,13 @@ export async function POST(request: NextRequest) {
     if (modern.error?.code === "42703") {
       const legacy = await sessionClient
         .from("child_profiles")
-        .select("child_name, child_age, profile_code, pin_updated_at, created_at")
+        .select("child_name, profile_code, pin_updated_at, created_at")
         .eq("parent_user_id", user.id)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
         .limit(1)
         .maybeSingle<{
           child_name: string;
-          child_age: number;
           profile_code: string;
           pin_updated_at: string | null;
         }>();
@@ -194,7 +189,6 @@ export async function POST(request: NextRequest) {
       if (!legacy.error && legacy.data) {
         return {
           child_name: legacy.data.child_name,
-          child_age: legacy.data.child_age,
           profile_code: legacy.data.profile_code,
           player_code: legacy.data.profile_code,
           contact_email: user.email ?? null,
@@ -224,7 +218,6 @@ export async function POST(request: NextRequest) {
     const modernInsert = await sessionClient.from("child_profiles").insert({
       parent_user_id: user.id,
       child_name: childName,
-      child_age: 11,
       profile_code: code,
       player_code: code,
       contact_email: user.email ?? null
@@ -234,7 +227,6 @@ export async function POST(request: NextRequest) {
       const legacyInsert = await sessionClient.from("child_profiles").insert({
         parent_user_id: user.id,
         child_name: childName,
-        child_age: 11,
         profile_code: code
       });
       if (legacyInsert.error) {
@@ -259,7 +251,7 @@ export async function POST(request: NextRequest) {
 
     const byParentUpdated = await admin
       .from("child_profiles")
-      .select("id, parent_user_id, child_name, child_age, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
+      .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
       .eq("parent_user_id", user.id)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
@@ -268,7 +260,6 @@ export async function POST(request: NextRequest) {
         id: string;
         parent_user_id: string | null;
         child_name: string;
-        child_age: number;
         profile_code: string;
         player_code: string | null;
         contact_email: string | null;
@@ -282,7 +273,7 @@ export async function POST(request: NextRequest) {
       byParentUpdated.error?.code === "42703"
         ? await admin
             .from("child_profiles")
-            .select("id, parent_user_id, child_name, child_age, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
+            .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
             .eq("parent_user_id", user.id)
             .order("created_at", { ascending: true })
             .order("id", { ascending: true })
@@ -291,7 +282,6 @@ export async function POST(request: NextRequest) {
               id: string;
               parent_user_id: string | null;
               child_name: string;
-              child_age: number;
               profile_code: string;
               player_code: string | null;
               contact_email: string | null;
@@ -307,7 +297,6 @@ export async function POST(request: NextRequest) {
     if (resolved) {
       profile = {
         child_name: resolved.child_name,
-        child_age: resolved.child_age,
         profile_code: resolved.profile_code,
         player_code: resolved.player_code || resolved.profile_code,
         contact_email: resolved.contact_email ?? null,

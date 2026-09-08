@@ -14,7 +14,6 @@ import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally
 type ChildProfileRow = {
   id: string;
   child_name: string;
-  child_age?: number;
   profile_code: string;
   player_code?: string | null;
   avatar?: string | null;
@@ -430,8 +429,7 @@ export function ProfileScreen() {
       | {
           profile?: {
             child_name?: string;
-            child_age?: number;
-            profile_code?: string;
+                      profile_code?: string;
             player_code?: string;
             avatar?: string | null;
             avatar_config?: AvatarConfig | null;
@@ -472,8 +470,7 @@ export function ProfileScreen() {
         | {
             profile?: {
               child_name?: string;
-              child_age?: number;
-              profile_code?: string;
+                          profile_code?: string;
               player_code?: string;
               avatar?: string | null;
               avatar_config?: AvatarConfig | null;
@@ -492,7 +489,6 @@ export function ProfileScreen() {
       const bootstrapped: ChildProfileRow = {
         id: bootstrapPayload?.profile_id || "",
         child_name: bootstrapProfile.child_name || "Hráč",
-        child_age: bootstrapProfile.child_age || 11,
         profile_code: bootstrapProfile.profile_code,
         player_code: bootstrapProfile.player_code || bootstrapProfile.profile_code
       };
@@ -500,7 +496,6 @@ export function ProfileScreen() {
       setCloudProfileError("");
       syncCloudProfile({
         childName: bootstrapped.child_name,
-        childAge: bootstrapped.child_age,
         profileCode: bootstrapped.profile_code,
         playerCode: bootstrapped.player_code || bootstrapped.profile_code,
         profileRowId: bootstrapPayload?.profile_id ?? null,
@@ -515,7 +510,6 @@ export function ProfileScreen() {
     const resolved: ChildProfileRow = {
       id: payload?.profile_id || "",
       child_name: profile.child_name || "Hráč",
-      child_age: profile.child_age || 11,
       profile_code: profile.profile_code,
       player_code: profile.player_code || profile.profile_code
     };
@@ -523,7 +517,6 @@ export function ProfileScreen() {
     setCloudProfileError("");
     syncCloudProfile({
       childName: resolved.child_name,
-      childAge: resolved.child_age,
       profileCode: resolved.profile_code,
       playerCode: resolved.player_code || resolved.profile_code,
       profileRowId: payload?.profile_id ?? null,
@@ -563,8 +556,7 @@ export function ProfileScreen() {
         | {
             profile?: {
               child_name?: string;
-              child_age?: number;
-              player_code?: string;
+                          player_code?: string;
               profile_code?: string;
               has_pin?: boolean;
               avatar?: string;
@@ -581,7 +573,6 @@ export function ProfileScreen() {
 
       syncCloudProfile({
         childName: profile.child_name,
-        childAge: profile.child_age,
         playerCode: profile.player_code,
         profileCode: profile.profile_code,
         profileRowId: payload?.profile_id ?? null,
@@ -806,8 +797,7 @@ export function ProfileScreen() {
     const payload = (await response.json()) as {
       profile?: {
         child_name?: string;
-        child_age?: number;
-        player_code?: string;
+              player_code?: string;
         profile_code?: string;
         has_pin?: boolean;
         avatar?: string;
@@ -1414,7 +1404,7 @@ export function ProfileScreen() {
               {savingProfile ? "Ukládám…" : "Uložit jméno"}
             </button>
             <p className="mt-1 text-sm text-mist">
-              {state.profile.age} let · {state.profile.title}
+              {state.profile.title}
             </p>
             {savingProfile ? <p className="mt-1 text-xs text-mist">Ukládám profil…</p> : null}
             {!savingProfile && profileMessage ? (

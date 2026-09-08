@@ -32,7 +32,6 @@ export type AvatarConfig = {
 
 type PlayerProfile = {
   name: string;
-  age: number;
   title: string;
   avatar: string;
   avatarConfig: AvatarConfig;
@@ -73,7 +72,6 @@ type AppStateContextValue = {
   openParentAuthGate: () => void;
   completeRegistration: (payload: {
     name: string;
-    age: number;
     parentEmail?: string;
     playerCode?: string;
     profileCode?: string;
@@ -92,7 +90,6 @@ type AppStateContextValue = {
   updateProfile: (profile: Partial<PlayerProfile>) => void;
   syncCloudProfile: (payload: {
     childName?: string;
-    childAge?: number;
     playerCode?: string;
     profileCode?: string;
     profileRowId?: string | null;
@@ -131,7 +128,6 @@ const initialState: AppState = {
   city: "Praha",
   profile: {
     name: "Hráč",
-    age: 11,
     title: "Lovec městských tajemství",
     avatar: "batuzek-01",
     avatarConfig: {
@@ -326,7 +322,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       let childProfile: {
         id?: string;
         child_name: string;
-        child_age: number;
         profile_code: string;
         player_code?: string;
         profile_id?: string | null;
@@ -363,7 +358,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                 profile?: {
                   id?: string;
                   child_name: string;
-                  child_age: number;
                   profile_code: string;
                   player_code?: string;
                   contact_email?: string | null;
@@ -472,7 +466,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           profile: {
             ...current.profile,
             name: shouldApplyRemoteProfile ? childProfile.child_name || current.profile.name : current.profile.name,
-            age: shouldApplyRemoteProfile ? childProfile.child_age || current.profile.age : current.profile.age,
             avatar: shouldApplyRemoteProfile ? childProfile.avatar || current.profile.avatar : current.profile.avatar,
             avatarConfig: shouldApplyRemoteProfile
               ? childProfile.avatar_config || current.profile.avatarConfig
@@ -514,7 +507,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const completeRegistration = useCallback(
     ({
       name,
-      age,
       parentEmail,
       playerCode,
       profileCode,
@@ -523,7 +515,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       avatarConfig
     }: {
       name: string;
-      age: number;
       parentEmail?: string;
       playerCode?: string;
       profileCode?: string;
@@ -550,7 +541,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         profile: {
           ...current.profile,
           name: trimmedName || current.profile.name,
-          age,
           avatar: avatar?.trim() || current.profile.avatar,
           avatarConfig: avatarConfig || current.profile.avatarConfig
         },
@@ -696,7 +686,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const syncCloudProfile = useCallback(
     (payload: {
       childName?: string;
-      childAge?: number;
       playerCode?: string;
       profileCode?: string;
       profileRowId?: string | null;
@@ -713,7 +702,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         profile: {
           ...current.profile,
           name: payload.childName || current.profile.name,
-          age: payload.childAge || current.profile.age,
           avatar: payload.avatar || current.profile.avatar,
           avatarConfig: payload.avatarConfig || current.profile.avatarConfig
         }

@@ -294,8 +294,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             unknownTaskIds,
             unknownCount,
             source: "gameplay",
-            childName: state.profile.name,
-            childAge: state.profile.age
+            childName: state.profile.name
           })
         }).catch(() => null);
 

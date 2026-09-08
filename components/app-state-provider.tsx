@@ -102,7 +102,7 @@ type AppStateContextValue = {
     options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => void;
   resetProgress: () => void;
-  isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean) => boolean;
+  isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean, requiredLocationId?: string | null) => boolean;
   getPlayerScore: () => number;
 };
 
@@ -816,7 +816,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isLocationUnlocked = useCallback(
-    (locationId: string, defaultUnlocked = false) => {
+    (locationId: string, defaultUnlocked = false, requiredLocationId?: string | null) => {
+      // R20: když volající zná katalogový zámek z DB (unlock_after_mission_id → locationId),
+      // rozhoduje výhradně on – fail-closed, bez ohledu na mock. null = bez podmínky.
+      if (requiredLocationId !== undefined) {
+        return requiredLocationId ? state.completedGameplayLocationIds.includes(requiredLocationId) : true;
+      }
       const location = locations.find((item) => item.id === locationId);
       if (!location) {
         return defaultUnlocked;

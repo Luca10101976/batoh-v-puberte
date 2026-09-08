@@ -267,7 +267,8 @@ function buildDbBackedLocationSeed(
     subtitle: "Městská mise",
     story: introStory,
     image,
-    unlocked: true,
+    // R20 fail-closed: hra s katalogovým zámkem není "defaultně odemčená"
+    unlocked: !catalogEntry?.unlockAfterLocationId,
     difficulty: mapDifficultyLabel(mission.difficulty) ?? "Lehká",
     distance: mission.city,
     duration:

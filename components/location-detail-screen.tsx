@@ -27,7 +27,7 @@ function formatTaskCount(count: number) {
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
   const { state, isLocationUnlocked, setActiveMode } = useAppState();
   const router = useRouter();
-  const unlocked = isLocationUnlocked(location.id, location.unlocked);
+  const unlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   const completed = state.completedLocationIds.includes(location.id);
   const unlockRequirement = getUnlockRequirement(location, locations);
   const canUsePlayerFeatures = state.registrationCompleted;

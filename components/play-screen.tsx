@@ -77,7 +77,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     }
   }, [requestedEpisodeIndex, requestedTaskIndex, searchParams, setActiveMode]);
 
-  const locationUnlocked = isLocationUnlocked(location.id, location.unlocked);
+  const locationUnlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   const unlockRequirement = getUnlockRequirement(location, locations);
   const taskPositionById = useMemo(() => {
     const map = new Map<string, { episodeIndex: number; taskIndex: number }>();

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { BottomNav } from "@/components/bottom-nav";
 import { useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { isSessionInvalidAuthError } from "@/lib/session-recovery";
 
 const ParentAuthGate = dynamic(() => import("@/components/player-auth-gate").then((mod) => mod.PlayerAuthGate), {
   ssr: false,
@@ -286,11 +287,26 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
     let cancelled = false;
     let startupTimer: number | null = null;
     const checkSession = () => {
-      void supabase.auth.getSession().then(({ data }) => {
+      void supabase.auth.getSession().then(async ({ data }) => {
         if (cancelled) {
           return;
         }
-        setHasCloudSession(Boolean(data.session?.user));
+        let valid = Boolean(data.session?.user);
+        // Lokálně uložená session může být serverem zneplatněná (JWT ještě nevypršel).
+        // Online ji ověříme u serveru; při zamítnutí se zařízení lokálně odhlásí a
+        // zobrazí se přihlášení místo hry, která by pak selhávala při každém ověření.
+        // Offline / síťová chyba = session ponecháme (offline-first).
+        if (valid && typeof navigator !== "undefined" && navigator.onLine) {
+          const { error } = await supabase.auth.getUser();
+          if (cancelled) {
+            return;
+          }
+          if (error && isSessionInvalidAuthError(error)) {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+            valid = false;
+          }
+        }
+        setHasCloudSession(valid);
         setSessionChecked(true);
       });
     };

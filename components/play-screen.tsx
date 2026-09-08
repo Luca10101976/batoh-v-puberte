@@ -12,6 +12,7 @@ import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isComplete
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 import { POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
+import { fetchWithSessionRecovery } from "@/lib/session-recovery";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
@@ -316,34 +317,47 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       return null;
     }
 
-    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-    if (!accessToken) {
+    // Neplatná session (server ji zamítl, lokální JWT ještě nevypršel) → refresh → retry →
+    // jinak lokální odhlášení, které otevře PlayerAuthGate („Už mám Traki“).
+    const recovery = await fetchWithSessionRecovery(
+      (accessToken) =>
+        fetch("/api/game/submit-task-answer", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            profileCode: state.profileCode,
+            locationId: location.id,
+            taskId: activeTask.id,
+            action,
+            answer: answerValue ?? "",
+            replayAttempts: wrongAttemptsByTask[activeTask.id] ?? 0
+          })
+        }).catch(() => null),
+      {
+        getAccessToken: async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
+        refreshAccessToken: async () => (await supabase.auth.refreshSession()).data.session?.access_token ?? null,
+        signOutLocal: async () => {
+          await supabase.auth.signOut({ scope: "local" });
+        }
+      }
+    );
+
+    if (recovery.kind === "no_session" || recovery.kind === "session_invalid") {
       setStatus("wrong");
-      setMessage("Nejdřív se prosím přihlas.");
+      setMessage("Přihlášení vypršelo. Přihlas se prosím znovu Traki klíčem – tvůj postup zůstává uložený.");
       return null;
     }
 
-    const response = await fetch("/api/game/submit-task-answer", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
-        profileCode: state.profileCode,
-        locationId: location.id,
-        taskId: activeTask.id,
-        action,
-        answer: answerValue ?? "",
-        replayAttempts: wrongAttemptsByTask[activeTask.id] ?? 0
-      })
-    }).catch(() => null);
-
-    if (!response?.ok) {
+    if (recovery.kind === "network_error" || !recovery.response.ok) {
       setStatus("wrong");
       setMessage("Ověření odpovědi se nepodařilo. Zkus to znovu.");
       return null;
     }
+
+    const response = recovery.response;
 
     return (await response.json()) as {
       ok: boolean;

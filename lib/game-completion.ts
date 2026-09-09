@@ -163,7 +163,7 @@ export async function completeRunForParticipants(
       completion_source: args.source,
       child_profile_id: entry.childProfileId
     };
-    if (typeof existing.penalty_points !== "number" || existing.penalty_points > entry.result.missingPoints) {
+    if (decision.missingPointsUpdated) {
       updatePayload.penalty_points = entry.result.missingPoints;
     }
     if (decision.bestScoreUpdated) {

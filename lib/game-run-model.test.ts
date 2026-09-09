@@ -122,8 +122,32 @@ test("C: rozehraný řádek se dokončí a lepší starší výsledek se nezhor�
 
 test("C: penalizace se zhoršit nemůže ani v zápisu", () => {
   const shared = read("lib/game-completion.ts");
-  assert.match(shared, /existing\.penalty_points > entry\.result\.missingPoints/);
+  assert.match(shared, /if \(decision\.missingPointsUpdated\)/);
   assert.match(shared, /if \(decision\.bestScoreUpdated\)/);
+});
+
+test("C: první dokončení zapíše skutečnou ztrátu bodů i přes rozehraný řádek", () => {
+  // Rozehraný řádek má penalty_points ve výchozí nule; nesmí se tvářit jako
+  // bezchybný dřívější výsledek a blokovat zápis skutečné ztráty.
+  const prvni = deriveCompletionUpdate({
+    existing: { penalty_points: 0, best_score: null, status: "in_progress", first_completed_at: null },
+    finalScore: 0,
+    finalMissingPoints: 190,
+    source: "gameplay",
+    hasExtendedProgressColumns: true
+  });
+  assert.equal(prvni.missingPointsUpdated, true, "skutečná ztráta bodů se musí zapsat");
+  assert.equal(prvni.bestScoreUpdated, true);
+
+  const horsiPoDokonceni = deriveCompletionUpdate({
+    existing: { penalty_points: 10, best_score: 180, status: "completed", first_completed_at: "2026-05-21T17:06:24Z" },
+    finalScore: 0,
+    finalMissingPoints: 190,
+    source: "gameplay",
+    hasExtendedProgressColumns: true
+  });
+  assert.equal(horsiPoDokonceni.missingPointsUpdated, false, "horší průchod nesmí zvýšit ztrátu bodů");
+  assert.equal(horsiPoDokonceni.bestScoreUpdated, false);
 });
 
 // ---------------------------------------------------------------------------

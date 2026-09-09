@@ -22,12 +22,19 @@ export function deriveCompletionUpdate(args: {
       shouldUpdate: false,
       firstCompletionTriggered: gameplayUnlockEligible,
       bestScoreUpdated: true,
+      missingPointsUpdated: true,
       nextStatus: hasExtendedProgressColumns ? ("completed" as const) : null
     };
   }
 
-  const shouldImproveMissingPoints =
-    typeof existing.penalty_points === "number"
+  // R23: monotónnost („výsledek se nikdy nezhorší“) se smí porovnávat jen se
+  // SKUTEČNÝM dřívějším dokončením. Rozehraný řádek má penalty_points ve výchozí
+  // nule, což vypadalo jako bezchybný dřívější průchod, a skutečná ztráta bodů
+  // se pak při prvním dokončení nezapsala.
+  const previouslyCompleted = existing.status === "completed" || Boolean(existing.first_completed_at);
+  const shouldImproveMissingPoints = !previouslyCompleted
+    ? true
+    : typeof existing.penalty_points === "number"
       ? existing.penalty_points > finalMissingPoints
       : hasExtendedProgressColumns;
   const shouldSetFirstCompleted = gameplayUnlockEligible && !existing.first_completed_at;
@@ -40,6 +47,7 @@ export function deriveCompletionUpdate(args: {
     shouldUpdate,
     firstCompletionTriggered: shouldSetFirstCompleted,
     bestScoreUpdated,
+    missingPointsUpdated: shouldImproveMissingPoints,
     nextStatus: hasExtendedProgressColumns ? ("completed" as const) : null
   };
 }

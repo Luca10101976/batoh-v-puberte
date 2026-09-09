@@ -54,3 +54,25 @@ test("migrace vynucuje prerequisite pouze ve stejném městě", () => {
   assert.match(sql, /references public\.missions \(id, city\)/);
   assert.ok(!/drop table|delete from|truncate/i.test(sql), "migrace nesmí mazat data");
 });
+
+// Oprava před R23 (audit problém B): expedice nesmí odmítnout publikovanou DB hru
+// jen proto, že není v lib/mock-data.ts, a finish nesmí bodovat podle mocku.
+test("expeditions start/finish nepoužívají mock whitelist her", () => {
+  for (const file of ["app/api/expeditions/start/route.ts", "app/api/expeditions/finish/route.ts"]) {
+    const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+    assert.ok(!src.includes("@/lib/mock-data"), `${file} importuje mock-data`);
+    assert.ok(!/locations\.(some|find|filter|map)\(/.test(src), `${file} používá mock whitelist`);
+    assert.match(src, /resolveServerGameAccess\(/, `${file}: existenci hry musí určovat katalog přes R22 přístup`);
+  }
+});
+
+test("expeditions finish boduje z DB úkolů hry, ne z mock scoringu", () => {
+  const src = fs.readFileSync(path.join(ROOT, "app/api/expeditions/finish/route.ts"), "utf8");
+  assert.ok(!src.includes("computeMissionScore"), "mock computeMissionScore musí být pryč");
+  assert.ok(!src.includes("@/lib/scoring"), "finish nesmí importovat mock scoring");
+  assert.match(src, /getLocationTaskIds\(missionId\)/);
+  assert.match(src, /computeScoreFromTaskProgress\(/);
+  assert.match(src, /buildTaskProgressFromClientInput\(/);
+  // výchozí skóre se počítá až po ověření přístupu a session, nikdy před zámkem
+  assert.ok(src.indexOf("resolveServerGameAccess(") < src.indexOf("getLocationTaskIds(missionId)"));
+});

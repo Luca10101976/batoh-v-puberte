@@ -4,6 +4,7 @@ import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import { taskAnswers } from "@/lib/task-answers";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
 import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
+import { legacyLocationIdForMission, legacyMissionIdForLocation } from "@/lib/legacy-location-ids";
 
 type MissionStopDbRow = {
   id: string;
@@ -289,37 +290,6 @@ function buildDbBackedLocationSeed(
   };
 }
 
-async function fetchPublishedMissionByCanonical(
-  supabase: ReturnType<typeof getSupabaseServerClient>,
-  canonical: { city: string; missionTitle: string }
-) {
-  const queryWithHero = await supabase
-    .from("missions")
-    .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, created_at")
-    .eq("city", canonical.city)
-    .eq("title", canonical.missionTitle)
-    .eq("is_published", true)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  let missionRows = queryWithHero.data as MissionDbRow[] | null;
-
-  if (queryWithHero.error?.message?.toLowerCase().includes("hero_image_url")) {
-    const queryWithoutHero = await supabase
-      .from("missions")
-      .select("id, title, city, intro_text, difficulty, duration_min, points, is_published, created_at")
-      .eq("city", canonical.city)
-      .eq("title", canonical.missionTitle)
-      .eq("is_published", true)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    missionRows = queryWithoutHero.data as MissionDbRow[] | null;
-  }
-
-  return ((missionRows ?? [])[0] as MissionDbRow | undefined) ?? null;
-}
-
 async function fetchPublishedMissionById(
   supabase: ReturnType<typeof getSupabaseServerClient>,
   missionId: string
@@ -349,18 +319,13 @@ async function fetchPublishedMissionById(
   return queryWithoutHero.data ?? null;
 }
 
+/**
+ * Historická hra (slug z legacy mapy podle UUID mise). Obsah se v DB hledá výhradně
+ * podle stabilního UUID – změna názvu nebo města v Mozku identitu hry nemění.
+ */
 function getCanonicalMission(locationId: string) {
-  const location = locations.find((item) => item.id === locationId) ?? null;
-  const nearbyMission = nearbyMissions.find((item) => item.locationId === locationId) ?? null;
-  if (!location || !nearbyMission) {
-    return null;
-  }
-
-  return {
-    location,
-    missionTitle: nearbyMission.name,
-    city: location.city
-  };
+  const missionId = legacyMissionIdForLocation(locationId);
+  return missionId ? { missionId } : null;
 }
 
 function getLegacyEpisode(location: MapLocation, stopOrder: number) {
@@ -477,9 +442,7 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
     return null;
   }
 
-  const mission = canonical
-    ? await fetchPublishedMissionByCanonical(supabase, canonical)
-    : await fetchPublishedMissionById(supabase, locationId);
+  const mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId);
 
   if (!mission) {
     return null;
@@ -518,18 +481,17 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
 // ---------------------------------------------------------------------------
 // R20: katalog měst a her – jediný zdroj pravdy je tabulka `missions`.
 // mock-data.ts už nerozhoduje, zda se hra/město v katalogu objeví, o publikaci
-// ani o pořadí; slouží jen k mapování historických slugů (klamovka, …) a k runtime
-// gameplay (viz R38/R39).
+// ani o pořadí; slouží jen k runtime gameplay obsahu historických her (viz R38/R39).
+// Historický slug (klamovka, …) určuje výhradně lib/legacy-location-ids.ts podle UUID.
 // ---------------------------------------------------------------------------
 
 const CATALOG_COLUMNS =
   "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, points, catalog_order, is_published, unlock_after_mission_id";
 const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published";
 
-/** Historický slug hry (mock) podle dvojice město::název; jinak UUID mise. */
+/** Historický slug hry podle UUID mise (stabilní mapa); jinak UUID mise. */
 function resolveCatalogLocationId(row: CatalogMissionRow) {
-  const key = `${String(row.city).trim().toLowerCase()}::${String(row.title).trim().toLowerCase()}`;
-  return canonicalSlugByKey().get(key) ?? row.id;
+  return legacyLocationIdForMission(row.id) ?? row.id;
 }
 
 /** Uživatelský název hry pro dané locationId: název místa z mocku (karta), jinak titul mise z katalogu. */
@@ -556,21 +518,6 @@ function resolveLocationDisplayName(locationId: string | null | undefined, catal
     return mock.name;
   }
   return catalog.find((entry) => entry.locationId === locationId)?.title ?? null;
-}
-
-let canonicalSlugCache: Map<string, string> | null = null;
-function canonicalSlugByKey() {
-  if (canonicalSlugCache) {
-    return canonicalSlugCache;
-  }
-  canonicalSlugCache = nearbyMissions.reduce((map, mission) => {
-    const location = locations.find((item) => item.id === mission.locationId);
-    if (location) {
-      map.set(`${location.city.trim().toLowerCase()}::${mission.name.trim().toLowerCase()}`, mission.locationId);
-    }
-    return map;
-  }, new Map<string, string>());
-  return canonicalSlugCache;
 }
 
 /**
@@ -641,9 +588,7 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
   if (canonical || !location) {
     try {
       const supabase = getSupabaseServerClient();
-      mission = canonical
-        ? await fetchPublishedMissionByCanonical(supabase, canonical)
-        : await fetchPublishedMissionById(supabase, locationId);
+      mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId);
     } catch {
       mission = null;
     }

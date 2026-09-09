@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { locations } from "@/lib/mock-data";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
-import { computeMissionScore } from "@/lib/scoring";
-import { computeScoreFromTaskProgress } from "@/lib/task-validation";
+import { POINTS_PER_TASK } from "@/lib/game-rules";
+import { buildTaskProgressFromClientInput } from "@/lib/expedition-scoring";
+import { computeScoreFromTaskProgress, getLocationTaskIds } from "@/lib/task-validation";
 import { deriveCompletionUpdate } from "@/lib/location-completion-state";
 
 type SessionPlayerRow = {
@@ -71,21 +71,9 @@ export async function POST(request: NextRequest) {
   const sessionId = (body.sessionId ?? "").trim();
   const missionId = (body.missionId ?? "").trim();
   const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
-  const scoring = computeMissionScore(missionId, {
-    unknownTaskIds: body.unknownTaskIds,
-    unknownCount: body.unknownCount,
-    penaltyPoints: body.penaltyPoints
-  });
-  let missingPoints = scoring.missingPoints;
-  let bestScore = scoring.score;
 
   if (!sessionId || !missionId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-  }
-
-  const isKnownMission = locations.some((location) => location.id === missionId);
-  if (!isKnownMission) {
-    return NextResponse.json({ ok: false, error: "unknown_mission" }, { status: 400 });
   }
 
   const ownProfile = await getOwnedChildProfile(auth.admin, auth.user.id, body.playerCode ?? body.profileCode);
@@ -94,6 +82,8 @@ export async function POST(request: NextRequest) {
   }
 
   // R22: i skupinová výprava se řídí serverovým herním zámkem (fail-closed).
+  // Existenci a publikaci hry určuje katalog z DB (not_published → 400 unknown_mission),
+  // ne mock whitelist – publikovaná hra z Mozku tak projde i bez lib/mock-data.ts.
   const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId);
   if (!access.allowed) {
     return NextResponse.json(
@@ -140,6 +130,17 @@ export async function POST(request: NextRequest) {
 
   const profiles = (profilesData as ChildProfileCodeRow[] | null) ?? [];
   const profileCodes = Array.from(new Set(profiles.map((profile) => normalizeCode(profile.profile_code))));
+
+  // Skóre výpravy vychází výhradně z DB reality hry (úkoly mise v DB), ne z mocku:
+  //   1. výchozí hodnota = odpovědi poslané klientem, započtené jen na skutečné úkoly hry,
+  //   2. pokud lze načíst postup leadera z DB, rozhoduje on (stejně jako u sólo dokončení).
+  const missionTaskIds = await getLocationTaskIds(missionId);
+  const defaultScoring = await computeScoreFromTaskProgress(
+    missionId,
+    buildTaskProgressFromClientInput(missionTaskIds, body, POINTS_PER_TASK)
+  );
+  let missingPoints = defaultScoring.missingPoints;
+  let bestScore = defaultScoring.score;
 
   const { data: leaderTaskProgressRows, error: leaderTaskProgressError } = await auth.admin
     .from("child_task_progress")

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { locations } from "@/lib/mock-data";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
 
@@ -40,17 +39,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
 
-  const isKnownMission = locations.some((location) => location.id === missionId);
-  if (!isKnownMission) {
-    return NextResponse.json({ ok: false, error: "unknown_mission" }, { status: 400 });
-  }
-
   const ownProfile = await getOwnedChildProfile(auth.admin, auth.user.id, body.playerCode ?? body.profileCode);
   if (!ownProfile?.id) {
     return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
 
   // R22: i skupinová výprava se řídí serverovým herním zámkem (fail-closed).
+  // Existenci a publikaci hry určuje katalog z DB (not_published → 400 unknown_mission),
+  // ne mock whitelist – publikovaná hra z Mozku tak projde i bez lib/mock-data.ts.
   const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId);
   if (!access.allowed) {
     return NextResponse.json(

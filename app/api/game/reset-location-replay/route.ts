@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
+import { ensureActiveRun } from "@/lib/game-run";
 import { createClient } from "@supabase/supabase-js";
 import { getGameplayLocation } from "@/lib/gameplay-server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 
 type ChildProfileRow = {
   id: string;
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "reset_location_replay",
     ip: getRequestIpAddress(request),
     userId: user.id,
@@ -89,7 +90,9 @@ export async function POST(request: NextRequest) {
   }
 
   // R22: herní zámek se vynucuje na serveru (fail-closed), ne jen v UI.
-  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId);
+  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId, {
+    childProfileId: ownProfile.id
+  });
   if (!access.allowed) {
     return NextResponse.json(
       { ok: false, error: access.reason === "not_published" ? "unknown_location" : "location_locked" },
@@ -97,20 +100,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { error: deleteError } = await admin
-    .from("child_task_progress")
-    .delete()
-    .eq("child_profile_id", ownProfile.id)
-    .eq("location_id", locationId);
-
-  if (deleteError?.code === "42P01") {
-    return NextResponse.json(
-      { ok: false, error: "missing_task_progress_table", hint: "run_supabase_online_task_progress_sql" },
-      { status: 500 }
-    );
-  }
-
-  if (deleteError) {
+  // R23: opakované hraní = NOVÁ výprava. Odpovědi z předchozího průchodu se
+  // nemažou, zůstávají u své výpravy jako historie. Nejlepší dosažený výsledek
+  // v child_location_progress se nedotýká a horším průchodem se nezhorší.
+  const run = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
+  if (!run) {
     return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
   }
 
@@ -135,5 +129,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, reset: true });
+  return NextResponse.json({ ok: true, reset: true, runId: run.id });
 }

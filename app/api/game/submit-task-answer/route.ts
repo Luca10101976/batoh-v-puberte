@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
+import { ensureActiveRun, isMissingColumnError } from "@/lib/game-run";
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import {
   getTaskByLocationAndId,
   isTaskAnswerCorrect
 } from "@/lib/task-validation";
-import { isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { resolveAnswerAttempt } from "@/lib/task-attempt";
 import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK } from "@/lib/game-rules";
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "submit_task_answer",
     ip: getRequestIpAddress(request),
     userId: user.id,
@@ -116,7 +116,11 @@ export async function POST(request: NextRequest) {
   }
 
   // R22: herní zámek se vynucuje na serveru (fail-closed), ne jen v UI.
-  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId);
+  // R23/P9: pro platného přijatého člena společné výpravy platí výjimka ze zámku,
+  // vyhodnocuje ji resolveServerGameAccess podle skutečného členství v databázi.
+  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId, {
+    childProfileId: ownProfile.id
+  });
   if (!access.allowed) {
     return NextResponse.json(
       { ok: false, error: access.reason === "not_published" ? "unknown_location" : "location_locked" },
@@ -124,34 +128,35 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: existingLocationProgressRow } = await admin
-    .from("child_location_progress")
-    .select("status, first_completed_at, completed_at")
-    .eq("profile_code", ownProfile.profile_code)
-    .eq("location_id", locationId)
-    .limit(1)
-    .maybeSingle<{
-      status?: "in_progress" | "completed" | null;
-      first_completed_at?: string | null;
-      completed_at?: string | null;
-    }>();
+  // R23: odpověď patří konkrétní výpravě. Sólo hraní má výpravu s jedním hráčem.
+  const run = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
+  if (!run) {
+    return NextResponse.json({ ok: false, error: "run_unavailable" }, { status: 500 });
+  }
 
-  const isReplayOfCompletedMission = isCompletedLocationProgress(existingLocationProgressRow);
 
-  const { data: existingRow, error: existingError } = await admin
-    .from("child_task_progress")
-    .select("id, child_profile_id, profile_code, location_id, task_id, status, attempts, penalty_points")
-    .eq("child_profile_id", ownProfile.id)
-    .eq("location_id", locationId)
-    .eq("task_id", taskId)
+  const taskProgressQuery = () =>
+    admin
+      .from("child_task_progress")
+      .select("id, child_profile_id, profile_code, location_id, task_id, status, attempts, penalty_points")
+      .eq("child_profile_id", ownProfile.id)
+      .eq("location_id", locationId)
+      .eq("task_id", taskId);
+
+  let { data: existingRow, error: existingError } = await taskProgressQuery()
+    .eq("session_id", run.id)
     .limit(1)
     .maybeSingle<ChildTaskProgressRow>();
+  if (isMissingColumnError(existingError)) {
+    // Před migrací R23 sloupec session_id neexistuje.
+    ({ data: existingRow, error: existingError } = await taskProgressQuery().limit(1).maybeSingle<ChildTaskProgressRow>());
+  }
 
   if (existingError && existingError.code !== "PGRST116") {
     return NextResponse.json({ ok: false, error: "progress_load_failed" }, { status: 500 });
   }
 
-  if (!isReplayOfCompletedMission && existingRow && (existingRow.status === "correct" || existingRow.status === "unknown")) {
+  if (existingRow && (existingRow.status === "correct" || existingRow.status === "unknown")) {
     return NextResponse.json({
       ok: true,
       status: existingRow.status,
@@ -162,13 +167,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const replayAttempts =
-    typeof body.replayAttempts === "number" && Number.isFinite(body.replayAttempts)
-      ? Math.max(0, Math.floor(body.replayAttempts))
-      : 0;
-  const currentAttempts = isReplayOfCompletedMission
-    ? replayAttempts
-    : Math.max(0, existingRow?.attempts ?? 0);
+  // R23: počet pokusů je vždy serverový stav dané výpravy. Hodnota replayAttempts
+  // z klienta se záměrně nečte – opakované hraní je nová výprava s čistými pokusy.
+  const currentAttempts = Math.max(0, existingRow?.attempts ?? 0);
   let nextStatus: "correct" | "wrong" | "unknown" = "wrong";
   let nextAttempts = currentAttempts;
   let missingPointsForTask = 0;
@@ -207,21 +208,10 @@ export async function POST(request: NextRequest) {
   const remainingAttempts =
     nextStatus === "correct" || nextStatus === "unknown" ? 0 : Math.max(0, MAX_TASK_ATTEMPTS - nextAttempts);
 
-  if (isReplayOfCompletedMission) {
-    return NextResponse.json({
-      ok: true,
-      status: nextStatus,
-      attempts: nextAttempts,
-      remainingAttempts,
-      awardedPointsForTask: nextStatus === "correct" ? POINTS_PER_TASK : 0,
-      locked: false,
-      replay: true
-    });
-  }
-
   const payload = {
     child_profile_id: ownProfile.id,
     profile_code: ownProfile.profile_code,
+    session_id: run.id,
     location_id: locationId,
     task_id: taskId,
     status: nextStatus,
@@ -244,7 +234,13 @@ export async function POST(request: NextRequest) {
       .eq("id", existingRow.id);
     saveError = error;
   } else {
-    const { error } = await admin.from("child_task_progress").insert(payload);
+    let { error } = await admin.from("child_task_progress").insert(payload);
+    if (isMissingColumnError(error)) {
+      // Před migrací R23 sloupec session_id neexistuje – odpověď se uloží bez vazby
+      // na výpravu a migrace ji později k dopočítané výpravě přiřadí.
+      const { session_id: _ignoredSession, ...withoutSession } = payload;
+      ({ error } = await admin.from("child_task_progress").insert(withoutSession));
+    }
     saveError = error;
   }
 

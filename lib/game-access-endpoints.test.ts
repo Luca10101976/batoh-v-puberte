@@ -70,9 +70,12 @@ test("expeditions finish boduje z DB úkolů hry, ne z mock scoringu", () => {
   const src = fs.readFileSync(path.join(ROOT, "app/api/expeditions/finish/route.ts"), "utf8");
   assert.ok(!src.includes("computeMissionScore"), "mock computeMissionScore musí být pryč");
   assert.ok(!src.includes("@/lib/scoring"), "finish nesmí importovat mock scoring");
-  assert.match(src, /getLocationTaskIds\(missionId\)/);
-  assert.match(src, /computeScoreFromTaskProgress\(/);
-  assert.match(src, /buildTaskProgressFromClientInput\(/);
-  // výchozí skóre se počítá až po ověření přístupu a session, nikdy před zámkem
-  assert.ok(src.indexOf("resolveServerGameAccess(") < src.indexOf("getLocationTaskIds(missionId)"));
+  // R23: bodování má jedinou implementaci ve sdílené dokončovací vrstvě
+  assert.match(src, /completeRunForParticipants\(/);
+  const shared = fs.readFileSync(path.join(ROOT, "lib/game-completion.ts"), "utf8");
+  assert.match(shared, /getLocationTaskIds\(args\.locationId\)/);
+  assert.match(shared, /scoreTaskProgress\(taskIds, progressByChild\.get\(profile\.id\)/);
+  assert.ok(!shared.includes("@/lib/scoring"), "sdílená vrstva nesmí bodovat z mocku");
+  // dokončení se počítá až po ověření přístupu a výpravy, nikdy před zámkem
+  assert.ok(src.indexOf("resolveServerGameAccess(") < src.indexOf("completeRunForParticipants("));
 });

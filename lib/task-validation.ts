@@ -1,4 +1,5 @@
 import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
+import { scoreTaskProgress, type MissionTaskStatus, type TaskProgressLike } from "@/lib/mission-completion";
 import { getGameplayTask, getGameplayTaskIds } from "@/lib/gameplay-server";
 import type { GameplayTask } from "@/lib/gameplay-types";
 
@@ -6,12 +7,7 @@ const MULTI_WORD_RULES: Record<string, { minMatches: number }> = {
   "klamovka-cassel-5": { minMatches: 3 }
 };
 
-export type MissionTaskStatus = "correct" | "wrong" | "unknown";
-
-export type TaskProgressLike = {
-  task_id: string;
-  status: MissionTaskStatus;
-};
+export type { MissionTaskStatus, TaskProgressLike };
 
 function normalize(value: string) {
   return value
@@ -116,59 +112,7 @@ export async function isAnswerCorrect(locationId: string, taskId: string, answer
 }
 
 export async function computeScoreFromTaskProgress(locationId: string, rows: TaskProgressLike[]) {
-  const taskIds = await getLocationTaskIds(locationId);
-  const totalTasks = taskIds.length;
-  if (totalTasks === 0) {
-    return {
-      totalTasks: 0,
-      resolvedTasks: 0,
-      correctTasks: 0,
-      unknownTasks: 0,
-      missingTasks: 0,
-      maxScore: 0,
-      score: 0,
-      missingPoints: 0
-    };
-  }
-
-  const validTaskIds = new Set(taskIds);
-  const finalByTask = new Map<string, MissionTaskStatus>();
-  rows.forEach((row) => {
-    if (!validTaskIds.has(row.task_id)) {
-      return;
-    }
-    finalByTask.set(row.task_id, row.status);
-  });
-
-  let resolvedTasks = 0;
-  let correctTasks = 0;
-  let unknownTasks = 0;
-  for (const taskId of taskIds) {
-    const status = finalByTask.get(taskId);
-    if (status === "correct") {
-      resolvedTasks += 1;
-      correctTasks += 1;
-      continue;
-    }
-    if (status === "unknown") {
-      resolvedTasks += 1;
-      unknownTasks += 1;
-    }
-  }
-
-  const missingTasks = Math.max(0, totalTasks - resolvedTasks);
-  const finalUnknownTasks = unknownTasks + missingTasks;
-  const maxScore = getLocationMaxScore(totalTasks);
-  const score = correctTasks * POINTS_PER_TASK;
-
-  return {
-    totalTasks,
-    resolvedTasks,
-    correctTasks,
-    unknownTasks: finalUnknownTasks,
-    missingTasks,
-    maxScore,
-    score,
-    missingPoints: Math.max(0, maxScore - score)
-  };
+  // R23/T4: jediná implementace bodování – lib/mission-completion.ts. Tady se jen
+  // doplní seznam úkolů hry z databáze.
+  return scoreTaskProgress(await getLocationTaskIds(locationId), rows);
 }

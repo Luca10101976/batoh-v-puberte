@@ -344,3 +344,24 @@ export function checkInMemoryRateLimit({
     remaining: Math.max(0, maxAttempts - current.attempts)
   };
 }
+
+/**
+ * R23/T8: omezení počtu volání, které nespadne kvůli výpadku pomocné tabulky.
+ *
+ * checkRateLimit při chybě databáze vyhazuje výjimku a každý herní endpoint na ní
+ * dřív skončil chybou 500. Tady se chyba zachytí a ochrana degraduje na in-memory
+ * limiter (stejný, jaký už používá obnova Traki klíče).
+ *
+ * Vědomý kompromis: in-memory počitadlo žije jen v jedné instanci serveru, takže
+ * při běhu na více instancích je skutečný strop volnější (v nejhorším případě
+ * násobek limitu podle počtu instancí) a po restartu instance se počitadlo nuluje.
+ * Ochrana ale nezmizí a endpoint zůstává chráněný i při výpadku databáze.
+ * Rate limiting se NIKDY nevypíná – pouze se přepíná na slabší, ale funkční režim.
+ */
+export async function checkRateLimitSafe(params: CheckRateLimitParams): Promise<RateLimitResult> {
+  try {
+    return await checkRateLimit(params);
+  } catch {
+    return checkInMemoryRateLimit(params);
+  }
+}

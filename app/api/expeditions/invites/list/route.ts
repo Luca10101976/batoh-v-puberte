@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getOwnedChildProfiles } from "@/app/api/expeditions/_shared";
 
 type InviteMembershipRow = {
@@ -10,7 +10,8 @@ type InviteMembershipRow = {
 type SessionRow = {
   id: string;
   leader_child_profile_id: string;
-  mission_id: string | null;
+  mission_id?: string | null;
+  location_id?: string | null;
   status: "waiting" | "active" | "finished" | "cancelled";
   created_at: string;
 };
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.error === "unauthorized" ? 401 : 500 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "expeditions_invites_list",
     ip: getRequestIpAddress(request),
     userId: auth.user.id,
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
   const sessionIds = rows.map((row) => row.session_id);
   const { data: sessionsData } = await auth.admin
     .from("child_game_sessions")
-    .select("id, leader_child_profile_id, mission_id, status, created_at")
+    .select("*")
     .in("id", sessionIds)
     .in("status", ["waiting", "active"]);
 
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
       return {
         sessionId: session.id,
         invitedAt: row.created_at,
-        missionId: session.mission_id,
+        missionId: session.location_id ?? session.mission_id ?? null,
         leader: {
           name: leader.child_name,
           code: (leader.player_code || leader.profile_code).trim().toUpperCase()

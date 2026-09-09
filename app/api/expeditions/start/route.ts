@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
+import { isMissingColumnError } from "@/lib/game-run";
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser(request);
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.error === "unauthorized" ? 401 : 500 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "expeditions_start",
     ip: getRequestIpAddress(request),
     userId: auth.user.id,
@@ -47,7 +48,9 @@ export async function POST(request: NextRequest) {
   // R22: i skupinová výprava se řídí serverovým herním zámkem (fail-closed).
   // Existenci a publikaci hry určuje katalog z DB (not_published → 400 unknown_mission),
   // ne mock whitelist – publikovaná hra z Mozku tak projde i bez lib/mock-data.ts.
-  const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId);
+  const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId, {
+    childProfileId: ownProfile.id
+  });
   if (!access.allowed) {
     return NextResponse.json(
       { ok: false, error: access.reason === "not_published" ? "unknown_mission" : "mission_locked" },
@@ -69,16 +72,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "session_not_open" }, { status: 409 });
   }
 
+  // R23/T6: sloupec drží veřejnou adresu hry (locationId), ne UUID mise – proto
+  // se po migraci jmenuje location_id. Fallback pokrývá okno před migrací.
   const nowIso = new Date().toISOString();
-  const { error: updateError } = await auth.admin
+  const basePayload = {
+    status: "active",
+    started_at: session.started_at ?? nowIso,
+    mode: "group"
+  };
+  let { error: updateError } = await auth.admin
     .from("child_game_sessions")
-    .update({
-      status: "active",
-      mission_id: missionId,
-      started_at: session.started_at ?? nowIso
-    } as never)
+    .update({ ...basePayload, location_id: missionId } as never)
     .eq("id", sessionId)
     .in("status", ["waiting", "active"]);
+  if (isMissingColumnError(updateError)) {
+    ({ error: updateError } = await auth.admin
+      .from("child_game_sessions")
+      .update({ status: "active", started_at: session.started_at ?? nowIso, mission_id: missionId } as never)
+      .eq("id", sessionId)
+      .in("status", ["waiting", "active"]));
+  }
 
   if (updateError) {
     return NextResponse.json({ ok: false, error: "session_start_failed" }, { status: 500 });

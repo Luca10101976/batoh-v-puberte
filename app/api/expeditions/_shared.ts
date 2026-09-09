@@ -12,7 +12,8 @@ export type ChildProfileRow = {
 export type SessionRow = {
   id: string;
   leader_child_profile_id: string;
-  mission_id: string | null;
+  mission_id?: string | null;
+  location_id?: string | null;
   status: "waiting" | "active" | "finished" | "cancelled";
   started_at: string | null;
   finished_at: string | null;
@@ -198,7 +199,7 @@ export async function areFriendsAcrossOwnProfiles(
 export async function getSession(admin: any, sessionId: string) {
   const { data } = await admin
     .from("child_game_sessions")
-    .select("id, leader_child_profile_id, mission_id, status, started_at, finished_at, created_at")
+    .select("*")
     .eq("id", sessionId)
     .limit(1)
     .maybeSingle();

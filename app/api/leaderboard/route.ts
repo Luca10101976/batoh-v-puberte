@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { locations } from "@/lib/mock-data";
 import { scoreRowsByProfile, type LeaderboardProgressRow } from "@/lib/leaderboard-scoring";
 
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "leaderboard",
     ip: getRequestIpAddress(request),
     userId: user.id,

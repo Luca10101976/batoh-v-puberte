@@ -1,39 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { getAuthenticatedUser, getOwnedChildProfile, getSession } from "@/app/api/expeditions/_shared";
-import { POINTS_PER_TASK } from "@/lib/game-rules";
-import { buildTaskProgressFromClientInput } from "@/lib/expedition-scoring";
-import { computeScoreFromTaskProgress, getLocationTaskIds } from "@/lib/task-validation";
-import { deriveCompletionUpdate } from "@/lib/location-completion-state";
+import { completeRunForParticipants } from "@/lib/game-completion";
+import { getRun, getRunParticipantIds } from "@/lib/game-run";
 
-type SessionPlayerRow = {
-  child_profile_id: string;
-  status: "invited" | "accepted" | "declined" | "removed";
-};
-
-type ChildProfileCodeRow = {
-  id: string;
-  profile_code: string;
-  player_code?: string | null;
-};
-
-type ExistingProgressRow = {
-  profile_code: string;
-  penalty_points?: number | null;
-  first_completed_at?: string | null;
-  best_score?: number | null;
-  status?: "in_progress" | "completed" | null;
-};
-
-type TaskProgressPenaltyRow = {
-  task_id: string;
-  status: "correct" | "wrong" | "unknown";
-};
-
-function normalizeCode(value: string) {
-  return value.trim().toUpperCase();
-}
+// R23/T3: ukončení skupinové výpravy používá STEJNOU dokončovací logiku jako sólo
+// hraní (lib/game-completion.ts). Zmizelo tím:
+//   - kopírování skóre vedoucího všem účastníkům (P2),
+//   - druhý zdroj účastníků ve staré tabulce pozvánek,
+//   - filtr přes penalty_points, který přeskakoval rozehrané účastníky (T2),
+//   - bodování z hodnot poslaných klientem (T1),
+//   - čas dokončení z klienta (T7).
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser(request);
@@ -41,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.error === "unauthorized" ? 401 : 500 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "expeditions_finish",
     ip: getRequestIpAddress(request),
     userId: auth.user.id,
@@ -57,20 +35,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = (await request.json()) as {
+  const body = (await request.json().catch(() => null)) as {
     playerCode?: string;
     profileCode?: string;
     sessionId?: string;
     missionId?: string;
-    completedAt?: string;
-    unknownTaskIds?: string[];
-    unknownCount?: number;
-    penaltyPoints?: number;
-  };
+  } | null;
+
+  if (!body) {
+    return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+  }
 
   const sessionId = (body.sessionId ?? "").trim();
   const missionId = (body.missionId ?? "").trim();
-  const completedAt = body.completedAt ? new Date(body.completedAt).toISOString() : new Date().toISOString();
 
   if (!sessionId || !missionId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -81,17 +58,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "missing_own_profile" }, { status: 403 });
   }
 
-  // R22: i skupinová výprava se řídí serverovým herním zámkem (fail-closed).
-  // Existenci a publikaci hry určuje katalog z DB (not_published → 400 unknown_mission),
-  // ne mock whitelist – publikovaná hra z Mozku tak projde i bez lib/mock-data.ts.
-  const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId);
+  // R22 + R23/P9: existenci, publikaci i zámek hry určuje katalog z databáze.
+  const access = await resolveServerGameAccess(auth.admin, ownProfile.profile_code, missionId, {
+    childProfileId: ownProfile.id
+  });
   if (!access.allowed) {
     return NextResponse.json(
       { ok: false, error: access.reason === "not_published" ? "unknown_mission" : "mission_locked" },
       { status: gameAccessHttpStatus(access.reason) }
     );
   }
-
 
   const session = await getSession(auth.admin, sessionId);
   if (!session?.id) {
@@ -106,222 +82,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "session_not_active" }, { status: 409 });
   }
 
-  if (session.mission_id && session.mission_id !== missionId) {
+  const run = await getRun(auth.admin, sessionId);
+  if (run?.locationId && run.locationId !== missionId) {
     return NextResponse.json({ ok: false, error: "mission_mismatch" }, { status: 409 });
   }
 
-  const { data: playersData } = await auth.admin
-    .from("child_game_session_players")
-    .select("child_profile_id, status")
-    .eq("session_id", sessionId)
-    .eq("status", "accepted");
+  let participantIds: string[];
+  try {
+    participantIds = await getRunParticipantIds(auth.admin, sessionId);
+  } catch {
+    return NextResponse.json({ ok: false, error: "progress_load_failed" }, { status: 500 });
+  }
 
-  const acceptedPlayers = (playersData as SessionPlayerRow[] | null) ?? [];
-  const acceptedIds = Array.from(new Set(acceptedPlayers.map((row) => row.child_profile_id)));
-
-  if (acceptedIds.length === 0) {
+  if (participantIds.length === 0) {
     return NextResponse.json({ ok: false, error: "no_accepted_players" }, { status: 409 });
   }
 
-  const { data: profilesData } = await auth.admin
-    .from("child_profiles")
-    .select("id, profile_code, player_code")
-    .in("id", acceptedIds);
-
-  const profiles = (profilesData as ChildProfileCodeRow[] | null) ?? [];
-  const profileCodes = Array.from(new Set(profiles.map((profile) => normalizeCode(profile.profile_code))));
-
-  // Skóre výpravy vychází výhradně z DB reality hry (úkoly mise v DB), ne z mocku:
-  //   1. výchozí hodnota = odpovědi poslané klientem, započtené jen na skutečné úkoly hry,
-  //   2. pokud lze načíst postup leadera z DB, rozhoduje on (stejně jako u sólo dokončení).
-  const missionTaskIds = await getLocationTaskIds(missionId);
-  const defaultScoring = await computeScoreFromTaskProgress(
-    missionId,
-    buildTaskProgressFromClientInput(missionTaskIds, body, POINTS_PER_TASK)
-  );
-  let missingPoints = defaultScoring.missingPoints;
-  let bestScore = defaultScoring.score;
-
-  const { data: leaderTaskProgressRows, error: leaderTaskProgressError } = await auth.admin
-    .from("child_task_progress")
-    .select("task_id, status")
-    .eq("child_profile_id", ownProfile.id)
-    .eq("location_id", missionId);
-
-  if (!leaderTaskProgressError) {
-    const computed = await computeScoreFromTaskProgress(missionId, (leaderTaskProgressRows as TaskProgressPenaltyRow[] | null) ?? []);
-    if (computed.totalTasks > 0) {
-      missingPoints = computed.missingPoints;
-      bestScore = computed.score;
-    }
-  }
-
-  const { data: existingRowsWithPenalty, error: existingRowsWithPenaltyError } = await auth.admin
-    .from("child_location_progress")
-    .select("profile_code, penalty_points, first_completed_at, best_score, status")
-    .eq("location_id", missionId)
-    .in("profile_code", profileCodes);
-
-  let existingRows = (existingRowsWithPenalty as ExistingProgressRow[] | null) ?? [];
-  const hasExtendedProgressColumns = existingRowsWithPenaltyError?.code !== "42703";
-  const hasPenaltyColumn = hasExtendedProgressColumns;
-  if (existingRowsWithPenaltyError?.code === "42703") {
-    const { data: legacyExistingRows } = await auth.admin
-      .from("child_location_progress")
-      .select("profile_code")
-      .eq("location_id", missionId)
-      .in("profile_code", profileCodes);
-    existingRows = ((legacyExistingRows as Array<{ profile_code: string }> | null) ?? []).map((row) => ({
-      profile_code: row.profile_code
-    }));
-  }
-
-  const existingByCode = new Map(existingRows.map((row) => [normalizeCode(row.profile_code), row]));
-  const existingCodes = new Set(Array.from(existingByCode.keys()));
-
-  const rowsToInsert = profileCodes
-    .filter((code) => !existingCodes.has(code))
-    .map((code) => ({
-      profile_code: code,
-      location_id: missionId,
-      completed_at: completedAt,
-      penalty_points: missingPoints,
-      status: "completed" as const,
-      completion_source: "expedition" as const,
-      best_score: bestScore,
-      first_completed_at: completedAt
-    }));
-
-  const rowsToImprove = profileCodes.filter((code) => {
-    const existing = existingByCode.get(code);
-    if (!existing) {
-      return false;
-    }
-    const decision = deriveCompletionUpdate({
-      existing,
-      finalScore: bestScore,
-      finalMissingPoints: missingPoints,
-      source: "expedition",
-      hasExtendedProgressColumns
-    });
-    return decision.shouldUpdate;
+  const outcome = await completeRunForParticipants(auth.admin, {
+    runId: sessionId,
+    locationId: missionId,
+    participantChildProfileIds: participantIds.slice(0, 8),
+    source: "expedition"
   });
 
-  if (rowsToInsert.length > 0) {
-    const { error: insertError } = await auth.admin.from("child_location_progress").insert(rowsToInsert);
-    if (insertError?.code === "42703") {
-      const fallbackRows = rowsToInsert.map(
-        ({
-          penalty_points: _ignoredPenalty,
-          status: _ignoredStatus,
-          completion_source: _ignoredSource,
-          best_score: _ignoredBestScore,
-          first_completed_at: _ignoredFirstCompletedAt,
-          ...row
-        }) => row
-      );
-      const { error: fallbackError } = await auth.admin.from("child_location_progress").insert(fallbackRows);
-      if (fallbackError) {
-        return NextResponse.json({ ok: false, error: "progress_save_failed" }, { status: 500 });
-      }
-    } else if (insertError) {
-      return NextResponse.json({ ok: false, error: "progress_save_failed" }, { status: 500 });
-    }
+  if (!outcome.ok) {
+    return NextResponse.json(
+      { ok: false, error: outcome.error === "save_failed" ? "progress_save_failed" : "progress_load_failed" },
+      { status: 500 }
+    );
   }
 
-  if (hasPenaltyColumn && rowsToImprove.length > 0) {
-    for (const profile_code of rowsToImprove) {
-      const existing = existingByCode.get(profile_code);
-      if (!existing) {
-        continue;
-      }
-
-      let updateError: { code?: string } | null = null;
-      if (typeof existing.penalty_points === "number") {
-        const updatePayload: Record<string, unknown> = {
-          penalty_points: missingPoints,
-          completed_at: completedAt
-        };
-        if (hasExtendedProgressColumns) {
-          const decision = deriveCompletionUpdate({
-            existing,
-            finalScore: bestScore,
-            finalMissingPoints: missingPoints,
-            source: "expedition",
-            hasExtendedProgressColumns
-          });
-          updatePayload.status = "completed";
-          updatePayload.completion_source = "expedition";
-          if (decision.bestScoreUpdated) {
-            updatePayload.best_score = bestScore;
-          }
-          if (decision.firstCompletionTriggered) {
-            updatePayload.first_completed_at = completedAt;
-          }
-        }
-        const { error } = await auth.admin
-          .from("child_location_progress")
-          .update(updatePayload)
-          .eq("profile_code", profile_code)
-          .eq("location_id", missionId)
-          .gt("penalty_points", missingPoints);
-        updateError = error;
-      } else {
-        const updatePayload: Record<string, unknown> = {
-          penalty_points: missingPoints,
-          completed_at: completedAt
-        };
-        if (hasExtendedProgressColumns) {
-          const decision = deriveCompletionUpdate({
-            existing,
-            finalScore: bestScore,
-            finalMissingPoints: missingPoints,
-            source: "expedition",
-            hasExtendedProgressColumns
-          });
-          updatePayload.status = "completed";
-          updatePayload.completion_source = "expedition";
-          if (decision.bestScoreUpdated) {
-            updatePayload.best_score = bestScore;
-          }
-          if (decision.firstCompletionTriggered) {
-            updatePayload.first_completed_at = completedAt;
-          }
-        }
-        const { error } = await auth.admin
-          .from("child_location_progress")
-          .update(updatePayload)
-          .eq("profile_code", profile_code)
-          .eq("location_id", missionId)
-          .is("penalty_points", null);
-        updateError = error;
-      }
-
-      if (updateError) {
-        return NextResponse.json({ ok: false, error: "progress_save_failed" }, { status: 500 });
-      }
-    }
-  }
-
-  const nowIso = new Date().toISOString();
-  const { error: finishError } = await auth.admin
-    .from("child_game_sessions")
-    .update({
-      status: "finished",
-      mission_id: missionId,
-      finished_at: nowIso
-    } as never)
-    .eq("id", sessionId)
-    .eq("status", "active");
-
-  if (finishError) {
-    return NextResponse.json({ ok: false, error: "session_finish_failed" }, { status: 500 });
-  }
-
+  // P2 + P3: kdo v této výpravě neuzavřel všechny úkoly, ten hru nedokončil.
+  // Výprava se přesto uzavírá – ostatním se výsledek zapsal.
   return NextResponse.json({
     ok: true,
     sessionId,
     missionId,
-    participantCodes: profileCodes
+    participantCodes: outcome.completedCodes,
+    unfinishedCodes: outcome.participants.filter((entry) => !entry.completed).map((entry) => entry.profileCode)
   });
 }

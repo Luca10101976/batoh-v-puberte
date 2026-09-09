@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
+import { isMissingColumnError } from "@/lib/game-run";
 import {
   areFriendsAcrossOwnProfiles,
   getAuthenticatedUser,
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.error === "unauthorized" ? 401 : 500 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "expeditions_create",
     ip: getRequestIpAddress(request),
     userId: auth.user.id,
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
   const { data: leaderOpenSession } = await auth.admin
     .from("child_game_sessions")
-    .select("id, leader_child_profile_id, mission_id, status, started_at, finished_at, created_at")
+    .select("*")
     .eq("leader_child_profile_id", ownProfile.id)
     .in("status", ["waiting", "active"])
     .order("created_at", { ascending: false })
@@ -73,7 +74,8 @@ export async function POST(request: NextRequest) {
     .maybeSingle<{
       id: string;
       leader_child_profile_id: string;
-      mission_id: string | null;
+      mission_id?: string | null;
+  location_id?: string | null;
       status: "waiting" | "active" | "finished" | "cancelled";
       started_at: string | null;
       finished_at: string | null;
@@ -82,14 +84,23 @@ export async function POST(request: NextRequest) {
 
   let sessionId = leaderOpenSession?.id ?? null;
   if (!sessionId) {
-    const { data: createdSession, error: sessionError } = await auth.admin
+    // R23: výprava vzniká rovnou jako skupinová; hra se doplní až při spuštění.
+    let { data: createdSession, error: sessionError } = await auth.admin
       .from("child_game_sessions")
       .insert({
         leader_child_profile_id: ownProfile.id,
-        status: "waiting"
+        status: "waiting",
+        mode: "group"
       })
       .select("id")
       .single<{ id: string }>();
+    if (isMissingColumnError(sessionError)) {
+      ({ data: createdSession, error: sessionError } = await auth.admin
+        .from("child_game_sessions")
+        .insert({ leader_child_profile_id: ownProfile.id, status: "waiting" })
+        .select("id")
+        .single<{ id: string }>());
+    }
 
     if (sessionError || !createdSession?.id) {
       return NextResponse.json({ ok: false, error: "session_create_failed" }, { status: 500 });

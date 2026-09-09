@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
+import { findActiveRunForPlayer, isMissingColumnError } from "@/lib/game-run";
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 import { isCompletedLocationProgress } from "@/lib/location-progress-state";
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "location_progress",
     ip: getRequestIpAddress(request),
     userId: user.id,
@@ -92,7 +93,9 @@ export async function POST(request: NextRequest) {
   }
 
   // R22: herní zámek se vynucuje na serveru (fail-closed), ne jen v UI.
-  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId);
+  const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId, {
+    childProfileId: ownProfile.id
+  });
   if (!access.allowed) {
     return NextResponse.json(
       { ok: false, error: access.reason === "not_published" ? "unknown_location" : "location_locked" },
@@ -100,11 +103,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: taskRows } = await admin
-    .from("child_task_progress")
-    .select("task_id, status, attempts")
-    .eq("child_profile_id", ownProfile.id)
-    .eq("location_id", locationId);
+  // R23: vrací se postup AKTUÁLNÍ výpravy. Odpovědi z dřívějších průchodů zůstávají
+  // v databázi u své výpravy, ale do rozehrané hry se nemíchají.
+  const run = await findActiveRunForPlayer(admin, ownProfile.id, locationId);
+  const taskQuery = () =>
+    admin
+      .from("child_task_progress")
+      .select("task_id, status, attempts")
+      .eq("child_profile_id", ownProfile.id)
+      .eq("location_id", locationId);
+
+  let taskRows: TaskProgressRow[] = [];
+  if (run) {
+    let { data, error } = await taskQuery().eq("session_id", run.id);
+    if (isMissingColumnError(error)) {
+      // Před migrací R23 sloupec session_id neexistuje.
+      ({ data, error } = await taskQuery());
+    }
+    taskRows = (data as TaskProgressRow[] | null) ?? [];
+  }
 
   const { data: locationRow } = await admin
     .from("child_location_progress")
@@ -114,7 +131,9 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle<{ status?: "in_progress" | "completed" | null; first_completed_at?: string | null; completed_at?: string | null }>();
 
-  const isReplayOfCompletedMission = isCompletedLocationProgress(locationRow);
+  // Dokončená hra bez běžící výpravy = nabídka opakovaného hraní: prázdný postup
+  // je pro aplikaci signál, aby si vyžádala novou výpravu (reset-location-replay).
+  const finishedWithoutRun = !run && isCompletedLocationProgress(locationRow);
 
   return NextResponse.json({
     ok: true,
@@ -123,12 +142,13 @@ export async function POST(request: NextRequest) {
       first_completed_at: locationRow?.first_completed_at ?? null,
       completed_at: locationRow?.completed_at ?? null
     },
-    task_progress: isReplayOfCompletedMission
+    run: run ? { id: run.id, mode: run.mode, startedAt: run.started_at } : null,
+    task_progress: finishedWithoutRun
       ? []
-      : ((taskRows as TaskProgressRow[] | null) ?? []).map((row) => ({
-      task_id: row.task_id,
-      status: row.status,
-      attempts: Math.max(0, row.attempts ?? 0)
-    }))
+      : taskRows.map((row) => ({
+          task_id: row.task_id,
+          status: row.status,
+          attempts: Math.max(0, row.attempts ?? 0)
+        }))
   });
 }

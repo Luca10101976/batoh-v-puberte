@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import {
   getAuthenticatedUser,
   getOwnedChildProfile,
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.error === "unauthorized" ? 401 : 500 });
   }
 
-  const rateLimitResult = await checkRateLimit({
+  const rateLimitResult = await checkRateLimitSafe({
     action: "expeditions_invite_respond",
     ip: getRequestIpAddress(request),
     userId: auth.user.id,
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     session: {
       id: session.id,
       status: session.status,
-      missionId: session.mission_id
+      missionId: session.location_id ?? session.mission_id ?? null
     }
   });
 }

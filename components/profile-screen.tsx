@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
-import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
 import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
 import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
@@ -83,7 +82,8 @@ export function ProfileScreen() {
     setActiveMode,
     setCurrentExpeditionId,
     getPlayerScore,
-    openParentAuthGate
+    openParentAuthGate,
+    activeRuns
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
@@ -111,7 +111,6 @@ export function ProfileScreen() {
   const [avatarMessageTone, setAvatarMessageTone] = useState<MessageTone>("neutral");
   const [gamesFilter, setGamesFilter] = useState<"all" | "active" | "completed">("all");
   const [visibleGamesCount, setVisibleGamesCount] = useState(6);
-  const [activeResumeCard, setActiveResumeCard] = useState<ResumeMissionCard | null>(null);
   const avatarSaveTimeoutRef = useRef<number | null>(null);
   const avatarSaveRequestIdRef = useRef(0);
   const supabase = useMemo(() => {
@@ -127,73 +126,65 @@ export function ProfileScreen() {
   );
   const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
   const score = getPlayerScore();
-  const activeLocation = useMemo(
-    () => locations.find((location) => location.id === state.activeMission?.locationId) ?? null,
-    [state.activeMission]
+  // R24: pozici v rozehrané hře spočítal server z uzavřených úkolů výpravy
+  // (stejnou funkcí jako herní obrazovka). Profil proto nepotřebuje obsah hry
+  // ani data v kódu, jen běžící výpravy.
+  const resumeByLocation = useMemo(
+    () =>
+      new Map(
+        activeRuns.map((run) => {
+          const { episodeIndex, taskIndex, episodeCount, taskCountInEpisode, stopName } = run.position;
+          const progressText =
+            episodeCount > 0
+              ? `Zastavení ${episodeIndex + 1}/${episodeCount} • Úkol ${taskIndex + 1}/${Math.max(1, taskCountInEpisode)}`
+              : `Uzavřeno ${run.closedTasks} z ${run.totalTasks} úkolů`;
+          return [
+            run.locationId,
+            {
+              progressText,
+              stopName,
+              href: `/play/${run.locationId}?episode=${episodeIndex + 1}&task=${taskIndex + 1}`
+            }
+          ] as const;
+        })
+      ),
+    [activeRuns]
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function hydrateProfileResumeCard() {
-      if (!supabase || !state.registrationCompleted || !state.profileCode || !activeLocation) {
-        if (!cancelled) {
-          setActiveResumeCard(null);
-        }
-        return;
-      }
-
-      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-      if (!accessToken) {
-        if (!cancelled) {
-          setActiveResumeCard(null);
-        }
-        return;
-      }
-
-      const nextResumeCard = await resolveResumeMissionCard({
-        accessToken,
-        profileCode: state.profileCode,
-        location: activeLocation
-      });
-
-      if (!cancelled) {
-        setActiveResumeCard(nextResumeCard);
-      }
-    }
-
-    void hydrateProfileResumeCard();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeLocation, state.profileCode, state.registrationCompleted, supabase]);
 
   const gameSummaries = useMemo(() => {
     const completedIds = new Set(state.completedLocationIds);
-    const activeId = state.activeMission?.locationId ?? null;
+    // R24: rozehranost určují BĚŽÍCÍ VÝPRAVY, stejně jako na hlavní obrazovce.
+    // Hráč jich může mít víc, takže se v profilu objeví všechny.
+    const runByLocation = new Map(activeRuns.map((run) => [run.locationId, run]));
 
-    const rows = locations
-      .filter((location) => completedIds.has(location.id) || location.id === activeId)
-      .map((location) => {
+    const knownIds = Array.from(new Set([...completedIds, ...runByLocation.keys()]));
+    const rows = knownIds
+      .map((locationId) => {
+        const run = runByLocation.get(locationId) ?? null;
+        const location = locations.find((item) => item.id === locationId) ?? null;
+        const name = location?.name ?? run?.title ?? locationId;
+        const city = location?.city ?? run?.city ?? "";
         const maxPoints = Math.max(
-          state.locationMaxScores[location.id] ?? 0,
-          getLocationMaxScore(getLocationTaskCount(location.id))
+          state.locationMaxScores[locationId] ?? 0,
+          getLocationMaxScore(getLocationTaskCount(locationId))
         );
-        const earnedPoints = Math.max(0, state.locationBestScores[location.id] ?? 0);
-        const isActive = location.id === activeId;
-        const isCompleted = completedIds.has(location.id);
+        const earnedPoints = Math.max(0, state.locationBestScores[locationId] ?? 0);
+        const isActive = Boolean(run);
+        const isCompleted = completedIds.has(locationId);
+        const resume = resumeByLocation.get(locationId) ?? null;
+        const resumeHref = isActive ? (resume?.href ?? `/play/${locationId}`) : `/locations/${locationId}`;
+        const resumeProgress = resume?.progressText;
 
         return {
-          id: location.id,
-          name: location.name,
-          city: location.city,
+          id: locationId,
+          name,
+          city,
           status: isActive ? ("active" as const) : ("completed" as const),
           statusLabel: isActive ? "Rozehráno" : "Dokončeno",
-          scoreLabel: isCompleted ? `${earnedPoints}/${maxPoints} bodů` : (activeResumeCard?.progressText ?? "Rozehráno"),
+          scoreLabel: isActive ? (resumeProgress ?? "Rozehráno") : `${earnedPoints}/${maxPoints} bodů`,
           actionLabel: isActive ? "Pokračovat" : "Zahrát znovu",
-          href: isActive ? (activeResumeCard?.href ?? `/play/${location.id}`) : `/locations/${location.id}`,
-          updatedAt: isActive ? (state.activeMission?.updatedAt ?? "") : (state.lastCompletedAt[location.id] ?? ""),
+          href: resumeHref,
+          updatedAt: isActive ? (run?.updatedAt ?? "") : (state.lastCompletedAt[locationId] ?? ""),
           isCompleted
         };
       })
@@ -204,7 +195,7 @@ export function ProfileScreen() {
       });
 
     return rows;
-  }, [activeResumeCard, state.activeMission, state.completedLocationIds, state.lastCompletedAt, state.locationBestScores, state.locationMaxScores]);
+  }, [activeRuns, resumeByLocation, state.completedLocationIds, state.lastCompletedAt, state.locationBestScores, state.locationMaxScores]);
   const completedGamesCount = useMemo(
     () => gameSummaries.filter((game) => game.status === "completed").length,
     [gameSummaries]
@@ -1464,9 +1455,9 @@ export function ProfileScreen() {
                           <span>{game.scoreLabel}</span>
                           {game.status === "completed" ? <span>Nejlepší uložený výsledek</span> : null}
                         </div>
-                        {game.status === "active" && activeLocation?.id === game.id ? (
+                        {game.status === "active" ? (
                           <div className="mt-2 text-xs text-mist">
-                            Pokračuješ ve hře <span className="font-semibold text-white">{activeLocation.subtitle}</span>.
+                            {resumeByLocation.get(game.id)?.stopName ?? "Rozehraná hra"}
                           </div>
                         ) : null}
                       </div>

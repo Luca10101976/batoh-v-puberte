@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CitySelector } from "@/components/city-selector";
 import { useAppState } from "@/components/app-state-provider";
-import { resolveResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
+import { buildResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
 import type { MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-unlock";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
@@ -59,8 +59,7 @@ function cityLocative(city: string) {
 }
 
 export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLocation[] }) {
-  const { state, setCity } = useAppState();
-  const [resumeCard, setResumeCard] = useState<ResumeMissionCard | null>(null);
+  const { state, setCity, activeRuns } = useAppState();
   const publishedCities = useMemo(
     () => Array.from(new Set(publishedLocations.map((location) => location.city))).sort((a, b) => a.localeCompare(b, "cs")),
     [publishedLocations]
@@ -91,50 +90,22 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
     }
   }, [publishedCities, setCity, state.city]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function hydrateResumeMission() {
-      const activeMission = state.activeMission;
-      if (!supabase || !state.registrationCompleted || !state.profileCode || !activeMission?.locationId) {
-        if (!cancelled) {
-          setResumeCard(null);
+  // R24: rozehrané hry se berou z BĚŽÍCÍCH VÝPRAV. Hráč jich může mít víc,
+  // proto se zobrazují všechny, ne jen naposledy hraná.
+  const resumeCards = useMemo(() => {
+    return activeRuns
+      .map((run) => {
+        const location = publishedLocations.find((item) => item.id === run.locationId);
+        if (!location) {
+          return null;
         }
-        return;
-      }
-
-      const location = publishedLocations.find((item) => item.id === activeMission.locationId);
-      if (!location) {
-        if (!cancelled) {
-          setResumeCard(null);
-        }
-        return;
-      }
-
-      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-      if (!accessToken) {
-        if (!cancelled) {
-          setResumeCard(null);
-        }
-        return;
-      }
-
-      const nextResumeCard = await resolveResumeMissionCard({
-        accessToken,
-        profileCode: state.profileCode,
-        location
-      });
-      if (!cancelled) {
-        setResumeCard(nextResumeCard);
-      }
-    }
-
-    void hydrateResumeMission();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [publishedLocations, state.activeMission, state.profileCode, state.registrationCompleted, supabase]);
+        return buildResumeMissionCard(location, {
+          task_progress: run.taskProgress,
+          location: { status: "in_progress" }
+        });
+      })
+      .filter((card): card is ResumeMissionCard => Boolean(card));
+  }, [activeRuns, publishedLocations]);
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
@@ -156,7 +127,7 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         />
       </header>
 
-      {resumeCard ? (
+      {resumeCards.length === 1 ? (
         <section className="glass-card border-lime/30 bg-lime/10 p-4 sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="flex max-w-3xl items-start gap-4">
@@ -168,21 +139,58 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                 className="h-16 w-16 shrink-0 object-contain sm:h-[88px] sm:w-[88px]"
               />
               <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-lime">Pokračovat ve hře</p>
-              <h2 className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">{resumeCard.missionName}</h2>
-              <p className="mt-2 text-base font-semibold text-white">{resumeCard.stopName}</p>
-              <p className="mt-1 text-sm leading-6 text-mist">{resumeCard.taskLabel}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-mist">
-                <span className="rounded-full bg-white/8 px-3 py-2">{resumeCard.progressText}</span>
-              </div>
+                <p className="text-xs uppercase tracking-[0.24em] text-lime">Pokračovat ve hře</p>
+                <h2 className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">{resumeCards[0].missionName}</h2>
+                <p className="mt-2 text-base font-semibold text-white">{resumeCards[0].stopName}</p>
+                <p className="mt-1 text-sm leading-6 text-mist">{resumeCards[0].taskLabel}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-mist">
+                  <span className="rounded-full bg-white/8 px-3 py-2">{resumeCards[0].progressText}</span>
+                </div>
               </div>
             </div>
             <Link
-              href={resumeCard.href}
+              href={resumeCards[0].href}
               className="inline-flex min-h-12 items-center justify-center rounded-[22px] bg-lime px-6 py-3 text-base font-bold text-night"
             >
               Pokračovat
             </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {resumeCards.length > 1 ? (
+        <section className="glass-card border-lime/30 bg-lime/10 p-4 sm:p-5">
+          <div className="flex items-start gap-4">
+            <Image
+              src={illustrationSrc("bezici")}
+              alt=""
+              width={88}
+              height={88}
+              className="h-16 w-16 shrink-0 object-contain sm:h-[88px] sm:w-[88px]"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs uppercase tracking-[0.24em] text-lime">Rozehrané hry</p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {resumeCards.map((card) => (
+                  <li
+                    key={card.locationId}
+                    className="flex flex-col gap-2 rounded-2xl bg-white/8 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-white">{card.missionName}</p>
+                      <p className="mt-1 truncate text-sm text-mist">{card.stopName}</p>
+                      <p className="mt-1 text-xs font-semibold text-mist">{card.progressText}</p>
+                    </div>
+                    <Link
+                      href={card.href}
+                      className="inline-flex min-h-11 flex-none items-center justify-center rounded-[20px] bg-lime px-5 py-2 text-sm font-bold text-night"
+                    >
+                      Pokračovat
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
       ) : null}
@@ -314,7 +322,7 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                             missionUnlocked ? "bg-lime text-night" : "border border-white/10 bg-white/5 text-mist"
                           }`}
                         >
-                          Otevřít hru
+                          {activeRuns.some((run) => run.locationId === missionLocation.id) ? "Pokračovat" : "Otevřít hru"}
                         </Link>
                       </div>
                     </div>

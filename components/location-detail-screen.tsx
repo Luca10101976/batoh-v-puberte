@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import type { MapLocation } from "@/lib/mock-data";
 import type { GameplayEpisode } from "@/lib/gameplay-types";
@@ -22,8 +23,11 @@ function isExternalImage(src: string) {
 }
 
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
-  const { state, isLocationUnlocked, setActiveMode } = useAppState();
+  const { state, isLocationUnlocked, setActiveMode, activeRuns, startRun } = useAppState();
   const router = useRouter();
+  const [starting, setStarting] = useState(false);
+  const hasActiveRun = activeRuns.some((run) => run.locationId === location.id);
+  const completed = state.completedLocationIds.includes(location.id);
   const unlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   const model = buildLocationDetailModel({
     name: location.name,
@@ -35,11 +39,26 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
     unlockedByPlaceId: location.unlockedByPlaceId ?? null,
     unlockRequirementName: location.unlockRequirementName ?? null,
     unlocked,
-    registered: state.registrationCompleted
+    registered: state.registrationCompleted,
+    hasActiveRun,
+    completed
   });
 
-  function startMission() {
+  // R24: jediná operace zahájení. Hrát, Pokračovat i Hrát znovu volají totéž –
+  // server najde běžící výpravu, a když žádná není, založí ji. Teprve pak se
+  // otevře herní obrazovka, takže hra je rozehraná ještě před první odpovědí.
+  async function startMission() {
+    if (starting) {
+      return;
+    }
     setActiveMode("solo");
+    if (!state.registrationCompleted) {
+      router.push(`/play/${location.id}?mode=solo`);
+      return;
+    }
+    setStarting(true);
+    await startRun(location.id);
+    setStarting(false);
     router.push(`/play/${location.id}?mode=solo`);
   }
 
@@ -89,10 +108,14 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
           <>
             <button
               onClick={startMission}
-              className="mt-5 w-full rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card"
+              disabled={starting}
+              className="mt-5 w-full rounded-[24px] bg-gradient-to-r from-coral to-[#ffb089] px-5 py-4 text-center text-base font-semibold text-white shadow-card disabled:opacity-70"
             >
-              {model.primaryAction === "play" ? "Hrát" : "Přihlásit a hrát"}
+              {starting ? "Otevírám hru…" : model.primaryLabel}
             </button>
+            {model.primaryAction === "replay" ? (
+              <p className="mt-3 text-sm text-mist">Tuhle hru už máš dokončenou. Nejlepší výsledek si novým průchodem nezhoršíš.</p>
+            ) : null}
             {model.primaryAction === "login_and_play" ? (
               <p className="mt-3 text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
             ) : null}

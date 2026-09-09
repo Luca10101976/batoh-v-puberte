@@ -202,20 +202,71 @@ export async function startRun(
   return selectRun(admin, runId);
 }
 
-/** Běžící výprava hráče pro danou hru; když žádná není, založí sólo výpravu. */
+/**
+ * R24: JEDINÁ operace zahájení hry – „najdi běžící výpravu této hry, a když žádná
+ * není, založ ji". Používají ji Hrát, Pokračovat i Hrát znovu.
+ *
+ * Je idempotentní: opakované volání vrátí tutéž výpravu a nikdy nezaloží druhou.
+ * `created` říká, jestli výprava právě vznikla.
+ */
 export async function ensureActiveRun(
   admin: any,
   args: { childProfileId: string; locationId: string }
-): Promise<GameRun | null> {
+): Promise<{ run: GameRun | null; created: boolean }> {
   const existing = await findActiveRunForPlayer(admin, args.childProfileId, args.locationId);
   if (existing) {
-    return existing;
+    return { run: existing, created: false };
   }
-  return startRun(admin, {
+  const started = await startRun(admin, {
     leaderChildProfileId: args.childProfileId,
     locationId: args.locationId,
     mode: "solo"
   });
+  // startRun při souběhu dohledá existující výpravu, takže se druhá nikdy nezaloží.
+  return { run: started, created: Boolean(started) };
+}
+
+/**
+ * R24/P8: všechny běžící výpravy hráče. Hráč smí mít rozehraných více RŮZNÝCH her,
+ * ale nejvýš jednu výpravu jedné hry.
+ *
+ * Tohle je jediný zdroj pravdy pro otázku „má hráč tuhle hru právě rozehranou?".
+ * child_location_progress je od R23 jen nejlepší historický výsledek a na tuhle
+ * otázku se ho ptát nesmíme.
+ */
+export async function listActiveRunsForPlayer(admin: any, childProfileId: string): Promise<GameRun[]> {
+  const column = await resolveLocationColumn(admin);
+  const { data: memberships } = await admin
+    .from("child_game_session_players")
+    .select("session_id")
+    .eq("child_profile_id", childProfileId)
+    .eq("status", "accepted")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  const sessionIds = ((memberships as Array<{ session_id: string }> | null) ?? []).map((row) => row.session_id);
+  if (sessionIds.length === 0) {
+    return [];
+  }
+
+  const { data } = await admin
+    .from("child_game_sessions")
+    .select(`id, leader_child_profile_id, status, started_at, ${column}`)
+    .in("id", sessionIds)
+    .in("status", ["waiting", "active"])
+    .order("created_at", { ascending: false });
+
+  const runs = ((data as SessionRow[] | null) ?? []).map((row) => toRun(row, column)).filter((run) => run.locationId);
+
+  // Pojistka: kdyby přece jen existovaly dvě otevřené výpravy téže hry, platí
+  // nejnovější – stejně jako ve findActiveRunForPlayer, aby si obě cesty odpovídaly.
+  const byLocation = new Map<string, GameRun>();
+  runs.forEach((run) => {
+    if (run.locationId && !byLocation.has(run.locationId)) {
+      byLocation.set(run.locationId, run);
+    }
+  });
+  return Array.from(byLocation.values());
 }
 
 /** Uzavře výpravu. Idempotentní: už uzavřená výprava se znovu nemění. */

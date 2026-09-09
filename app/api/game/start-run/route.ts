@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { ensureActiveRun } from "@/lib/game-run";
 import { createClient } from "@supabase/supabase-js";
+import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
 import { getGameplayLocation } from "@/lib/gameplay-server";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
+import { ensureActiveRun } from "@/lib/game-run";
+
+// R24: zahájení hry. Jediná cesta, kterou v aplikaci vzniká sólo výprava.
+//
+// Volají ji všechna tři tlačítka na detailu hry:
+//   Hrát        – hráč hru nikdy nedokončil a nemá běžící výpravu
+//   Pokračovat  – hráč má běžící výpravu (vrátí se tatáž)
+//   Hrát znovu  – hráč hru dokončil a nemá běžící výpravu (vznikne nová)
+//
+// Operace je idempotentní (lib/game-run.ts): opakovaný klik ani druhé zařízení
+// nikdy nezaloží druhou výpravu téže hry. Hra je rozehraná od tohoto okamžiku,
+// ne až od první odpovědi.
 
 type ChildProfileRow = {
   id: string;
@@ -41,32 +52,28 @@ export async function POST(request: NextRequest) {
   }
 
   const rateLimitResult = await checkRateLimitSafe({
-    action: "reset_location_replay",
+    action: "start_run",
     ip: getRequestIpAddress(request),
     userId: user.id,
-    limit: 30,
+    limit: 120,
     windowMinutes: 60,
     blockMinutes: 10
   });
 
   if (!rateLimitResult.allowed) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "rate_limited",
-        retry_after: rateLimitResult.retryAfterSeconds ?? 60
-      },
+      { ok: false, error: "rate_limited", retry_after: rateLimitResult.retryAfterSeconds ?? 60 },
       { status: 429 }
     );
   }
 
-  const body = (await request.json()) as {
+  const body = (await request.json().catch(() => null)) as {
     profileCode?: string;
     locationId?: string;
-  };
+  } | null;
 
-  const profileCode = normalizeCode(body.profileCode ?? "");
-  const locationId = (body.locationId ?? "").trim();
+  const profileCode = normalizeCode(body?.profileCode ?? "");
+  const locationId = (body?.locationId ?? "").trim();
   if (!profileCode || !locationId) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
@@ -80,8 +87,8 @@ export async function POST(request: NextRequest) {
   const { data: ownProfile } = await admin
     .from("child_profiles")
     .select("id, profile_code")
-    .eq("parent_user_id", user.id)
     .eq("profile_code", profileCode)
+    .eq("parent_user_id", user.id)
     .limit(1)
     .maybeSingle<ChildProfileRow>();
 
@@ -89,7 +96,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "forbidden_profile" }, { status: 403 });
   }
 
-  // R22: herní zámek se vynucuje na serveru (fail-closed), ne jen v UI.
+  // R22 + R23/P9: zámek hry se vynucuje na serveru i při zahájení, aby zamčenou
+  // hru nešlo rozehrát přímým voláním API.
   const access = await resolveServerGameAccess(admin, ownProfile.profile_code, locationId, {
     childProfileId: ownProfile.id
   });
@@ -100,34 +108,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // R23: opakované hraní = NOVÁ výprava. Odpovědi z předchozího průchodu se
-  // nemažou, zůstávají u své výpravy jako historie. Nejlepší dosažený výsledek
-  // v child_location_progress se nedotýká a horším průchodem se nezhorší.
-  const { run } = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
+  const { run, created } = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
   if (!run) {
-    return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "run_unavailable" }, { status: 500 });
   }
 
-  const nowIso = new Date().toISOString();
-  const { error: updateError } = await admin
-    .from("child_location_progress")
-    .update({
-      status: "in_progress",
-      completion_source: "gameplay",
-      updated_at: nowIso
-    })
-    .eq("profile_code", ownProfile.profile_code)
-    .eq("location_id", locationId);
-
-  if (updateError?.code === "42703") {
-    await admin
-      .from("child_location_progress")
-      .update({ completed_at: nowIso })
-      .eq("profile_code", ownProfile.profile_code)
-      .eq("location_id", locationId);
-  } else if (updateError) {
-    return NextResponse.json({ ok: false, error: "reset_replay_failed" }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, reset: true, runId: run.id });
+  return NextResponse.json({
+    ok: true,
+    created,
+    run: { id: run.id, locationId: run.locationId, mode: run.mode, startedAt: run.started_at }
+  });
 }

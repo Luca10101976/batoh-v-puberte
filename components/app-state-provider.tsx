@@ -11,7 +11,6 @@ import {
   type ReactNode
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { pickLatestActiveMission } from "@/lib/home-resume";
 import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { locations } from "@/lib/mock-data";
 import { isLocationUnlockedByChain } from "@/lib/location-unlock";
@@ -67,6 +66,33 @@ type AppState = {
   trustedContacts: string[];
 };
 
+/**
+ * R24: běžící výprava hráče. JEDINÝ zdroj pravdy pro otázku „mám tuhle hru
+ * rozehranou?" – na detailu hry, na hlavní obrazovce i v profilu.
+ * child_location_progress je od R23 jen nejlepší historický výsledek.
+ */
+export type ActiveRunSummary = {
+  runId: string;
+  locationId: string;
+  title: string | null;
+  city: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  closedTasks: number;
+  totalTasks: number;
+  /** Pozice spočítaná serverem z uzavřených úkolů (stejná funkce jako herní obrazovka). */
+  position: {
+    episodeIndex: number;
+    taskIndex: number;
+    episodeCount: number;
+    taskCountInEpisode: number;
+    stopName: string | null;
+    taskTitle: string | null;
+    allClosed: boolean;
+  };
+  taskProgress: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
+};
+
 type AppStateContextValue = {
   state: AppState;
   hydrated: boolean;
@@ -103,6 +129,15 @@ type AppStateContextValue = {
     options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => void;
   resetProgress: () => void;
+  /** R24: běžící výpravy hráče, seřazené od nejnovější aktivity. */
+  activeRuns: ActiveRunSummary[];
+  /** R24: znovu načte běžící výpravy ze serveru (po zahájení nebo dokončení hry). */
+  refreshActiveRuns: () => Promise<void>;
+  /**
+   * R24: zahájení hry – najde běžící výpravu, a když žádná není, založí ji.
+   * Stejná operace pro Hrát, Pokračovat i Hrát znovu. Vrací, zda se povedla.
+   */
+  startRun: (locationId: string) => Promise<boolean>;
   isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean, requiredLocationId?: string | null) => boolean;
   getPlayerScore: () => number;
 };
@@ -176,6 +211,69 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // -------------------------------------------------------------------------
+  // R24: běžící výpravy. Server je zdroj pravdy, drží se jen v paměti (neukládají
+  // se do localStorage), aby aplikace nikdy neukazovala zastaralou rozehranost.
+  // -------------------------------------------------------------------------
+  const [activeRuns, setActiveRuns] = useState<ActiveRunSummary[]>([]);
+
+  const callGameApi = useCallback(
+    async (path: string, body: Record<string, unknown>) => {
+      const profileCode = stateRef.current.profileCode;
+      if (!supabase || !profileCode) {
+        return null;
+      }
+      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      if (!accessToken) {
+        return null;
+      }
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ profileCode, ...body }),
+        cache: "no-store"
+      }).catch(() => null);
+      if (!response?.ok) {
+        return null;
+      }
+      return (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    },
+    [supabase]
+  );
+
+  const refreshActiveRuns = useCallback(async () => {
+    const payload = await callGameApi("/api/game/active-runs", {});
+    if (!payload?.ok) {
+      return;
+    }
+    const runs = Array.isArray(payload.runs) ? (payload.runs as ActiveRunSummary[]) : [];
+    setActiveRuns(
+      runs
+        .filter((run) => Boolean(run?.locationId))
+        .slice()
+        .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")))
+    );
+  }, [callGameApi]);
+
+  const startRun = useCallback(
+    async (locationId: string) => {
+      const payload = await callGameApi("/api/game/start-run", { locationId });
+      if (!payload?.ok) {
+        return false;
+      }
+      await refreshActiveRuns();
+      return true;
+    },
+    [callGameApi, refreshActiveRuns]
+  );
+
+  useEffect(() => {
+    if (!hydrated || !state.registrationCompleted || !state.profileCode) {
+      return;
+    }
+    void refreshActiveRuns();
+  }, [hydrated, refreshActiveRuns, state.profileCode, state.registrationCompleted]);
 
   useEffect(() => {
     if (!hydrated || !supabase) {
@@ -433,7 +531,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const locationPenaltyPoints: Record<string, number> = {};
         const locationBestScores: Record<string, number> = {};
         const locationMaxScores: Record<string, number> = {};
-        const activeMission = pickLatestActiveMission(remoteRows);
+        // R24: rozehranost už neurčuje tabulka nejlepších výsledků, ale běžící
+        // výpravy (activeRuns). Pole activeMission zůstává jen kvůli tvaru uloženého
+        // stavu a je vždy prázdné.
+        const activeMission = null;
 
         remoteRows.forEach((row) => {
           lastCompletedAt[row.location_id] = row.completed_at;
@@ -721,6 +822,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     locationId: string,
     options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => {
+    // R24: dokončením se výprava uzavírá, takže hra přestává být rozehraná.
+    setActiveRuns((current) => current.filter((run) => run.locationId !== locationId));
     setState((current) => ({
       ...current,
       locationPenaltyPoints: {
@@ -850,10 +953,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       syncCloudProfile,
       completeLocation,
       resetProgress,
+      activeRuns,
+      refreshActiveRuns,
+      startRun,
       isLocationUnlocked,
       getPlayerScore
     }),
     [
+      activeRuns,
+      refreshActiveRuns,
+      startRun,
       completeLocation,
       addFriendByCode,
       removeFriendByCode,

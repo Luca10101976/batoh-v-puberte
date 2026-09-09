@@ -133,6 +133,31 @@ export async function POST(request: NextRequest) {
   // R23: dokončuje se konkrétní běžící výprava. Když žádná není (historická data
   // před R23), vyhodnotí se odpovědi bez vazby na výpravu.
   const run = await findActiveRunForPlayer(admin, ownProfile.id, locationId);
+
+  // R24: druhé dokončení téže hry musí být idempotentní. Když už žádná výprava
+  // neběží a hráč má hru dokončenou, request nic nemění a vrátí uložený stav.
+  // Bez toho by dvojklik nebo druhé zařízení dostaly nepravdivou hlášku
+  // o nevyřešených úkolech, protože uzavřená výprava už odpovědi nedodá.
+  if (!run) {
+    const { data: existingProgress } = await admin
+      .from("child_location_progress")
+      .select("status, first_completed_at, best_score")
+      .eq("profile_code", ownProfile.profile_code)
+      .eq("location_id", locationId)
+      .limit(1)
+      .maybeSingle<{ status?: string | null; first_completed_at?: string | null; best_score?: number | null }>();
+
+    if (existingProgress?.status === "completed" || existingProgress?.first_completed_at) {
+      return NextResponse.json({
+        ok: true,
+        alreadyCompleted: true,
+        participantCodes: [normalizeCode(ownProfile.profile_code)],
+        firstCompletionProfileCodes: [],
+        bestScore: existingProgress.best_score ?? null
+      });
+    }
+  }
+
   let participantIds = [ownProfile.id];
   if (run) {
     try {

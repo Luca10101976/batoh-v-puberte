@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
 import { locations, type MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement } from "@/lib/location-unlock";
-import { parseRequestedPlayStep } from "@/lib/play-resume";
+import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
 import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
@@ -30,7 +30,7 @@ function isManualTask(task: GameplayTask) {
 }
 
 export function PlayScreen({ location }: { location: PlayLocation }) {
-  const { state, setActiveMode, completeLocation, isLocationUnlocked } = useAppState();
+  const { state, setActiveMode, completeLocation, isLocationUnlocked, startRun } = useAppState();
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedStep = useMemo(
@@ -163,6 +163,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         | {
             task_progress?: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
             location?: { status?: "in_progress" | "completed" | null };
+            run?: { id: string; mode: string; startedAt: string | null } | null;
           }
         | null;
 
@@ -170,105 +171,71 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       const locationProgress = payload?.location ?? null;
 
       if (rows.length === 0) {
-        if (isCompletedLocationProgress(locationProgress)) {
-          await fetch("/api/game/reset-location-replay", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`
-            },
-            body: JSON.stringify({
-              profileCode: state.profileCode,
-              locationId: location.id
-            })
-          }).catch(() => null);
-
-          if (requestedEpisodeIndex !== null) {
-            setEpisodeIndex(requestedEpisodeIndex);
-            setTaskIndex(requestedTaskIndex ?? 0);
-          } else {
-            setEpisodeIndex(0);
-            setTaskIndex(0);
-          }
-
-          setMessage("Tohle je opakované hraní. Začínáš znovu na čisto a nejlepší výsledek už si tím nezhoršíš.");
-          setResuming(false);
-          return;
+        // R24: o rozehranosti rozhoduje BĚŽÍCÍ VÝPRAVA, kterou vrací server.
+        // Když žádná neběží (přímý vstup na adresu hry), zahájí se stejnou
+        // operací jako tlačítko Hrát – žádná druhá cesta zakládání neexistuje.
+        if (!payload?.run) {
+          await startRun(location.id);
         }
 
-        if (isActiveInProgressLocation(locationProgress)) {
-          if (requestedEpisodeIndex !== null) {
-            setEpisodeIndex(requestedEpisodeIndex);
-            setTaskIndex(requestedTaskIndex ?? 0);
-          } else {
-            setEpisodeIndex(0);
-            setTaskIndex(0);
-          }
+        const target = resolveResumeTarget({
+          episodes: location.episodes,
+          taskProgress: [],
+          requestedEpisodeIndex,
+          requestedTaskIndex
+        });
+        setEpisodeIndex(target.episodeIndex);
+        setTaskIndex(target.taskIndex);
 
-          if (historicallyCompleted || hasHistoricalLocationCompletion(locationProgress)) {
-            setMessage("Tohle je opakované hraní. Pokračuješ v novém pokusu.");
-          }
-
-          setResuming(false);
-          return;
+        if (historicallyCompleted || hasHistoricalLocationCompletion(locationProgress)) {
+          setMessage("Tohle je opakované hraní. Nejlepší výsledek si tím nezhoršíš.");
         }
-
+        setStatus("idle");
         setResuming(false);
         return;
       }
 
       const outcomes: Record<string, "known" | "unknown"> = {};
       const attempts: Record<string, number> = {};
-      const lockedTasks = new Set<string>();
 
       rows.forEach((row) => {
         attempts[row.task_id] = Math.max(0, row.attempts ?? 0);
         if (row.status === "correct") {
           outcomes[row.task_id] = "known";
-          lockedTasks.add(row.task_id);
         }
         if (row.status === "unknown") {
           outcomes[row.task_id] = "unknown";
-          lockedTasks.add(row.task_id);
         }
       });
 
       setTaskOutcomes((current) => ({ ...current, ...outcomes }));
       setWrongAttemptsByTask((current) => ({ ...current, ...attempts }));
 
-      const firstOpenTask = location.episodes
-        .flatMap((episode) => episode.tasks)
-        .find((task) => !lockedTasks.has(task.id));
+      // R24: pozice se nikam neukládá, počítá se z uzavřených úkolů této výpravy.
+      // Číslo v adrese je jen nápověda pro odkaz zvenčí – když na něm leží už
+      // uzavřený úkol (zastaralý odkaz), použije se skutečná pozice.
+      const target = resolveResumeTarget({
+        episodes: location.episodes,
+        taskProgress: rows.map((row) => ({ task_id: row.task_id, status: row.status })),
+        requestedEpisodeIndex,
+        requestedTaskIndex
+      });
+      setEpisodeIndex(target.episodeIndex);
+      setTaskIndex(target.taskIndex);
 
-      if (requestedEpisodeIndex !== null) {
-        setEpisodeIndex(requestedEpisodeIndex);
-        setTaskIndex(requestedTaskIndex ?? 0);
-        setResuming(false);
-        return;
-      }
-
-      if (firstOpenTask) {
-        const target = taskPositionById.get(firstOpenTask.id);
-        if (target) {
-          setEpisodeIndex(target.episodeIndex);
-          setTaskIndex(target.taskIndex);
-          setMessage("Navázali jsme na tvoji rozehranou hru.");
-          setStatus("idle");
-        }
-      } else if (payload?.location?.status === "in_progress") {
-        setMessage("Máš vyřešené všechny úkoly. Dokonči misi tlačítkem v posledním kroku.");
+      if (target.source === "completed") {
+        setMessage("Máš vyřešené všechny úkoly. Dokonči hru tlačítkem v posledním kroku.");
         setStatus("idle");
-        const lastEpisodeIndex = location.episodes.length - 1;
-        const lastTaskIndex = Math.max(0, location.episodes[lastEpisodeIndex]?.tasks.length - 1);
-        setEpisodeIndex(lastEpisodeIndex);
-        setTaskIndex(lastTaskIndex);
+      } else if (target.source === "computed") {
+        setMessage("Navázali jsme na tvoji rozehranou hru.");
+        setStatus("idle");
       }
 
       setResuming(false);
     }
 
     void hydrateInProgressMission();
-  }, [historicallyCompleted, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, state.profileCode, supabase, taskPositionById]);
+  }, [historicallyCompleted, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, startRun, state.profileCode, supabase, taskPositionById]);
 
   async function finishLocation() {
     const participants = [SELF_MEMBER_ID];
@@ -404,6 +371,24 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     })();
   }
 
+  // R24/D3: server je zdroj pravdy. Když úkol mezitím uzavřelo jiné zařízení,
+  // server vrátí uložený výsledek s `locked: true` a tahle obrazovka ho jen
+  // převezme – nic nepřepisuje a neukazuje hlášku pro odpověď, která se nezapsala.
+  function applyLockedResult(result: { status: "correct" | "wrong" | "unknown"; locked: boolean; attempts: number }) {
+    if (!result.locked || result.status === "wrong") {
+      return false;
+    }
+    setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: result.attempts }));
+    setTaskOutcomes((current) => ({ ...current, [activeTask.id]: result.status === "correct" ? "known" : "unknown" }));
+    setStatus(result.status === "correct" ? "correct" : "unknown");
+    setMessage(
+      result.status === "correct"
+        ? `Tenhle úkol už máš vyřešený správně, třeba na jiném zařízení. Máš za něj ${POINTS_PER_TASK} bodů.`
+        : "Tenhle úkol už je uzavřený jako Nevím, třeba na jiném zařízení. Pokračuj dál."
+    );
+    return true;
+  }
+
   async function handleValidate() {
     if (submittingAnswer) {
       return;
@@ -425,6 +410,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     const result = await submitTaskAnswer("answer", input);
     setSubmittingAnswer(false);
     if (!result) {
+      return;
+    }
+    if (taskOutcomes[activeTask.id] === undefined && result.locked && applyLockedResult(result)) {
       return;
     }
 
@@ -458,6 +446,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     if (!result) {
       return;
     }
+    if (result.locked && result.status !== "unknown" && applyLockedResult(result)) {
+      return;
+    }
     setStatus("unknown");
     setMessage("Nevadí, jdeme dál. Za tenhle úkol je 0 bodů.");
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
@@ -471,6 +462,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     const result = await submitTaskAnswer("confirm_manual");
     setSubmittingAnswer(false);
     if (!result) {
+      return;
+    }
+    if (result.locked && result.status !== "correct" && applyLockedResult(result)) {
       return;
     }
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
@@ -487,6 +481,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     const result = await submitTaskAnswer("mark_unknown");
     setSubmittingAnswer(false);
     if (!result) {
+      return;
+    }
+    if (result.locked && result.status !== "unknown" && applyLockedResult(result)) {
       return;
     }
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));

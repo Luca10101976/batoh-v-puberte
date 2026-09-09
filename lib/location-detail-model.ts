@@ -25,6 +25,10 @@ export type LocationDetailInput = {
   unlocked: boolean;
   /** Hráč má dokončenou registraci (může hrát bez přihlašovacího kroku) */
   registered: boolean;
+  /** R24: hráč má právě běžící výpravu této hry (zdroj: běžící sessions, ne nejlepší výsledek) */
+  hasActiveRun?: boolean;
+  /** R24: hráč hru už někdy dokončil */
+  completed?: boolean;
 };
 
 export type LocationDetailModel = {
@@ -37,7 +41,9 @@ export type LocationDetailModel = {
   locked: boolean;
   /** Text pro zamčenou hru, např. „Nejdřív dokonči: Park Klamovka“ */
   lockMessage: string | null;
-  primaryAction: "play" | "login_and_play" | "locked";
+  primaryAction: "play" | "continue" | "replay" | "login_and_play" | "locked";
+  /** Popisek hlavního tlačítka podle stavu hráče (R24) */
+  primaryLabel: string;
 };
 
 const GENERIC_SUBTITLE = "Městská mise";
@@ -52,6 +58,28 @@ export function buildLocationDetailModel(input: LocationDetailInput): LocationDe
   const requirement = (input.unlockRequirementName ?? "").trim();
   const lockMessage = locked ? `Nejdřív dokonči: ${requirement || "předchozí hru"}` : null;
 
+  // R24: rozehranost se bere z běžící výpravy, ne z nejlepšího výsledku.
+  //   běžící výprava      -> Pokračovat
+  //   dokončeno, nic neběží -> Hrát znovu (vznikne nová výprava)
+  //   jinak               -> Hrát
+  const primaryAction: LocationDetailModel["primaryAction"] = locked
+    ? "locked"
+    : !input.registered
+      ? "login_and_play"
+      : input.hasActiveRun
+        ? "continue"
+        : input.completed
+          ? "replay"
+          : "play";
+
+  const PRIMARY_LABELS: Record<LocationDetailModel["primaryAction"], string> = {
+    play: "Hrát",
+    continue: "Pokračovat",
+    replay: "Hrát znovu",
+    login_and_play: "Přihlásit a hrát",
+    locked: ""
+  };
+
   return {
     title,
     subtitle,
@@ -60,6 +88,7 @@ export function buildLocationDetailModel(input: LocationDetailInput): LocationDe
     startStopName,
     locked,
     lockMessage,
-    primaryAction: locked ? "locked" : input.registered ? "play" : "login_and_play"
+    primaryAction,
+    primaryLabel: PRIMARY_LABELS[primaryAction]
   };
 }

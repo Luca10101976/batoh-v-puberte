@@ -29,3 +29,70 @@ export function parseRequestedPlayStep(args: {
 
   return { episodeIndex, taskIndex: taskNumber - 1 };
 }
+
+// R24: rekonstrukce pozice v rozehrané výpravě.
+//
+// Pozice se NEUKLÁDÁ. Počítá se pokaždé znovu z uzavřených úkolů dané výpravy,
+// takže reload i druhé zařízení dají stejný výsledek.
+//
+// Uzavřený úkol = správně zodpovězený, explicitní Nevím, nebo automatické Nevím
+// po vyčerpání pokusů. Úkol s jedním nebo dvěma chybnými pokusy uzavřený NENÍ,
+// takže se na něj hráč vrací.
+
+export type ResumeTaskRow = {
+  task_id: string;
+  status: "correct" | "wrong" | "unknown";
+};
+
+export type ResumeTarget = {
+  episodeIndex: number;
+  taskIndex: number;
+  /** requested = pozice z adresy, computed = první neuzavřený úkol, completed = vše hotové */
+  source: "requested" | "computed" | "completed";
+};
+
+export function isClosedTaskStatus(status: string | null | undefined) {
+  return status === "correct" || status === "unknown";
+}
+
+export function resolveResumeTarget(args: {
+  episodes: Array<{ tasks: Array<{ id: string }> }>;
+  taskProgress: ResumeTaskRow[];
+  requestedEpisodeIndex?: number | null;
+  requestedTaskIndex?: number | null;
+}): ResumeTarget {
+  const { episodes, taskProgress } = args;
+  const closed = new Set(taskProgress.filter((row) => isClosedTaskStatus(row.status)).map((row) => row.task_id));
+
+  const flat: Array<{ episodeIndex: number; taskIndex: number; id: string }> = [];
+  episodes.forEach((episode, episodeIndex) => {
+    episode.tasks.forEach((task, taskIndex) => {
+      flat.push({ episodeIndex, taskIndex, id: task.id });
+    });
+  });
+
+  if (flat.length === 0) {
+    return { episodeIndex: 0, taskIndex: 0, source: "computed" };
+  }
+
+  // Pozice z adresy je jen nápověda pro odkaz zvenčí. Použije se, když na ni
+  // opravdu leží neuzavřený úkol; zastaralý odkaz hráče na hotový úkol nevrátí.
+  const requestedEpisodeIndex = args.requestedEpisodeIndex ?? null;
+  if (requestedEpisodeIndex !== null) {
+    const requestedTaskIndex = args.requestedTaskIndex ?? 0;
+    const requested = flat.find(
+      (item) => item.episodeIndex === requestedEpisodeIndex && item.taskIndex === requestedTaskIndex
+    );
+    if (requested && !closed.has(requested.id)) {
+      return { episodeIndex: requested.episodeIndex, taskIndex: requested.taskIndex, source: "requested" };
+    }
+  }
+
+  const firstOpen = flat.find((item) => !closed.has(item.id));
+  if (firstOpen) {
+    return { episodeIndex: firstOpen.episodeIndex, taskIndex: firstOpen.taskIndex, source: "computed" };
+  }
+
+  const last = flat[flat.length - 1];
+  return { episodeIndex: last.episodeIndex, taskIndex: last.taskIndex, source: "completed" };
+}

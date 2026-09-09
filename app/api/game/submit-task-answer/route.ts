@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
   }
 
   // R23: odpověď patří konkrétní výpravě. Sólo hraní má výpravu s jedním hráčem.
-  const run = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
+  const { run } = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
   if (!run) {
     return NextResponse.json({ ok: false, error: "run_unavailable" }, { status: 500 });
   }
@@ -240,6 +240,26 @@ export async function POST(request: NextRequest) {
       // na výpravu a migrace ji později k dopočítané výpravě přiřadí.
       const { session_id: _ignoredSession, ...withoutSession } = payload;
       ({ error } = await admin.from("child_task_progress").insert(withoutSession));
+    }
+
+    // R24/D3: dvě zařízení mohou odpovědět na stejný úkol téměř současně. První
+    // zápis přijatý serverem platí; druhý narazí na jedinečnost odpovědi ve výpravě
+    // a místo chyby 500 dostane zpět už uložený stav.
+    if (error?.code === "23505") {
+      const { data: storedRow } = await taskProgressQuery()
+        .limit(1)
+        .maybeSingle<ChildTaskProgressRow>();
+      if (storedRow) {
+        const storedResolved = storedRow.status === "correct" || storedRow.status === "unknown";
+        return NextResponse.json({
+          ok: true,
+          status: storedRow.status,
+          attempts: storedRow.attempts,
+          remainingAttempts: storedResolved ? 0 : Math.max(0, MAX_TASK_ATTEMPTS - storedRow.attempts),
+          awardedPointsForTask: storedRow.status === "correct" ? POINTS_PER_TASK : 0,
+          locked: storedResolved
+        });
+      }
     }
     saveError = error;
   }

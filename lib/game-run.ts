@@ -334,17 +334,27 @@ export async function loadRunTaskProgress(
 
   let query = admin
     .from("child_task_progress")
-    .select("child_profile_id, task_id, status")
+    .select("child_profile_id, task_id, status, hint_used_at")
     .eq("location_id", args.locationId)
     .in("child_profile_id", args.childProfileIds);
   query = args.runId ? query.eq("session_id", args.runId) : query.is("session_id", null);
 
   let { data, error } = await query;
+  if (error && /hint_used_at/i.test(error.message ?? "")) {
+    // Prostředí bez migrace R25: bodování běží bez nápověd.
+    let legacy = admin
+      .from("child_task_progress")
+      .select("child_profile_id, task_id, status")
+      .eq("location_id", args.locationId)
+      .in("child_profile_id", args.childProfileIds);
+    legacy = args.runId ? legacy.eq("session_id", args.runId) : legacy.is("session_id", null);
+    ({ data, error } = await legacy);
+  }
   if (isMissingColumnError(error)) {
     // Před migrací R23 sloupec neexistuje – odpovědi jsou jen jedny.
     ({ data, error } = await admin
       .from("child_task_progress")
-      .select("child_profile_id, task_id, status")
+      .select("child_profile_id, task_id, status, hint_used_at")
       .eq("location_id", args.locationId)
       .in("child_profile_id", args.childProfileIds));
   }
@@ -352,13 +362,12 @@ export async function loadRunTaskProgress(
     throw new Error(`run_progress_unavailable: ${error.message}`);
   }
 
-  const byChild = new Map<string, Array<{ task_id: string; status: "correct" | "wrong" | "unknown" }>>();
-  ((data as Array<{ child_profile_id: string; task_id: string; status: "correct" | "wrong" | "unknown" }> | null) ?? []).forEach(
-    (row) => {
-      const current = byChild.get(row.child_profile_id) ?? [];
-      current.push({ task_id: row.task_id, status: row.status });
-      byChild.set(row.child_profile_id, current);
-    }
-  );
+  type Row = { child_profile_id: string; task_id: string; status: "correct" | "wrong" | "unknown"; hint_used_at?: string | null };
+  const byChild = new Map<string, Array<{ task_id: string; status: Row["status"]; hintUsed: boolean }>>();
+  ((data as Row[] | null) ?? []).forEach((row) => {
+    const current = byChild.get(row.child_profile_id) ?? [];
+    current.push({ task_id: row.task_id, status: row.status, hintUsed: Boolean(row.hint_used_at) });
+    byChild.set(row.child_profile_id, current);
+  });
   return byChild;
 }

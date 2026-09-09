@@ -219,6 +219,19 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
   };
 }
 
+/** R25: „pro splnění stačí X". Prázdné pole = musí sedět celá odpověď. */
+function parseMinCorrectMatches(raw: string): { value: number | null; error?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { value: null };
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return { value: null, error: "Zadejte celé číslo od 1, nebo nechte pole prázdné." };
+  }
+  return { value: parsed };
+}
+
 export async function createTaskAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const stopId = normalizeText(formData.get("stop_id"));
   const missionId = normalizeText(formData.get("mission_id"));
@@ -230,8 +243,11 @@ export async function createTaskAction(_prevState: FormState, formData: FormData
   const order = parseNonNegativeInt(orderRaw);
   const options = parseTaskOptions(optionsRaw);
   const storedOptions = buildStoredTaskOptions(type, options);
+  const hintText = normalizeText(formData.get("hint_text"));
+  const minMatches = parseMinCorrectMatches(normalizeText(formData.get("min_correct_matches")));
 
   const fieldErrors: Record<string, string> = {};
+  if (minMatches.error) fieldErrors.min_correct_matches = minMatches.error;
   if (!stopId) fieldErrors.stop_id = "Chybí stop_id.";
   if (!missionId) fieldErrors.mission_id = "Chybí mission_id.";
   if (!TASK_TYPES.has(type)) fieldErrors.type = "Vyber platný typ úkolu.";
@@ -267,7 +283,9 @@ export async function createTaskAction(_prevState: FormState, formData: FormData
       question,
       correct_answer: storedCorrectAnswer,
       options: storedOptions,
-      order
+      order,
+      hint_text: hintText,
+      min_correct_matches: minMatches.value
     });
 
     if (error) {
@@ -295,8 +313,11 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
   const order = parseNonNegativeInt(orderRaw);
   const options = parseTaskOptions(optionsRaw);
   const storedOptions = buildStoredTaskOptions(type, options);
+  const hintText = normalizeText(formData.get("hint_text"));
+  const minMatches = parseMinCorrectMatches(normalizeText(formData.get("min_correct_matches")));
 
   const fieldErrors: Record<string, string> = {};
+  if (minMatches.error) fieldErrors.min_correct_matches = minMatches.error;
   if (!taskId) fieldErrors.task_id = "Chybí task_id.";
   if (!stopId) fieldErrors.stop_id = "Chybí stop_id.";
   if (!missionId) fieldErrors.mission_id = "Chybí mission_id.";
@@ -334,7 +355,9 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
         question,
         correct_answer: storedCorrectAnswer,
         options: storedOptions,
-        order
+        order,
+        hint_text: hintText,
+        min_correct_matches: minMatches.value
       })
       .eq("id", taskId)
       .eq("stop_id", stopId);

@@ -10,8 +10,8 @@ import { getUnlockRequirement } from "@/lib/location-unlock";
 import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
 import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
-import { POINTS_PER_TASK, getLocationMaxScore } from "@/lib/game-rules";
+import type { PublicGameplayEpisode, PublicGameplayTask } from "@/lib/gameplay-types";
+import { POINTS_PER_TASK, POINTS_PER_TASK_WITH_HINT, formatRemainingAttempts, getLocationMaxScore } from "@/lib/game-rules";
 import { fetchWithSessionRecovery } from "@/lib/session-recovery";
 import { illustrationSrc, type IllustrationName } from "@/lib/illustrations";
 
@@ -19,13 +19,13 @@ type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
 const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
-type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[] };
+type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: PublicGameplayEpisode[] };
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
 }
 
-function isManualTask(task: GameplayTask) {
+function isManualTask(task: PublicGameplayTask) {
   return task.type === "photo";
 }
 
@@ -59,6 +59,11 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
   const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  // R25: nápovědy otevřené v této výpravě. Text přichází ze serveru až po otevření.
+  const [hintTextByTask, setHintTextByTask] = useState<Record<string, string>>({});
+  const [hintUsedByTask, setHintUsedByTask] = useState<Record<string, boolean>>({});
+  const [loadingHint, setLoadingHint] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const [resuming, setResuming] = useState(true);
   const supabase = useMemo(() => {
     try {
@@ -69,8 +74,11 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   }, []);
 
   useEffect(() => {
-    const mode = searchParams.get("mode");
-
+    // R25: intro se ukazuje jen na skutečném začátku výpravy. Detail hry ho zapne
+    // po zahájení nové výpravy; pokračování rozehrané hry ho nikdy nevyvolá.
+    if (searchParams.get("intro") === "1") {
+      setIntroOpen(true);
+    }
     setActiveMode("solo");
 
     if (requestedEpisodeIndex !== null) {
@@ -119,6 +127,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           : null;
 
   const completionLabel = useMemo(() => `Body se připíšou hráči ${state.profile.name}.`, [state.profile.name]);
+  const hintUsedHere = Boolean(hintUsedByTask[activeTask?.id ?? ""]);
+  const revealedHint = hintTextByTask[activeTask?.id ?? ""] ?? "";
+  const pointsForThisTask = hintUsedHere ? POINTS_PER_TASK_WITH_HINT : POINTS_PER_TASK;
   const hasAnyTasks = totalTasks > 0;
 
   useEffect(() => {
@@ -161,7 +172,12 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
       const payload = (await response.json().catch(() => null)) as
         | {
-            task_progress?: Array<{ task_id: string; status: "correct" | "wrong" | "unknown"; attempts: number }>;
+            task_progress?: Array<{
+              task_id: string;
+              status: "correct" | "wrong" | "unknown";
+              attempts: number;
+              hintUsed?: boolean;
+            }>;
             location?: { status?: "in_progress" | "completed" | null };
             run?: { id: string; mode: string; startedAt: string | null } | null;
           }
@@ -198,8 +214,12 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       const outcomes: Record<string, "known" | "unknown"> = {};
       const attempts: Record<string, number> = {};
 
+      const hints: Record<string, boolean> = {};
       rows.forEach((row) => {
         attempts[row.task_id] = Math.max(0, row.attempts ?? 0);
+        if (row.hintUsed) {
+          hints[row.task_id] = true;
+        }
         if (row.status === "correct") {
           outcomes[row.task_id] = "known";
         }
@@ -210,6 +230,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
       setTaskOutcomes((current) => ({ ...current, ...outcomes }));
       setWrongAttemptsByTask((current) => ({ ...current, ...attempts }));
+      setHintUsedByTask((current) => ({ ...current, ...hints }));
+      // Rozehraná výprava už úvod nepotřebuje, i kdyby na ni vedl starý odkaz.
+      setIntroOpen(false);
 
       // R24: pozice se nikam neukládá, počítá se z uzavřených úkolů této výpravy.
       // Číslo v adrese je jen nápověda pro odkaz zvenčí – když na něm leží už
@@ -374,7 +397,12 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   // R24/D3: server je zdroj pravdy. Když úkol mezitím uzavřelo jiné zařízení,
   // server vrátí uložený výsledek s `locked: true` a tahle obrazovka ho jen
   // převezme – nic nepřepisuje a neukazuje hlášku pro odpověď, která se nezapsala.
-  function applyLockedResult(result: { status: "correct" | "wrong" | "unknown"; locked: boolean; attempts: number }) {
+  function applyLockedResult(result: {
+    status: "correct" | "wrong" | "unknown";
+    locked: boolean;
+    attempts: number;
+    awardedPointsForTask?: number;
+  }) {
     if (!result.locked || result.status === "wrong") {
       return false;
     }
@@ -383,7 +411,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setStatus(result.status === "correct" ? "correct" : "unknown");
     setMessage(
       result.status === "correct"
-        ? `Tenhle úkol už máš vyřešený správně, třeba na jiném zařízení. Máš za něj ${POINTS_PER_TASK} bodů.`
+        ? `Tenhle úkol už máš vyřešený správně, třeba na jiném zařízení. Máš za něj ${result.awardedPointsForTask ?? POINTS_PER_TASK} bodů.`
         : "Tenhle úkol už je uzavřený jako Nevím, třeba na jiném zařízení. Pokračuj dál."
     );
     return true;
@@ -419,7 +447,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setWrongAttemptsByTask((current) => ({ ...current, [activeTask.id]: result.attempts }));
     if (result.status === "correct") {
       setStatus("correct");
-      setMessage(`Správně. Za tenhle úkol máš ${POINTS_PER_TASK} bodů.`);
+      setMessage(`Správně. Za tenhle úkol máš ${result.awardedPointsForTask ?? pointsForThisTask} bodů.`);
       setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
       return;
     }
@@ -433,7 +461,44 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
     const attemptsLeft = Math.max(0, result.remainingAttempts);
     setStatus("wrong");
-    setMessage(`Tohle nesedí. Zkus to znovu. Zbývá ${attemptsLeft} pokus.`);
+    setMessage(`Tohle nesedí. Zkus to znovu. ${formatRemainingAttempts(attemptsLeft)}`);
+  }
+
+  // R25: nápovědu vydá až server a zároveň si poznamená, že padla. Text se proto
+  // nedá přečíst ze zdroje stránky a body se nedají získat obejitím klienta.
+  async function handleRevealHint() {
+    if (loadingHint || revealedHint) {
+      return;
+    }
+    if (!supabase || !state.profileCode) {
+      setMessage("Nejdřív se prosím přihlas.");
+      return;
+    }
+    setLoadingHint(true);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = accessToken
+      ? await fetch("/api/game/reveal-hint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            profileCode: state.profileCode,
+            locationId: location.id,
+            taskId: activeTask.id
+          })
+        }).catch(() => null)
+      : null;
+    setLoadingHint(false);
+
+    if (!response?.ok) {
+      setMessage("Nápovědu se teď nepodařilo načíst. Zkus to prosím znovu.");
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as { hintText?: string } | null;
+    if (!payload?.hintText) {
+      return;
+    }
+    setHintTextByTask((current) => ({ ...current, [activeTask.id]: payload.hintText as string }));
+    setHintUsedByTask((current) => ({ ...current, [activeTask.id]: true }));
   }
 
   async function handleUnknown() {
@@ -530,6 +595,40 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           <p className="text-xs uppercase tracking-[0.24em] text-sky">Načítám rozehranou hru</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-3 text-sm text-mist">Obnovuju poslední uložený krok hry.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (introOpen) {
+    return (
+      <main className="flex flex-1 flex-col gap-5 pb-24">
+        <section className="glass-card overflow-hidden p-0">
+          <div className="relative h-56 w-full">
+            {isExternalImage(location.image) ? (
+              <img src={location.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <Image src={location.image} alt="" fill priority className="object-cover" sizes="100vw" />
+            )}
+          </div>
+          <div className="p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-lime">Začínáme</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{location.name}</h1>
+            {location.introStory ? (
+              <p className="mt-4 text-sm leading-7 text-mist">{location.introStory}</p>
+            ) : null}
+            {location.episodes[0]?.name ? (
+              <p className="mt-4 text-sm text-white/90">
+                První zastávka: <span className="font-semibold">{location.episodes[0].name}</span>
+              </p>
+            ) : null}
+            <button
+              onClick={() => setIntroOpen(false)}
+              className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-center text-base font-bold text-night"
+            >
+              Vyrážíme
+            </button>
+          </div>
         </section>
       </main>
     );
@@ -775,16 +874,51 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 placeholder="Sem napiš odpověď"
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white outline-none placeholder:text-mist"
               />
-              {activeTask.id === "klamovka-cassel-5" ? (
+              {activeTask.minCorrectMatches ? (
                 <p className="text-xs text-mist">
-                  Napiš aspoň 3 slova a odděluj je mezerou nebo čárkou, například{" "}
-                  <span className="text-white/90">les, las, esa</span> nebo{" "}
-                  <span className="text-white/90">les las esa</span>.
+                  Stačí {activeTask.minCorrectMatches} správné odpovědi. Odděl je mezerou nebo čárkou.
                 </p>
               ) : null}
             </div>
           )}
         </div>
+
+        {activeTask.hasHint ? (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            {revealedHint ? (
+              <div className="flex items-start gap-3">
+                <Image
+                  src={illustrationSrc("zarovka")}
+                  alt=""
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 shrink-0 object-contain"
+                />
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-lime">Nápověda</p>
+                  <p className="mt-2 text-sm leading-6 text-white/90">{revealedHint}</p>
+                  <p className="mt-2 text-xs text-mist">
+                    Za správnou odpověď máš teď {POINTS_PER_TASK_WITH_HINT} bodů.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-mist">
+                  Nevíš si rady? Nápověda ti pomůže, ale za správnou odpověď pak bude{" "}
+                  <span className="font-semibold text-white">{POINTS_PER_TASK_WITH_HINT} místo {POINTS_PER_TASK} bodů</span>.
+                </p>
+                <button
+                  onClick={() => void handleRevealHint()}
+                  disabled={loadingHint}
+                  className="inline-flex min-h-11 flex-none items-center justify-center rounded-[20px] border border-lime/40 bg-lime/10 px-5 py-2 text-sm font-semibold text-lime disabled:opacity-70"
+                >
+                  {loadingHint ? "Načítám…" : `Ukázat nápovědu za ${POINTS_PER_TASK_WITH_HINT} bodů`}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {message ? (
           <div className="mt-4 flex items-center gap-3">
@@ -816,7 +950,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         ) : null}
 
         <p className="mt-3 text-xs text-mist/80">
-          Pravidlo: Správná odpověď = {POINTS_PER_TASK} bodů. Na odpověď máš 2 opravné pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím a je za 0 bodů.
+          Pravidlo: Správná odpověď = {POINTS_PER_TASK} bodů, po otevření nápovědy {POINTS_PER_TASK_WITH_HINT} bodů. Na odpověď máš 2 opravné pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím a je za 0 bodů.
         </p>
 
         {activeTask.type === "photo" ? (

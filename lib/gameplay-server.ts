@@ -1,8 +1,8 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib/mock-data";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
-import { taskAnswers } from "@/lib/task-answers";
-import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
+import type { GameplayEpisode, GameplayTask, PublicGameplayTask } from "@/lib/gameplay-types";
+import { toPublicTask as stripServerOnlyTaskFields } from "@/lib/gameplay-public";
 import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 import { legacyLocationIdForMission, legacyMissionIdForLocation } from "@/lib/legacy-location-ids";
 
@@ -23,6 +23,8 @@ type MissionTaskDbRow = {
   correct_answer: string;
   options: unknown;
   order: number;
+  hint_text?: string | null;
+  min_correct_matches?: number | null;
 };
 
 type MissionDbRow = {
@@ -38,6 +40,9 @@ type MissionDbRow = {
   short_description?: string | null;
   catalog_order?: number | null;
   unlock_after_mission_id?: string | null;
+  ending_title?: string | null;
+  ending_text?: string | null;
+  ending_player_message?: string | null;
 };
 
 type DbBackedLocationSeed = {
@@ -148,80 +153,18 @@ function parseCorrectAnswers(value: string | null | undefined) {
     .filter(Boolean);
 }
 
-function hasDigit(value: string) {
-  return /\d/.test(value);
-}
-
-function splitInlineVariantAnswers(value: string) {
-  return value
-    .split(/[,\s]+/g)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function extractMinimumMatchCount(question: string) {
-  const normalizedQuestion = normalize(question).replace(/\s+/g, " ");
-  const match = normalizedQuestion.match(/alespon\s+(\d+)/);
-  if (!match) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(match[1], 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function parseTaskCorrectnessRule(question: string, rawCorrectAnswer: string | null | undefined) {
-  const value = rawCorrectAnswer ?? "";
-  const explicitMatch = value.match(/^\s*MIN\s*(\d+)\s*:\s*(.*)$/i);
-  if (explicitMatch) {
-    const minCorrectMatches = Number.parseInt(explicitMatch[1], 10);
-    const payload = explicitMatch[2] ?? "";
-    const parsedAnswers = parseCorrectAnswers(payload);
-    const fallbackAnswers = parsedAnswers.length > 0 ? parsedAnswers : splitInlineVariantAnswers(payload);
-    return {
-      correctAnswers: fallbackAnswers,
-      minCorrectMatches: Number.isFinite(minCorrectMatches) && minCorrectMatches > 0 ? minCorrectMatches : undefined
-    };
-  }
-
-  const parsedAnswers = parseCorrectAnswers(value);
-  const inferredMinimum = extractMinimumMatchCount(question);
-  if (inferredMinimum && parsedAnswers.length <= 1) {
-    const inlineAnswers = splitInlineVariantAnswers(value);
-
-    if (inlineAnswers.length >= inferredMinimum) {
-      return {
-        correctAnswers: inlineAnswers,
-        minCorrectMatches: inferredMinimum
-      };
-    }
-  }
-
-  if (inferredMinimum && parsedAnswers.length >= inferredMinimum) {
-    return {
-      correctAnswers: parsedAnswers,
-      minCorrectMatches: inferredMinimum
-    };
-  }
-
-  if (parsedAnswers.length <= 1 && hasDigit(value)) {
-    const inlineAnswers = splitInlineVariantAnswers(value);
-    if (inlineAnswers.length > 1) {
-      return {
-        correctAnswers: inlineAnswers,
-        minCorrectMatches: undefined
-      };
-    }
-  }
-
-  return {
-    correctAnswers: parsedAnswers,
-    minCorrectMatches: undefined
-  };
+// R25: pravidlo správnosti je teď v datech, ne v textu zadání.
+// Uznávané odpovědi = řádky (nebo běžné oddělovače) sloupce correct_answer.
+// Kolik jich stačí = sloupec min_correct_matches. Dřívější odvozování z formulací
+// „alespoň N" / „aspoň N", prefix „MIN n:" i výjimka natvrdo pro jeden úkol
+// Klamovky jsou pryč – obsah se převedl migrací R25.
+function parseTaskCorrectnessRule(rawCorrectAnswer: string | null | undefined, minCorrectMatches: number | null | undefined) {
+  const correctAnswers = parseCorrectAnswers(rawCorrectAnswer);
+  const min =
+    typeof minCorrectMatches === "number" && Number.isFinite(minCorrectMatches) && minCorrectMatches > 0
+      ? minCorrectMatches
+      : undefined;
+  return { correctAnswers, minCorrectMatches: min };
 }
 
 function truncateText(value: string, maxLength: number) {
@@ -282,9 +225,14 @@ function buildDbBackedLocationSeed(
     map: anchor?.map ?? { x: 50, y: 50 },
     introLabel: "Mise",
     introStory,
-    endingTitle: "Mise dokončena",
-    endingStory: "Projdi všechna zastavení, posbírej stopy a zadej odpovědi přímo v aplikaci.",
-    playerMessage: "Skvělá práce. Tohle je oficiální výsledek tvé mise v aplikaci.",
+    // R25: autorský závěr z databáze. Konstanty zůstávají jen jako neutrální náhrada,
+    // když ho autor zatím nenapsal.
+    endingTitle: (mission.ending_title ?? "").trim() || "Mise dokončena",
+    endingStory:
+      (mission.ending_text ?? "").trim() ||
+      "Prošla jsi celou hru a posbírala všechny stopy. Tohle je konec téhle výpravy.",
+    playerMessage:
+      (mission.ending_player_message ?? "").trim() || "Skvělá práce. Tohle je oficiální výsledek tvé hry.",
     interludes: [],
     catalogOrder: catalogEntry?.catalogOrder ?? 0
   };
@@ -296,7 +244,9 @@ async function fetchPublishedMissionById(
 ) {
   const queryWithHero = await supabase
     .from("missions")
-    .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published")
+    .select(
+      "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, ending_title, ending_text, ending_player_message"
+    )
     .eq("id", missionId)
     .eq("is_published", true)
     .maybeSingle<MissionDbRow>();
@@ -305,7 +255,23 @@ async function fetchPublishedMissionById(
     return queryWithHero.data ?? null;
   }
 
-  if (!queryWithHero.error.message?.toLowerCase().includes("hero_image_url")) {
+  const message = queryWithHero.error.message?.toLowerCase() ?? "";
+
+  // R25: prostředí bez migrace R25 nemá sloupce autorského závěru – hra funguje dál
+  // s neutrální náhradou.
+  if (message.includes("ending_")) {
+    const queryWithoutEnding = await supabase
+      .from("missions")
+      .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published")
+      .eq("id", missionId)
+      .eq("is_published", true)
+      .maybeSingle<MissionDbRow>();
+    if (!queryWithoutEnding.error) {
+      return queryWithoutEnding.data ?? null;
+    }
+  }
+
+  if (!message.includes("hero_image_url")) {
     return null;
   }
 
@@ -334,7 +300,7 @@ function getLegacyEpisode(location: MapLocation, stopOrder: number) {
 
 function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): GameplayTask {
   const questionParts = splitQuestion(task.question);
-  const correctnessRule = parseTaskCorrectnessRule(task.question, task.correct_answer);
+  const correctnessRule = parseTaskCorrectnessRule(task.correct_answer, task.min_correct_matches);
   const correctAnswers = correctnessRule.correctAnswers;
   const options = parseTaskOptions(task.type, task.options);
   const canonicalDbAnswer =
@@ -362,7 +328,9 @@ function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): Gamepl
     content: questionParts.content,
     options,
     correctAnswers: finalCorrectAnswers,
-    minCorrectMatches: correctnessRule.minCorrectMatches
+    minCorrectMatches: correctnessRule.minCorrectMatches,
+    hasHint: Boolean((task.hint_text ?? "").trim()),
+    hintText: (task.hint_text ?? "").trim() || undefined
   };
 }
 
@@ -402,7 +370,8 @@ function buildEpisodesFromMock(episodes: Episode[]): GameplayEpisode[] {
     clue: episode.clue,
     tasks: episode.tasks.map((task) => {
       const options = task.options;
-      const rawAnswers = taskAnswers[task.id] ?? [];
+      // R25: obsah v kódu už nikdy nedodává správné odpovědi. Autoritou je databáze.
+      const rawAnswers: string[] = [];
       const mappedType = task.type === "choice" ? "vyber" : task.type === "photo" ? "otevrena" : "otevrena";
       const canonicalChoiceAnswer =
         task.type === "choice"
@@ -447,33 +416,35 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
   if (!mission) {
     return null;
   }
-  const [{ data: stopsData, error: stopsError }, { data: tasksData, error: tasksError }] = await Promise.all([
-    supabase
-      .from("mission_stops")
-      .select("id, mission_id, title, description, image_url, order")
-      .eq("mission_id", mission.id)
-      .order("order", { ascending: true }),
+  const { data: stopsData, error: stopsError } = await supabase
+    .from("mission_stops")
+    .select("id, mission_id, title, description, image_url, order")
+    .eq("mission_id", mission.id)
+    .order("order", { ascending: true });
+
+  const stopIds = (stopsData ?? []).map((row) => row.id);
+  const taskQuery = (columns: string) =>
     supabase
       .from("mission_tasks")
-      .select("id, stop_id, type, question, correct_answer, options, order")
-      .in(
-        "stop_id",
-        (
-          await supabase
-            .from("mission_stops")
-            .select("id")
-            .eq("mission_id", mission.id)
-            .order("order", { ascending: true })
-        ).data?.map((row) => row.id) ?? ["00000000-0000-0000-0000-000000000000"]
-      )
-      .order("order", { ascending: true })
-  ]);
+      .select(columns)
+      .in("stop_id", stopIds.length > 0 ? stopIds : ["00000000-0000-0000-0000-000000000000"])
+      .order("order", { ascending: true });
+
+  let { data: tasksData, error: tasksError } = (await taskQuery(
+    "id, stop_id, type, question, correct_answer, options, order, hint_text, min_correct_matches"
+  )) as { data: MissionTaskDbRow[] | null; error: { message?: string } | null };
+  if (tasksError && /hint_text|min_correct_matches/i.test(tasksError.message ?? "")) {
+    // Prostředí bez migrace R25: hra funguje dál, jen bez nápověd a bez pravidla „stačí X".
+    ({ data: tasksData, error: tasksError } = (await taskQuery(
+      "id, stop_id, type, question, correct_answer, options, order"
+    )) as { data: MissionTaskDbRow[] | null; error: { message?: string } | null });
+  }
 
   if (stopsError || tasksError || !stopsData?.length) {
     return null;
   }
 
-  const normalizedTasks = ((tasksData as MissionTaskDbRow[]) ?? []).map((task) => ({ ...task }));
+  const normalizedTasks = (tasksData ?? []).map((task) => ({ ...task }));
 
   return buildEpisodesFromDb((stopsData as MissionStopDbRow[]) ?? [], normalizedTasks);
 }
@@ -557,7 +528,11 @@ export async function getPublishedLocationIds() {
   }
 }
 
-export async function getGameplayLocation(locationId: string, catalog?: CatalogEntry[]) {
+/**
+ * R25: verze se VŠEMI daty, včetně správných odpovědí a textů nápověd.
+ * Smí ji volat jen server. Do prohlížeče se nikdy nesmí dostat.
+ */
+async function getGameplayLocationInternal(locationId: string, catalog?: CatalogEntry[]) {
   const location = locations.find((item) => item.id === locationId) ?? null;
   const canonical = getCanonicalMission(locationId);
   let catalogEntries: CatalogEntry[] = catalog ?? [];
@@ -622,6 +597,11 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
     catalogOrder: catalogEntry?.catalogOrder ?? 0,
     subtitle: mission?.title ?? location.subtitle,
     introStory: mission?.intro_text ?? location.introStory,
+    // R25: autorský závěr se přesunul do databáze; obsah v kódu je jen záloha,
+    // dokud ho R38 neodstraní úplně.
+    endingTitle: (mission?.ending_title ?? "").trim() || location.endingTitle,
+    endingStory: (mission?.ending_text ?? "").trim() || location.endingStory,
+    playerMessage: (mission?.ending_player_message ?? "").trim() || location.playerMessage,
     story: mission?.intro_text ? "" : location.story,
     image: mission?.hero_image_url?.trim() ? mission.hero_image_url : location.image,
     duration:
@@ -631,6 +611,41 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
     difficulty: mapDifficultyLabel(mission?.difficulty) ?? location.difficulty,
     episodes: episodes ?? buildEpisodesFromMock(location.episodes)
   };
+}
+
+/** R25: odstraní z úkolu vše, co je tajné – uznávané odpovědi a text nápovědy. */
+function toPublicTask(task: GameplayTask): PublicGameplayTask {
+  return stripServerOnlyTaskFields(task);
+}
+
+/**
+ * R25: obsah hry pro prohlížeč. Jediné místo, kudy se hra dostává na stránku,
+ * a proto jediné místo, kde se odstraňují správné odpovědi a texty nápověd.
+ *
+ * Dřív se celý objekt hry předával herní obrazovce jako vlastnost komponenty,
+ * takže se všech devatenáct sad odpovědí Klamovky serializovalo do HTML.
+ * Klient je k ničemu nepotřebuje: o správnosti rozhoduje výhradně server.
+ */
+export async function getGameplayLocation(locationId: string, catalog?: CatalogEntry[]) {
+  const location = await getGameplayLocationInternal(locationId, catalog);
+  if (!location) {
+    return null;
+  }
+  return {
+    ...location,
+    episodes: location.episodes.map((episode) => ({
+      ...episode,
+      tasks: episode.tasks.map(toPublicTask)
+    }))
+  };
+}
+
+/**
+ * R25: obsah hry včetně odpovědí pro administrační export za heslem.
+ * Jediný povolený konzument je CSV/JSON export v Mozku, nikdy ne stránka pro hráče.
+ */
+export async function getGameplayLocationForExport(locationId: string, catalog?: CatalogEntry[]) {
+  return getGameplayLocationInternal(locationId, catalog);
 }
 
 export async function getGameplayTask(locationId: string, taskId: string) {

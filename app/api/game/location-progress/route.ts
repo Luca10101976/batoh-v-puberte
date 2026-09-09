@@ -12,6 +12,7 @@ type ChildProfileRow = {
 };
 
 type TaskProgressRow = {
+  hint_used_at?: string | null;
   task_id: string;
   status: "correct" | "wrong" | "unknown";
   attempts: number;
@@ -109,13 +110,25 @@ export async function POST(request: NextRequest) {
   const taskQuery = () =>
     admin
       .from("child_task_progress")
-      .select("task_id, status, attempts")
+      .select("task_id, status, attempts, hint_used_at")
       .eq("child_profile_id", ownProfile.id)
       .eq("location_id", locationId);
 
   let taskRows: TaskProgressRow[] = [];
   if (run) {
-    let { data, error } = await taskQuery().eq("session_id", run.id);
+    let { data, error } = (await taskQuery().eq("session_id", run.id)) as {
+      data: TaskProgressRow[] | null;
+      error: { code?: string; message?: string } | null;
+    };
+    if (error && /hint_used_at/i.test(error.message ?? "")) {
+      // Prostředí bez migrace R25.
+      ({ data, error } = (await admin
+        .from("child_task_progress")
+        .select("task_id, status, attempts")
+        .eq("child_profile_id", ownProfile.id)
+        .eq("location_id", locationId)
+        .eq("session_id", run.id)) as { data: TaskProgressRow[] | null; error: { code?: string; message?: string } | null });
+    }
     if (isMissingColumnError(error)) {
       // Před migrací R23 sloupec session_id neexistuje.
       ({ data, error } = await taskQuery());
@@ -148,7 +161,8 @@ export async function POST(request: NextRequest) {
       : taskRows.map((row) => ({
           task_id: row.task_id,
           status: row.status,
-          attempts: Math.max(0, row.attempts ?? 0)
+          attempts: Math.max(0, row.attempts ?? 0),
+          hintUsed: Boolean(row.hint_used_at)
         }))
   });
 }

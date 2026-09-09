@@ -58,11 +58,30 @@ export default async function StopEditPage({
     .eq("id", stop.mission_id)
     .maybeSingle<{ id: string; title: string }>();
 
-  const { data: tasksData, error: tasksError } = await supabase
-    .from("mission_tasks")
-    .select("id, stop_id, type, question, correct_answer, options, order")
-    .eq("stop_id", stop.id)
-    .order("order", { ascending: true });
+  // R25: nápověda a „pro splnění stačí X" se editují v Mozku, proto se musí načíst.
+  const taskQuery = (columns: string) =>
+    supabase
+      .from("mission_tasks")
+      .select(columns)
+      .eq("stop_id", stop.id)
+      .order("order", { ascending: true }) as unknown as Promise<{
+      data: MissionTaskRow[] | null;
+      error: { message?: string } | null;
+    }>;
+
+  let { data: tasksData, error: tasksError } = await taskQuery(
+    "id, stop_id, type, question, correct_answer, options, order, hint_text, min_correct_matches"
+  );
+  if (tasksError?.message?.toLowerCase().includes("min_correct_matches")) {
+    ({ data: tasksData, error: tasksError } = await taskQuery(
+      "id, stop_id, type, question, correct_answer, options, order, hint_text"
+    ));
+  }
+  if (tasksError?.message?.toLowerCase().includes("hint_text")) {
+    ({ data: tasksData, error: tasksError } = await taskQuery(
+      "id, stop_id, type, question, correct_answer, options, order"
+    ));
+  }
 
   const status = statusText(resolvedSearchParams?.status);
   const tasks = ((tasksData ?? []) as MissionTaskRow[]) ?? [];

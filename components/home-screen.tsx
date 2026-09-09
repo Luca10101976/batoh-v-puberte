@@ -8,11 +8,11 @@ import { useAppState } from "@/components/app-state-provider";
 import { buildResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
 import type { MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-unlock";
-import type { GameplayEpisode } from "@/lib/gameplay-types";
+import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { illustrationSrc } from "@/lib/illustrations";
 
-type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: GameplayEpisode[]; catalogOrder?: number };
+type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: PublicGameplayEpisode[]; catalogOrder?: number };
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);

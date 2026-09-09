@@ -1,4 +1,4 @@
-import { POINTS_PER_TASK, getLocationMaxScore } from "./game-rules.ts";
+import { POINTS_PER_TASK, POINTS_PER_TASK_WITH_HINT, getLocationMaxScore } from "./game-rules.ts";
 
 // R23: JEDINÁ autoritativní definice výsledku hry pro jednoho hráče v jednom rozehrání.
 //
@@ -9,17 +9,25 @@ import { POINTS_PER_TASK, getLocationMaxScore } from "./game-rules.ts";
 //   P3 – hra je dokončená, jen když jsou uzavřené VŠECHNY úkoly hry
 //        (správně, explicitní Nevím, nebo automatické Nevím po vyčerpání pokusů),
 //   P4 – nula bodů je platné dokončení, když hráč všechny úkoly skutečně uzavřel,
-//   T1 – skóre nikdy nevzniká z hodnoty poslané klientem.
-//
-// P6 (nápověda za poloviční body) se sem doplní v R25; datový model na to má místo
-// ve výsledku úkolu, tato funkce se kvůli tomu nebude muset měnit tvarem.
+//   T1 – skóre nikdy nevzniká z hodnoty poslané klientem,
+//   R25/P6 – správná odpověď po otevřené nápovědě má poloviční hodnotu.
 
 export type MissionTaskStatus = "correct" | "wrong" | "unknown";
 
 export type TaskProgressLike = {
   task_id: string;
   status: MissionTaskStatus;
+  /** R25: hráč u tohoto úkolu otevřel nápovědu, takže správná odpověď platí za polovinu. */
+  hintUsed?: boolean;
 };
+
+/** R25: kolik bodů má uzavřený úkol. Bez nápovědy 10, s nápovědou 5, Nevím 0. */
+export function pointsForTask(status: MissionTaskStatus | undefined, hintUsed: boolean) {
+  if (status !== "correct") {
+    return 0;
+  }
+  return hintUsed ? POINTS_PER_TASK_WITH_HINT : POINTS_PER_TASK;
+}
 
 export type MissionResult = {
   totalTasks: number;
@@ -51,22 +59,26 @@ export function scoreTaskProgress(taskIds: string[], rows: TaskProgressLike[]): 
   }
 
   const validTaskIds = new Set(taskIds);
-  const finalByTask = new Map<string, MissionTaskStatus>();
+  const finalByTask = new Map<string, TaskProgressLike>();
   rows.forEach((row) => {
     if (!validTaskIds.has(row.task_id)) {
       return;
     }
-    finalByTask.set(row.task_id, row.status);
+    finalByTask.set(row.task_id, row);
   });
 
   let resolvedTasks = 0;
   let correctTasks = 0;
   let unknownTasks = 0;
+  let score = 0;
   for (const taskId of taskIds) {
-    const status = finalByTask.get(taskId);
+    const row = finalByTask.get(taskId);
+    const status = row?.status;
     if (status === "correct") {
       resolvedTasks += 1;
       correctTasks += 1;
+      // R25: hodnota úkolu závisí na tom, jestli hráč otevřel nápovědu.
+      score += pointsForTask(status, Boolean(row?.hintUsed));
       continue;
     }
     if (status === "unknown") {
@@ -77,7 +89,6 @@ export function scoreTaskProgress(taskIds: string[], rows: TaskProgressLike[]): 
 
   const missingTasks = Math.max(0, totalTasks - resolvedTasks);
   const maxScore = getLocationMaxScore(totalTasks);
-  const score = correctTasks * POINTS_PER_TASK;
 
   return {
     totalTasks,

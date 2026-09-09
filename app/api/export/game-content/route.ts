@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { constantTimeEquals } from "@/lib/constant-time";
 import { locations } from "@/lib/mock-data";
-import { getGameplayLocation, getPublishedLocationIds } from "@/lib/gameplay-server";
-import type { GameplayEpisode, GameplayTask } from "@/lib/gameplay-types";
+import { getGameplayLocation, getGameplayLocationForExport, getPublishedLocationIds } from "@/lib/gameplay-server";
+import type { GameplayEpisode, GameplayTask , PublicGameplayEpisode, PublicGameplayTask } from "@/lib/gameplay-types";
 
 type ExportRow = {
   city: string;
@@ -140,16 +140,14 @@ type PrintableLocation = {
   endingTitle: string;
   endingStory: string;
   playerMessage: string;
-  episodes: GameplayEpisode[];
+  episodes: PublicGameplayEpisode[];
 };
 
-function isPrintableSourceLocation(
-  location: Awaited<ReturnType<typeof getGameplayLocation>>
-): location is NonNullable<Awaited<ReturnType<typeof getGameplayLocation>>> {
+function isPresent<T>(location: T | null): location is T {
   return location !== null;
 }
 
-function renderPrintableTask(task: GameplayTask, taskIndex: number) {
+function renderPrintableTask(task: PublicGameplayTask, taskIndex: number) {
   const options =
     task.options && task.options.length > 0
       ? `<div class="task-meta"><strong>Možnosti:</strong> ${escapeHtml(task.options.join(" | "))}</div>`
@@ -169,7 +167,7 @@ function renderPrintableTask(task: GameplayTask, taskIndex: number) {
   `;
 }
 
-function renderPrintableEpisode(episode: GameplayEpisode, episodeIndex: number) {
+function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: number) {
   const taskList = episode.tasks.map((task, taskIndex) => renderPrintableTask(task, taskIndex)).join("");
 
   return `
@@ -219,7 +217,7 @@ function renderPrintableLocation(location: PrintableLocation) {
 async function buildPrintableHtml(locationId?: string) {
   const printableIds = locationId ? [locationId] : await getPublishedLocationIds();
   const gameplayLocations = (await Promise.all(printableIds.map((id) => getGameplayLocation(id)))).filter(
-    isPrintableSourceLocation
+    isPresent
   );
   const printableLocations: PrintableLocation[] = gameplayLocations.map((location) => ({
     id: location.id,
@@ -405,8 +403,9 @@ async function buildPrintableHtml(locationId?: string) {
 async function buildRows(locationId?: string): Promise<ExportRow[]> {
   const rows: ExportRow[] = [];
   const exportIds = locationId ? [locationId] : await getPublishedLocationIds();
-  const gameplayLocations = (await Promise.all(exportIds.map((id) => getGameplayLocation(id)))).filter(
-    isPrintableSourceLocation
+  // R25: administrační export za heslem je jediné místo, které smí vidět odpovědi.
+  const gameplayLocations = (await Promise.all(exportIds.map((id) => getGameplayLocationForExport(id)))).filter(
+    isPresent
   );
 
   for (const location of gameplayLocations) {

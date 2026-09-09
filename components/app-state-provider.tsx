@@ -137,7 +137,7 @@ type AppStateContextValue = {
    * R24: zahájení hry – najde běžící výpravu, a když žádná není, založí ji.
    * Stejná operace pro Hrát, Pokračovat i Hrát znovu. Vrací, zda se povedla.
    */
-  startRun: (locationId: string) => Promise<boolean>;
+  startRun: (locationId: string) => Promise<{ ok: boolean; created: boolean }>;
   isLocationUnlocked: (locationId: string, defaultUnlocked?: boolean, requiredLocationId?: string | null) => boolean;
   getPlayerScore: () => number;
 };
@@ -260,10 +260,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     async (locationId: string) => {
       const payload = await callGameApi("/api/game/start-run", { locationId });
       if (!payload?.ok) {
-        return false;
+        return { ok: false, created: false };
       }
       await refreshActiveRuns();
-      return true;
+      // R25: `created` říká, jestli výprava právě vznikla. Podle toho se rozhoduje,
+      // jestli hráč uvidí úvodní příběh, nebo pokračuje tam, kde skončil.
+      return { ok: true, created: payload.created === true };
     },
     [callGameApi, refreshActiveRuns]
   );

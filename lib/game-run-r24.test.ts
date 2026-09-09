@@ -25,7 +25,7 @@ test("A: zahájení hry zakládá výpravu ještě před první odpovědí", () 
   const detail = read("components/location-detail-screen.tsx");
   assert.match(detail, /await startRun\(location\.id\)/, "tlačítko musí zahájit hru na serveru");
   assert.ok(
-    detail.indexOf("await startRun(location.id)") < detail.indexOf("router.push(`/play/${location.id}?mode=solo`)", detail.indexOf("await startRun")),
+    detail.indexOf("await startRun(location.id)") < detail.indexOf("router.push(`/play/${location.id}?mode=solo", detail.indexOf("await startRun")),
     "výprava musí vzniknout dřív, než se otevře herní obrazovka"
   );
   const route = read("app/api/game/start-run/route.ts");
@@ -57,7 +57,7 @@ test("C: dokončená hra + Hrát znovu založí novou výpravu", () => {
   // Hrát znovu volá tutéž operaci zahájení jako Hrát – nová výprava vznikne proto,
   // že po dokončení žádná neběží.
   const detail = read("components/location-detail-screen.tsx");
-  assert.equal(detail.split("await startRun(").length - 1, 1, "existuje jediná cesta zahájení");
+  assert.equal(detail.split("startRun(location.id)").length - 1, 1, "existuje jediná cesta zahájení");
 });
 
 test("D: rozehraná hra nabídne Pokračovat a novou výpravu nezaloží", () => {

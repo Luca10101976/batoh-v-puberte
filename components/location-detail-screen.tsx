@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import type { MapLocation } from "@/lib/mock-data";
-import type { GameplayEpisode } from "@/lib/gameplay-types";
+import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { buildLocationDetailModel } from "@/lib/location-detail-model";
 import { illustrationSrc } from "@/lib/illustrations";
 
@@ -14,7 +14,7 @@ import { illustrationSrc } from "@/lib/illustrations";
 // Data přicházejí z DB katalogu (R20); zastávky/úkoly zůstávají ve hře, jen se tu nevypisují.
 
 type DetailLocation = Omit<MapLocation, "episodes"> & {
-  episodes: GameplayEpisode[];
+  episodes: PublicGameplayEpisode[];
   unlockRequirementName?: string | null;
 };
 
@@ -57,9 +57,11 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       return;
     }
     setStarting(true);
-    await startRun(location.id);
+    // R25: úvodní příběh patří ke skutečnému začátku výpravy. startRun vrací,
+    // jestli výprava právě vznikla; při pokračování se intro nezobrazí.
+    const started = await startRun(location.id);
     setStarting(false);
-    router.push(`/play/${location.id}?mode=solo`);
+    router.push(`/play/${location.id}?mode=solo${started.created ? "&intro=1" : ""}`);
   }
 
   return (

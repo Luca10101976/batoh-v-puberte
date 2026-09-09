@@ -20,6 +20,11 @@ function statusText(status?: string) {
       return { text: "✅ Zastavení bylo přidané.", tone: "ok" as const };
     case "stop_deleted":
       return { text: "🗑️ Zastavení bylo smazané.", tone: "ok" as const };
+    case "publish_blocked":
+      return {
+        text: "🚫 Hru zatím nejde publikovat, protože by nešla dohrát. Oprav prosím tohle:",
+        tone: "error" as const
+      };
     case "error":
       return { text: "❌ Akce se nepovedla.", tone: "error" as const };
     default:
@@ -32,16 +37,27 @@ export default async function MissionDetailPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{ status?: string; issues?: string }>;
 }) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
+  // R25: závěr hry se edituje v Mozku, proto se sem musí načíst.
   let missionQuery = await supabase
     .from("missions")
-    .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, created_at")
+    .select(
+      "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, created_at, ending_title, ending_text, ending_player_message"
+    )
     .eq("id", id)
     .maybeSingle<MissionRow>();
+
+  if (missionQuery.error?.message?.toLowerCase().includes("ending_")) {
+    missionQuery = await supabase
+      .from("missions")
+      .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, created_at")
+      .eq("id", id)
+      .maybeSingle<MissionRow>();
+  }
 
   if (missionQuery.error?.message?.toLowerCase().includes("hero_image_url")) {
     missionQuery = await supabase
@@ -77,6 +93,11 @@ export default async function MissionDetailPage({
 
   const orderedStops = ((stops ?? []) as MissionStopRow[]) ?? [];
   const status = statusText(resolvedSearchParams?.status);
+  // R25: konkrétní důvody, proč publikace neprošla. Autor musí vědět který úkol opravit.
+  const publishIssues = (resolvedSearchParams?.issues ?? "")
+    .split(" | ")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-5 pb-10">
@@ -116,6 +137,13 @@ export default async function MissionDetailPage({
           }`}
         >
           {status.text}
+          {publishIssues.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {publishIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       ) : null}
 

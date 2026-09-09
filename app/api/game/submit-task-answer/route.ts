@@ -9,6 +9,7 @@ import {
 } from "@/lib/task-validation";
 import { resolveAnswerAttempt } from "@/lib/task-attempt";
 import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK } from "@/lib/game-rules";
+import { pointsForTask } from "@/lib/mission-completion";
 
 type ChildProfileRow = {
   id: string;
@@ -16,6 +17,7 @@ type ChildProfileRow = {
 };
 
 type ChildTaskProgressRow = {
+  hint_used_at?: string | null;
   id: string;
   child_profile_id: string;
   profile_code: string;
@@ -138,7 +140,7 @@ export async function POST(request: NextRequest) {
   const taskProgressQuery = () =>
     admin
       .from("child_task_progress")
-      .select("id, child_profile_id, profile_code, location_id, task_id, status, attempts, penalty_points")
+      .select("id, child_profile_id, profile_code, location_id, task_id, status, attempts, penalty_points, hint_used_at")
       .eq("child_profile_id", ownProfile.id)
       .eq("location_id", locationId)
       .eq("task_id", taskId);
@@ -156,13 +158,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "progress_load_failed" }, { status: 500 });
   }
 
+  // R25: o hodnotě úkolu rozhoduje uložený stav nápovědy, ne klient.
+  const hintUsed = Boolean(existingRow?.hint_used_at);
+
   if (existingRow && (existingRow.status === "correct" || existingRow.status === "unknown")) {
     return NextResponse.json({
       ok: true,
       status: existingRow.status,
       attempts: existingRow.attempts,
       remainingAttempts: 0,
-      awardedPointsForTask: existingRow.status === "correct" ? POINTS_PER_TASK : 0,
+      awardedPointsForTask: pointsForTask(existingRow.status, hintUsed),
+      hintUsed,
       locked: true
     });
   }
@@ -226,6 +232,7 @@ export async function POST(request: NextRequest) {
     const { error } = await admin
       .from("child_task_progress")
       .update({
+        // R25: hint_used_at se tu záměrně nemění – jednou otevřená nápověda platí.
         status: payload.status,
         attempts: payload.attempts,
         penalty_points: payload.penalty_points,
@@ -256,7 +263,8 @@ export async function POST(request: NextRequest) {
           status: storedRow.status,
           attempts: storedRow.attempts,
           remainingAttempts: storedResolved ? 0 : Math.max(0, MAX_TASK_ATTEMPTS - storedRow.attempts),
-          awardedPointsForTask: storedRow.status === "correct" ? POINTS_PER_TASK : 0,
+          awardedPointsForTask: pointsForTask(storedRow.status, Boolean(storedRow.hint_used_at)),
+          hintUsed: Boolean(storedRow.hint_used_at),
           locked: storedResolved
         });
       }
@@ -325,7 +333,8 @@ export async function POST(request: NextRequest) {
     status: nextStatus,
     attempts: nextAttempts,
     remainingAttempts,
-    awardedPointsForTask: nextStatus === "correct" ? POINTS_PER_TASK : 0,
+    awardedPointsForTask: pointsForTask(nextStatus, hintUsed),
+    hintUsed,
     locked: false
   });
 }

@@ -97,6 +97,38 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
           />
           {state.fieldErrors?.intro_text ? <p className="text-xs text-coral">{state.fieldErrors.intro_text}</p> : null}
         </label>
+
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Závěrečný nadpis (nepovinné)</span>
+          <input
+            name="ending_title"
+            defaultValue={mission?.ending_title ?? ""}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Např. Klamovka zase vypráví"
+          />
+        </label>
+
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Závěrečný text hry (nepovinné)</span>
+          <textarea
+            name="ending_text"
+            defaultValue={mission?.ending_text ?? ""}
+            rows={4}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Co se hráč dozví, když hru dohraje..."
+          />
+          <p className="text-xs text-mist">Zobrazí se po dokončení hry. Bez vyplnění se použije neutrální text.</p>
+        </label>
+
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Vzkaz hráči na konci (nepovinné)</span>
+          <textarea
+            name="ending_player_message"
+            defaultValue={mission?.ending_player_message ?? ""}
+            rows={3}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+          />
+        </label>
       </section>
 
       {mission ? (

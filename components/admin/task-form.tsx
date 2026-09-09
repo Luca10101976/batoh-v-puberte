@@ -116,6 +116,39 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
       </label>
 
       <label className="block space-y-2">
+        <span className="text-sm text-mist">Pro splnění stačí (nepovinné)</span>
+        <input
+          name="min_correct_matches"
+          type="number"
+          min={1}
+          defaultValue={task?.min_correct_matches ?? ""}
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
+        />
+        <p className="text-xs text-mist">
+          Nechte prázdné, když musí sedět celá odpověď. Číslo použijte, když stačí trefit jen část ze seznamu
+          uznávaných odpovědí, například tři státy z osmnácti. Nahrazuje dřívější psaní „alespoň 3“ do zadání.
+        </p>
+        {state.fieldErrors?.min_correct_matches ? (
+          <p className="text-xs text-coral">{state.fieldErrors.min_correct_matches}</p>
+        ) : null}
+      </label>
+
+      <label className="block space-y-2">
+        <span className="text-sm text-mist">Nápověda pro hráče (nepovinné)</span>
+        <textarea
+          name="hint_text"
+          defaultValue={task?.hint_text ?? ""}
+          rows={3}
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
+          placeholder="Např. Podívej se nad vchod, čísla jsou vytesaná do kamene."
+        />
+        <p className="text-xs text-mist">
+          Když nápovědu vyplníte, hráč uvidí tlačítko Nápověda. Po jejím otevření má za správnou odpověď 5 bodů
+          místo 10. Bez vyplnění se tlačítko vůbec nezobrazí.
+        </p>
+      </label>
+
+      <label className="block space-y-2">
         <span className="text-sm text-mist">Možnosti pro výběr</span>
         <textarea
           name="options"

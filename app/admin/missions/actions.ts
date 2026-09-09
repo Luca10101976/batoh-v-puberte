@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { findPublishBlockers, type PublishTaskInput } from "@/lib/mission-publish-validation";
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { EMPTY_FORM_STATE, FormState, MissionDifficulty } from "@/app/admin/types";
@@ -34,6 +35,10 @@ function parseMission(formData: FormData) {
   const durationRaw = normalizeText(formData.get("duration_min"));
   const pointsRaw = normalizeText(formData.get("points"));
   const isPublished = formData.get("is_published") === "on";
+  // R25: autorský závěr hry. Nepovinný; bez něj se hráči zobrazí neutrální text.
+  const endingTitle = normalizeText(formData.get("ending_title"));
+  const endingText = normalizeText(formData.get("ending_text"));
+  const endingPlayerMessage = normalizeText(formData.get("ending_player_message"));
 
   const duration = parsePositiveInt(durationRaw);
   const points = parsePositiveInt(pointsRaw);
@@ -58,7 +63,10 @@ function parseMission(formData: FormData) {
       difficulty: difficultyRaw,
       duration_min: duration,
       points,
-      is_published: isPublished
+      is_published: isPublished,
+      ending_title: endingTitle,
+      ending_text: endingText,
+      ending_player_message: endingPlayerMessage
     }
   };
 }
@@ -209,6 +217,77 @@ export async function updateMissionAction(_prevState: FormState, formData: FormD
   return { ...EMPTY_FORM_STATE, success: "Mise byla uložená." };
 }
 
+/**
+ * R25: hru nelze publikovat, dokud není hratelná. Kontrola je serverová, takže ji
+ * nejde obejít ani přímým voláním akce. Autor dostane konkrétní seznam problémů,
+ * ne obecné „hru nelze publikovat".
+ */
+async function collectPublishBlockers(supabase: ReturnType<typeof getSupabaseServerClient>, missionId: string) {
+  const { data: stopRows, error: stopsError } = await supabase
+    .from("mission_stops")
+    .select("id, title, order")
+    .eq("mission_id", missionId)
+    .order("order", { ascending: true });
+  if (stopsError) {
+    return [{ code: "no_stops" as const, message: "Zastávky hry se nepodařilo načíst, zkus to prosím znovu." }];
+  }
+
+  const stops = stopRows ?? [];
+  const stopIds = stops.map((stop) => stop.id);
+
+  const taskColumns = "id, stop_id, type, question, correct_answer, options, order, min_correct_matches";
+  type TaskRow = Record<string, unknown>;
+  let { data: taskRows, error: tasksError } = (await supabase
+    .from("mission_tasks")
+    .select(taskColumns)
+    .in("stop_id", stopIds.length > 0 ? stopIds : ["00000000-0000-0000-0000-000000000000"])) as {
+    data: TaskRow[] | null;
+    error: { message?: string } | null;
+  };
+  if (tasksError && /min_correct_matches/i.test(tasksError.message ?? "")) {
+    ({ data: taskRows, error: tasksError } = (await supabase
+      .from("mission_tasks")
+      .select("id, stop_id, type, question, correct_answer, options, order")
+      .in("stop_id", stopIds.length > 0 ? stopIds : ["00000000-0000-0000-0000-000000000000"])) as {
+      data: TaskRow[] | null;
+      error: { message?: string } | null;
+    });
+  }
+  if (tasksError) {
+    return [{ code: "no_tasks" as const, message: "Úkoly hry se nepodařilo načíst, zkus to prosím znovu." }];
+  }
+
+  const byStop = new Map<string, PublishTaskInput[]>();
+  (taskRows ?? []).forEach((task) => {
+    const stop = stops.find((item) => item.id === task.stop_id);
+    const list = byStop.get(String(task.stop_id)) ?? [];
+    list.push({
+      id: String(task.id),
+      stopTitle: String(stop?.title ?? ""),
+      taskOrder: Number(task.order ?? 0),
+      type: String(task.type ?? ""),
+      question: String(task.question ?? ""),
+      correctAnswer: String(task.correct_answer ?? ""),
+      options: task.options,
+      minCorrectMatches: (task.min_correct_matches as number | null | undefined) ?? null
+    });
+    byStop.set(String(task.stop_id), list);
+  });
+
+  return findPublishBlockers(
+    stops.map((stop) => ({
+      id: stop.id,
+      title: stop.title,
+      order: stop.order,
+      tasks: (byStop.get(stop.id) ?? []).sort((a, b) => a.taskOrder - b.taskOrder)
+    }))
+  );
+}
+
+function encodePublishIssues(issues: Array<{ message: string }>) {
+  return encodeURIComponent(issues.map((issue) => issue.message).join(" | ").slice(0, 1500));
+}
+
 export async function toggleMissionPublishAction(formData: FormData) {
   const missionId = normalizeText(formData.get("mission_id"));
   const nextPublished = formData.get("next_published") === "true";
@@ -217,16 +296,28 @@ export async function toggleMissionPublishAction(formData: FormData) {
     redirect("/mozek?status=error");
   }
 
+  let blockers: Array<{ message: string }> = [];
   try {
     const supabase = getSupabaseServerClient();
-    const { error } = await supabase.from("missions").update({ is_published: nextPublished }).eq("id", missionId);
 
-    if (error) {
-      redirect("/mozek?status=error");
+    if (nextPublished) {
+      blockers = await collectPublishBlockers(supabase, missionId);
+    }
+
+    if (blockers.length === 0) {
+      const { error } = await supabase.from("missions").update({ is_published: nextPublished }).eq("id", missionId);
+
+      if (error) {
+        redirect("/mozek?status=error");
+      }
     }
   } catch (error) {
     rethrowIfRedirectError(error);
     redirect("/mozek?status=error");
+  }
+
+  if (blockers.length > 0) {
+    redirect(`/mozek/missions/${missionId}?status=publish_blocked&issues=${encodePublishIssues(blockers)}`);
   }
 
   revalidatePath("/mozek");

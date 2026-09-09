@@ -11,6 +11,10 @@ export type MissionRow = {
   duration_min: number;
   points: number;
   is_published: boolean;
+  /** R25: autorský závěr hry. */
+  ending_title?: string | null;
+  ending_text?: string | null;
+  ending_player_message?: string | null;
   created_at: string;
 };
 
@@ -31,6 +35,10 @@ export type MissionTaskRow = {
   correct_answer: string;
   options: unknown;
   order: number;
+  /** R25: autorská nápověda; prázdná = hráč tlačítko neuvidí. */
+  hint_text?: string | null;
+  /** R25: kolik uznávaných odpovědí stačí ke splnění. */
+  min_correct_matches?: number | null;
 };
 
 export type FormState = {

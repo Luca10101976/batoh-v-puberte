@@ -112,6 +112,33 @@ export async function getRunParticipantIds(admin: any, runId: string): Promise<s
   return Array.from(new Set(((data as Array<{ child_profile_id: string }> | null) ?? []).map((row) => row.child_profile_id)));
 }
 
+/**
+ * Otevřená výprava dané hry podle jejího VEDOUCÍHO, bez ohledu na účastnictví.
+ *
+ * Používá se jen při souběhu: když dva požadavky téhož hráče založí výpravu
+ * naráz, poražený se o vítězi dozví z porušení jedinečnosti. V ten okamžik už
+ * řádek výpravy v databázi je, ale řádek účastníka ještě nemusí, takže hledání
+ * přes účastnictví by nic nenašlo.
+ */
+async function findOpenRunByLeader(
+  admin: any,
+  leaderChildProfileId: string,
+  locationId: string
+): Promise<GameRun | null> {
+  const column = await resolveLocationColumn(admin);
+  const { data } = await admin
+    .from("child_game_sessions")
+    .select(`id, leader_child_profile_id, status, started_at, ${column}`)
+    .eq("leader_child_profile_id", leaderChildProfileId)
+    .eq(column, locationId)
+    .in("status", ["waiting", "active"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const rows = (data as SessionRow[] | null) ?? [];
+  return rows[0] ? toRun(rows[0], column) : null;
+}
+
 /** Běžící výprava dané hry, ve které je hráč přijatým účastníkem. */
 export async function findActiveRunForPlayer(
   admin: any,
@@ -177,7 +204,24 @@ export async function startRun(
   }
   if (inserted.error?.code === "23505") {
     // Souběh: výpravu téže hry mezitím založil jiný požadavek téhož hráče.
-    return findActiveRunForPlayer(admin, args.leaderChildProfileId, args.locationId);
+    // Hledá se přímo podle vedoucího a hry, protože vítěz nemusel stihnout
+    // zapsat řádek účastníka – přes účastnictví by se výprava ještě nenašla
+    // a požadavek by skončil chybou serveru.
+    const winner = await findOpenRunByLeader(admin, args.leaderChildProfileId, args.locationId);
+    if (!winner) {
+      return null;
+    }
+    // Účastnictví je idempotentní; kdyby vítěz ještě nedoběhl, doplní se tady.
+    await admin.from("child_game_session_players").upsert(
+      {
+        session_id: winner.id,
+        child_profile_id: args.leaderChildProfileId,
+        status: "accepted",
+        joined_at: nowIso
+      },
+      { onConflict: "session_id,child_profile_id" }
+    );
+    return winner;
   }
   if (inserted.error || !inserted.data?.id) {
     return null;

@@ -35,7 +35,19 @@ test("A: zahájení hry zakládá výpravu ještě před první odpovědí", () 
 test("B: opakované zahájení vrátí stejnou výpravu, nikdy nezaloží druhou", () => {
   const lib = read("lib/game-run.ts");
   assert.match(lib, /const existing = await findActiveRunForPlayer\([\s\S]*?if \(existing\) \{\s*\n\s*return \{ run: existing, created: false \};/);
-  assert.match(lib, /inserted\.error\?\.code === "23505"[\s\S]*?return findActiveRunForPlayer/, "souběh musí dohledat existující výpravu");
+  assert.match(lib, /inserted\.error\?\.code === "23505"[\s\S]*?findOpenRunByLeader\(/, "souběh musí dohledat existující výpravu");
+});
+
+test("F: souběžný start nesmí skončit chybou serveru", () => {
+  // Poražený požadavek se o vítězi dozví z porušení jedinečnosti. V ten okamžik
+  // řádek účastníka ještě nemusí existovat, takže hledání přes účastnictví by
+  // vrátilo prázdno a endpoint by odpověděl chybou 500.
+  const lib = read("lib/game-run.ts");
+  const branch = lib.slice(lib.indexOf('if (inserted.error?.code === "23505")'), lib.indexOf("const runId = inserted.data.id;"));
+  assert.match(branch, /findOpenRunByLeader\(admin, args\.leaderChildProfileId, args\.locationId\)/);
+  assert.ok(!/findActiveRunForPlayer/.test(branch), "souběh se nesmí spoléhat na řádek účastníka");
+  assert.match(branch, /child_game_session_players"\)\.upsert/, "účastnictví se doplní idempotentně");
+  assert.match(lib, /async function findOpenRunByLeader[\s\S]*?\.eq\("leader_child_profile_id", leaderChildProfileId\)/);
 });
 
 test("C: dokončená hra + Hrát znovu založí novou výpravu", () => {

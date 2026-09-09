@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -466,12 +466,19 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
   // R25: nápovědu vydá až server a zároveň si poznamená, že padla. Text se proto
   // nedá přečíst ze zdroje stránky a body se nedají získat obejitím klienta.
-  async function handleRevealHint() {
+  //
+  // `silent` je dotažení textu nápovědy, kterou hráč otevřel dřív (jiný den, jiné
+  // zařízení). Body už jsou utracené, volání je na serveru idempotentní, takže se
+  // tím nic nemění – jen se hráči vrátí to, co si už zaplatil.
+  async function handleRevealHint(options?: { silent?: boolean }) {
+    const silent = options?.silent === true;
     if (loadingHint || revealedHint) {
       return;
     }
     if (!supabase || !state.profileCode) {
-      setMessage("Nejdřív se prosím přihlas.");
+      if (!silent) {
+        setMessage("Nejdřív se prosím přihlas.");
+      }
       return;
     }
     setLoadingHint(true);
@@ -490,7 +497,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setLoadingHint(false);
 
     if (!response?.ok) {
-      setMessage("Nápovědu se teď nepodařilo načíst. Zkus to prosím znovu.");
+      if (!silent) {
+        setMessage("Nápovědu se teď nepodařilo načíst. Zkus to prosím znovu.");
+      }
       return;
     }
     const payload = (await response.json().catch(() => null)) as { hintText?: string } | null;
@@ -500,6 +509,23 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setHintTextByTask((current) => ({ ...current, [activeTask.id]: payload.hintText as string }));
     setHintUsedByTask((current) => ({ ...current, [activeTask.id]: true }));
   }
+
+  // R25: otevřená nápověda musí přežít reload i přechod na druhé zařízení. Server
+  // stav zná (hint_used_at), ale text v prohlížeči po načtení chybí – bez tohohle
+  // by obrazovka znovu nabízela „ukázat za 5 bodů" za něco, co je už zaplacené.
+  const hintRefetchedRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    const taskId = activeTask?.id;
+    if (!taskId || !activeTask?.hasHint || !hintUsedHere || revealedHint || loadingHint) {
+      return;
+    }
+    if (hintRefetchedRef.current[taskId]) {
+      return;
+    }
+    hintRefetchedRef.current[taskId] = true;
+    void handleRevealHint({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTask?.id, activeTask?.hasHint, hintUsedHere, revealedHint, loadingHint]);
 
   async function handleUnknown() {
     if (submittingAnswer) {
@@ -897,6 +923,25 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-lime">Nápověda</p>
                   <p className="mt-2 text-sm leading-6 text-white/90">{revealedHint}</p>
+                  <p className="mt-2 text-xs text-mist">
+                    Za správnou odpověď máš teď {POINTS_PER_TASK_WITH_HINT} bodů.
+                  </p>
+                </div>
+              </div>
+            ) : hintUsedHere ? (
+              <div className="flex items-start gap-3">
+                <Image
+                  src={illustrationSrc("zarovka")}
+                  alt=""
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 shrink-0 object-contain"
+                />
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-lime">Nápověda</p>
+                  <p className="mt-2 text-sm leading-6 text-white/90">
+                    {loadingHint ? "Načítám nápovědu…" : "Nápovědu k tomuhle úkolu už máš otevřenou."}
+                  </p>
                   <p className="mt-2 text-xs text-mist">
                     Za správnou odpověď máš teď {POINTS_PER_TASK_WITH_HINT} bodů.
                   </p>

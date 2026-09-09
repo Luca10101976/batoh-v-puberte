@@ -244,6 +244,25 @@ test("C7 – úkol bez nápovědy nemá mít tlačítko", () => {
   assert.match(playScreen, /activeTask\.hasHint \?/, "tlačítko nápovědy není podmíněné");
 });
 
+test("C7b – otevřená nápověda přežije reload i druhé zařízení také na obrazovce", () => {
+  // Regrese z produkčního ověření R25: server si otevření nápovědy pamatoval,
+  // ale obrazovka po načtení znovu nabízela „ukázat za 5 bodů" za něco, co už
+  // hráč zaplatil. Text nápovědy žije jen v paměti prohlížeče, stav v databázi.
+  const playScreen = read("components/play-screen.tsx");
+  assert.match(
+    playScreen,
+    /\) : hintUsedHere \? \(/,
+    "obrazovka nerozlišuje už otevřenou nápovědu od neotevřené"
+  );
+  assert.match(playScreen, /Nápovědu k tomuhle úkolu už máš otevřenou/, "hráč se nedozví, že nápovědu už otevřel");
+  assert.match(
+    playScreen,
+    /hintRefetchedRef[\s\S]*?handleRevealHint\(\{ silent: true \}\)/,
+    "text už otevřené nápovědy se po načtení nedotahuje"
+  );
+  assert.match(playScreen, /if \(hintRefetchedRef\.current\[taskId\]\)/, "dotažení textu se může opakovat donekonečna");
+});
+
 test("C8 – hráč se před otevřením dozví cenu", () => {
   const playScreen = read("components/play-screen.tsx");
   assert.match(playScreen, /Ukázat nápovědu za \$\{POINTS_PER_TASK_WITH_HINT\} bodů/);

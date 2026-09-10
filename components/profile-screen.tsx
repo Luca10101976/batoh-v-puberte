@@ -8,6 +8,8 @@ import { MobileAppCard } from "@/components/mobile-app-card";
 import { locations } from "@/lib/mock-data";
 import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib/avatars";
+import { AvatarPreview } from "@/components/avatar-preview";
+import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
 import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
@@ -52,23 +54,6 @@ type ActiveExpedition = {
 };
 
 
-// Avatar hráče = jedna samolepka Traki (jediný avatarový systém, R18/R21 navazující UI).
-function AvatarPreview({ size = 80, avatar }: { size?: number; avatar?: string }) {
-  return (
-    <div
-      className="relative flex items-center justify-center overflow-hidden rounded-[30px] border border-white/10 bg-[#8dded8] shadow-[inset_0_1px_0_rgba(255,255,255,0.38)]"
-      style={{ width: size, height: size }}
-    >
-      <div
-        className="absolute inset-0"
-        style={{ background: "radial-gradient(circle at 50% 18%, rgba(235,255,251,0.9), rgba(97,204,198,0.38) 72%, rgba(38,117,126,0.18))" }}
-      />
-      <div className="relative h-[90%] w-[90%]">
-        <Image src={avatarSrc(avatar)} alt="Avatar hráče" fill sizes={`${size}px`} className="object-contain" />
-      </div>
-    </div>
-  );
-}
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -92,6 +77,8 @@ export function ProfileScreen() {
   const [profileMessageTone, setProfileMessageTone] = useState<MessageTone>("neutral");
   const [savingProfile, setSavingProfile] = useState(false);
   const [nameDraft, setNameDraft] = useState(state.profile.name);
+  // R33: body ukazuje server, ne uložený stav v prohlížeči.
+  const [serverScore, setServerScore] = useState<number | null>(null);
   const [savingFriend, setSavingFriend] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
   const [cloudProfileError, setCloudProfileError] = useState("");
@@ -125,7 +112,9 @@ export function ProfileScreen() {
     [isLocationUnlocked]
   );
   const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
-  const score = getPlayerScore();
+  // Dokud server neodpoví, ukáže se poslední známý lokální součet; jakmile
+  // dorazí autoritativní číslo, přebije ho.
+  const score = serverScore ?? getPlayerScore();
   // R24: pozici v rozehrané hře spočítal server z uzavřených úkolů výpravy
   // (stejnou funkcí jako herní obrazovka). Profil proto nepotřebuje obsah hry
   // ani data v kódu, jen běžící výpravy.
@@ -439,10 +428,11 @@ export function ProfileScreen() {
   );
 
   const persistProfileName = useCallback(async () => {
-    const safeName = nameDraft.trim();
-    if (safeName.length < 2) {
+    // R33: stejné pravidlo jako při registraci – 2 až 24 znaků.
+    const safeName = normalizeNickname(nameDraft);
+    if (!validateNickname(safeName).ok) {
       setProfileMessageTone("error");
-      setProfileMessage("Jméno musí mít aspoň 2 znaky.");
+      setProfileMessage(NICKNAME_LENGTH_MESSAGE);
       return;
     }
 
@@ -489,9 +479,15 @@ export function ProfileScreen() {
     }
 
     if (!response?.ok) {
+      const payload = (await response?.json().catch(() => null)) as { code?: string; message?: string } | null;
       setSavingProfile(false);
       setProfileMessageTone("error");
-      setProfileMessage("Uložení jména se nepodařilo.");
+      // R33: obsazenou přezdívku pozná hráč z hlášky, ne z obecné chyby.
+      setProfileMessage(
+        payload?.code === "nickname_taken" || payload?.code === "invalid_child_name"
+          ? payload.message || "Tahle přezdívka už je obsazená. Zkus jinou."
+          : "Uložení přezdívky se nepodařilo."
+      );
       return;
     }
 
@@ -658,7 +654,12 @@ export function ProfileScreen() {
       profile_id?: string | null;
       friends?: Array<{ code: string; name: string; addedAt?: string }>;
       session?: ActiveExpedition | null;
+      totalScore?: number;
     };
+
+    if (typeof payload.totalScore === "number") {
+      setServerScore(Math.max(0, Math.floor(payload.totalScore)));
+    }
 
     const effectiveProfile = payload.profile;
     if (effectiveProfile?.profile_code) {
@@ -1231,9 +1232,11 @@ export function ProfileScreen() {
         <div className="flex items-center gap-4">
           <AvatarPreview avatar={state.profile.avatar} size={80} />
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.24em] text-mist">Profil hráče</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-mist">Přezdívka</p>
             <input
               value={nameDraft}
+              maxLength={24}
+              aria-label="Přezdívka hráče"
               onChange={(event) => {
                 setNameDraft(event.target.value);
                 setProfileMessageTone("neutral");
@@ -1253,8 +1256,9 @@ export function ProfileScreen() {
               disabled={savingProfile}
               className="mt-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-mist disabled:opacity-70"
             >
-              {savingProfile ? "Ukládám…" : "Uložit jméno"}
+              {savingProfile ? "Ukládám…" : "Uložit přezdívku"}
             </button>
+            <p className="mt-1 text-xs text-mist">{NICKNAME_HINT}</p>
             <p className="mt-1 text-sm text-mist">
               {state.profile.title}
             </p>

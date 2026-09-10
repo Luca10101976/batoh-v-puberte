@@ -45,13 +45,18 @@ test("rekurzivní politika nad child_profiles je po migracích pryč", () => {
 });
 
 test("vlastní přístup k profilu zůstává", () => {
-  for (const policy of [
-    "parents read own child profiles",
-    "parents insert own child profiles",
-    "parents update own child profiles"
-  ]) {
+  for (const policy of ["parents read own child profiles", "parents insert own child profiles"]) {
     assert.equal(policySurvives(policy, "child_profiles"), true, `chybí politika: ${policy}`);
   }
+});
+
+test("R33 – profil se z prohlížeče už nedá přepsat", () => {
+  // Klientský UPDATE by obešel pravidla přezdívky, která vynucuje API.
+  assert.equal(
+    policySurvives("parents update own child profiles", "child_profiles"),
+    false,
+    "zapisovací politika nad child_profiles přežila"
+  );
 });
 
 test("oprava ruší právě jednu politiku a nic nepřidává", () => {

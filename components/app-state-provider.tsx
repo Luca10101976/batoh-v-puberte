@@ -128,7 +128,6 @@ type AppStateContextValue = {
     locationId: string,
     options?: { participantIds?: string[]; penaltyPoints?: number; score?: number; maxScore?: number; source?: "gameplay" | "manual" | "expedition" }
   ) => void;
-  resetProgress: () => void;
   /** R24: běžící výpravy hráče, seřazené od nejnovější aktivity. */
   activeRuns: ActiveRunSummary[];
   /** R24: znovu načte běžící výpravy ze serveru (po zahájení nebo dokončení hry). */
@@ -875,39 +874,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const resetProgress = useCallback(() => {
-    setState((current) => {
-      if (supabase && current.profileCode) {
-        void supabase.auth.getSession().then(({ data }) => {
-          const accessToken = data.session?.access_token ?? "";
-          if (!accessToken) {
-            return;
-          }
-          void fetch("/api/game/reset-progress", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`
-            },
-            body: JSON.stringify({ profileCode: current.profileCode })
-          });
-        });
-      }
-
-      return {
-        ...initialState,
-        registrationCompleted: current.registrationCompleted,
-        parentEmail: current.parentEmail,
-        playerCode: current.playerCode,
-        profileCode: current.profileCode,
-        profileRowId: current.profileRowId,
-        city: current.city,
-        profile: current.profile,
-        squadName: current.squadName,
-        squadMembers: current.squadMembers
-      };
-    });
-  }, [supabase]);
 
   const openParentAuthGate = useCallback(() => {
     const nextCode = generateProfileCode();
@@ -954,7 +920,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateProfile,
       syncCloudProfile,
       completeLocation,
-      resetProgress,
       activeRuns,
       refreshActiveRuns,
       startRun,
@@ -975,7 +940,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       openParentAuthGate,
       isLocationUnlocked,
       getPlayerScore,
-      resetProgress,
       setActiveMode,
       setCurrentExpeditionId,
       setCity,

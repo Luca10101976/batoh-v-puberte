@@ -1,28 +1,105 @@
 "use client";
-import Image from "next/image";
-import { illustrationSrc } from "@/lib/illustrations";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { AvatarPreview } from "@/components/avatar-preview";
 import { useAppState } from "@/components/app-state-provider";
+import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+// R33: žebříček ukazuje výhradně to, co spočítal server.
+//
+// Dřív měla obrazovka náhradní řádek složený z localStorage, takže hráč mohl
+// vidět jiné číslo, než jaké má uložené. Skóre, pořadí i vlastní pozice teď
+// přicházejí z /api/leaderboard a nikde se nedopočítávají.
+
 type LeaderboardEntry = {
+  rank: number;
   name: string;
+  avatar: string | null;
   score: number;
   completed: number;
   isYou: boolean;
 };
 
+type LeaderboardYou = {
+  name: string;
+  avatar: string | null;
+  score: number;
+  completed: number;
+  rank: number | null;
+  inTop: boolean;
+  excluded: boolean;
+};
+
+type BoardState = {
+  entries: LeaderboardEntry[];
+  you: LeaderboardYou | null;
+};
+
+const EMPTY_BOARD: BoardState = { entries: [], you: null };
+
+function formatGames(count: number) {
+  if (count === 1) {
+    return "1 dokončená hra";
+  }
+  if (count >= 2 && count <= 4) {
+    return `${count} dokončené hry`;
+  }
+  return `${count} dokončených her`;
+}
+
+function EntryRow({
+  rank,
+  name,
+  avatar,
+  score,
+  completed,
+  isYou,
+  highlight
+}: {
+  rank: number | null;
+  name: string;
+  avatar: string | null;
+  score: number;
+  completed: number;
+  isYou: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <section
+      className={`glass-card flex items-center justify-between gap-3 p-4 ${
+        isYou || highlight ? "border-lime/30 bg-lime/8" : ""
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-base font-bold">
+          {rank ?? "–"}
+        </div>
+        <AvatarPreview avatar={avatar} size={44} />
+        <div className="min-w-0">
+          <div className="truncate font-semibold">{name}</div>
+          <div className="text-xs text-mist">{formatGames(completed)}</div>
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="text-lg font-semibold text-lime">{score}</div>
+        <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
+        {isYou ? <div className="mt-1 text-[11px] text-mist">Ty</div> : null}
+      </div>
+    </section>
+  );
+}
+
 export function LeaderboardScreen() {
   const [tab, setTab] = useState<"friends" | "global">("friends");
-  const { state, getPlayerScore } = useAppState();
+  const { state } = useAppState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [friendsBoard, setFriendsBoard] = useState<LeaderboardEntry[]>([]);
-  const [globalBoard, setGlobalBoard] = useState<LeaderboardEntry[]>([]);
-  const [friendsLoaded, setFriendsLoaded] = useState(false);
-  const [globalLoaded, setGlobalLoaded] = useState(false);
+  const [friendsBoard, setFriendsBoard] = useState<BoardState | null>(null);
+  const [globalBoard, setGlobalBoard] = useState<BoardState | null>(null);
+
   const supabase = useMemo(() => {
     try {
       return getSupabaseBrowserClient();
@@ -30,13 +107,10 @@ export function LeaderboardScreen() {
       return null;
     }
   }, []);
-  const playerScore = getPlayerScore();
 
   useEffect(() => {
-    setFriendsLoaded(false);
-    setGlobalLoaded(false);
-    setFriendsBoard([]);
-    setGlobalBoard([]);
+    setFriendsBoard(null);
+    setGlobalBoard(null);
   }, [state.playerCode]);
 
   useEffect(() => {
@@ -46,9 +120,8 @@ export function LeaderboardScreen() {
         return;
       }
 
-      const shouldLoadFriends = tab === "friends" && !friendsLoaded;
-      const shouldLoadGlobal = tab === "global" && !globalLoaded;
-      if (!shouldLoadFriends && !shouldLoadGlobal) {
+      const alreadyLoaded = tab === "friends" ? friendsBoard !== null : globalBoard !== null;
+      if (alreadyLoaded) {
         return;
       }
 
@@ -56,25 +129,19 @@ export function LeaderboardScreen() {
       setError("");
 
       const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-
       if (!accessToken) {
         setLoading(false);
         setError("Pro načtení žebříčku je potřeba být přihlášený.");
         return;
       }
 
-      const scope: "friends" | "global" = shouldLoadFriends ? "friends" : "global";
       const response = await fetch("/api/leaderboard", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({
-          scope,
-          playerCode: state.playerCode,
-          limit: 20
-        })
+        body: JSON.stringify({ scope: tab, playerCode: state.playerCode, limit: 20 })
       }).catch(() => null);
 
       if (!response?.ok) {
@@ -83,35 +150,22 @@ export function LeaderboardScreen() {
         return;
       }
 
-      const payload = (await response.json()) as { entries?: LeaderboardEntry[] };
-      if (scope === "friends") {
-        setFriendsBoard(payload.entries ?? []);
-        setFriendsLoaded(true);
+      const payload = (await response.json()) as { entries?: LeaderboardEntry[]; you?: LeaderboardYou | null };
+      const board: BoardState = { entries: payload.entries ?? [], you: payload.you ?? null };
+      if (tab === "friends") {
+        setFriendsBoard(board);
       } else {
-        setGlobalBoard(payload.entries ?? []);
-        setGlobalLoaded(true);
+        setGlobalBoard(board);
       }
       setLoading(false);
     }
 
     void loadActiveBoard();
-  }, [friendsLoaded, globalLoaded, state.playerCode, supabase, tab]);
+  }, [friendsBoard, globalBoard, state.playerCode, supabase, tab]);
 
-  const fallbackFriendsBoard = useMemo(
-    () =>
-      [
-        {
-          name: state.profile.name,
-          score: playerScore,
-          completed: state.completedLocationIds.length,
-          isYou: true
-        }
-      ].sort((a, b) => b.score - a.score),
-    [playerScore, state.completedLocationIds.length, state.profile.name]
-  );
-
-  const visibleFriendsBoard = friendsBoard.length > 0 ? friendsBoard : fallbackFriendsBoard;
-  const visibleGlobalBoard = globalBoard;
+  const board = (tab === "friends" ? friendsBoard : globalBoard) ?? EMPTY_BOARD;
+  const you = board.you;
+  const showOwnRowSeparately = Boolean(you && !you.inTop);
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
@@ -124,11 +178,12 @@ export function LeaderboardScreen() {
           className="h-16 w-16 shrink-0 object-contain sm:h-[92px] sm:w-[92px]"
         />
         <div>
-        <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
-        <p className="mt-2 text-sm leading-6 text-mist">
-          Můžeš si přepnout soutěž mezi kamarády nebo plošným žebříčkem všech hráčů.
-        </p>
+          <p className="text-xs uppercase tracking-[0.24em] text-coral">Soutěž</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Žebříček objevitelů</h1>
+          <p className="mt-2 text-sm leading-6 text-mist">
+            Body se sčítají z tvých nejlepších výsledků v dokončených hrách. Lepší opakování body přidá, horší ti je
+            nikdy nesebere.
+          </p>
         </div>
       </section>
 
@@ -179,66 +234,54 @@ export function LeaderboardScreen() {
           </section>
         </div>
       ) : null}
+
       {!loading && error ? <p className="text-sm text-mist">{error}</p> : null}
 
-      {!loading ? (
-        tab === "friends" ? (
-          <div className="space-y-3">
-            {visibleFriendsBoard.map((entry, index) => (
-              <section
-                key={`${entry.name}-${index}`}
-                className={`glass-card flex items-center justify-between p-4 ${
-                  entry.isYou ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-base font-bold">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div className="font-semibold">{entry.name}</div>
-                    <div className="text-xs text-mist">{entry.completed} dokončených her</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold text-lime">{entry.score}</div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-mist">bodů</div>
-                  {entry.isYou ? <div className="mt-1 text-[11px] text-mist">Ty</div> : null}
-                </div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {visibleGlobalBoard.length === 0 ? (
-              <section className="glass-card p-4 text-sm text-mist">
-                Zatím tu není dost dat pro plošný žebříček.
-              </section>
-            ) : null}
-            {visibleGlobalBoard.map((entry, index) => (
-              <section
-                key={`${entry.name}-${index}`}
-                className={`glass-card flex items-center justify-between rounded-2xl p-4 ${
-                  entry.isYou ? "border-lime/30 bg-lime/8" : index === 0 ? "border-sky/20" : ""
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-base font-bold">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div className="font-semibold">{entry.name}</div>
-                    <div className="text-xs text-mist">{entry.completed} dokončených her celkem</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold text-lime">{entry.score}</div>
-                  <div className="text-xs text-mist">bodů</div>
-                </div>
-              </section>
-            ))}
-          </div>
-        )
+      {!loading && !error ? (
+        <div className="space-y-3">
+          {board.entries.length === 0 ? (
+            <section className="glass-card p-4 text-sm text-mist">
+              {tab === "friends"
+                ? "Zatím tu nikdo nemá body. Dokonči hru a buď první."
+                : "Zatím tu není dost dat pro žebříček všech hráčů."}
+            </section>
+          ) : null}
+
+          {board.entries.map((entry) => (
+            <EntryRow
+              key={`${entry.rank}-${entry.name}`}
+              rank={entry.rank}
+              name={entry.name}
+              avatar={entry.avatar}
+              score={entry.score}
+              completed={entry.completed}
+              isYou={entry.isYou}
+            />
+          ))}
+
+          {/* R33/6 + R33/11: vlastní řádek se ukáže vždy – i mimo TOP 20 a i s nulou. */}
+          {showOwnRowSeparately && you ? (
+            <section className="space-y-2 pt-1">
+              <p className="text-xs uppercase tracking-[0.18em] text-mist">Ty</p>
+              <EntryRow
+                rank={you.rank}
+                name={you.name}
+                avatar={you.avatar}
+                score={you.score}
+                completed={you.completed}
+                isYou
+                highlight
+              />
+              {you.rank === null ? (
+                <p className="text-sm text-mist">
+                  {you.score === 0
+                    ? "Dokonči první hru a dostaň se do žebříčku."
+                    : "Tenhle profil se do pořadí nezapočítává."}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
       ) : null}
     </main>
   );

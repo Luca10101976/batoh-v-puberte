@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkInMemoryRateLimit, checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import { fallbackNickname, isNicknameConflict } from "@/lib/nickname";
 
 type LoginPayload = {
   email?: string;
@@ -212,28 +213,49 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const childName = (user.email?.split("@")[0] || "Hráč").slice(0, 40);
-    const code = generateProfileCode();
+    // R33: přezdívka musí projít stejnými pravidly jako všude jinde – délka
+    // 2–24 znaků a jedinečnost. Odvozené jméno z e-mailu se proto zkracuje
+    // a při kolizi zkusí příponu. Jedinečnost hlídá unikátní index v databázi.
+    const seed = user.email?.split("@")[0] || "Hráč";
 
-    const modernInsert = await sessionClient.from("child_profiles").insert({
-      parent_user_id: user.id,
-      child_name: childName,
-      profile_code: code,
-      player_code: code,
-      contact_email: user.email ?? null
-    });
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const childName = fallbackNickname(seed, attempt);
+      const code = generateProfileCode();
 
-    if (modernInsert.error?.code === "42703") {
-      const legacyInsert = await sessionClient.from("child_profiles").insert({
+      const modernInsert = await sessionClient.from("child_profiles").insert({
         parent_user_id: user.id,
         child_name: childName,
-        profile_code: code
+        profile_code: code,
+        player_code: code,
+        contact_email: user.email ?? null
       });
-      if (legacyInsert.error) {
-        return null;
+
+      if (modernInsert.error?.code === "42703") {
+        const legacyInsert = await sessionClient.from("child_profiles").insert({
+          parent_user_id: user.id,
+          child_name: childName,
+          profile_code: code
+        });
+        if (isNicknameConflict(legacyInsert.error)) {
+          continue;
+        }
+        if (legacyInsert.error) {
+          return null;
+        }
+        break;
       }
-    } else if (modernInsert.error) {
-      return null;
+
+      if (isNicknameConflict(modernInsert.error)) {
+        continue;
+      }
+
+      if (modernInsert.error) {
+        // Souběžné založení profilu (unikátní parent_user_id) není chyba –
+        // profil už existuje a načte se níž.
+        return modernInsert.error.code === "23505" ? findProfileViaSession() : null;
+      }
+
+      break;
     }
 
     return findProfileViaSession();

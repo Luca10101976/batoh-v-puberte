@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
 import { formatRecoveryKey, normalizeRecoveryKey } from "@/lib/recovery-key";
 import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc } from "@/lib/avatars";
 
@@ -139,9 +140,10 @@ export function PlayerAuthGate() {
       setError("Traki se teď nemůže připojit. Zkus to za chvíli.");
       return;
     }
-    const trimmed = nickname.trim();
-    if (trimmed.length < 2 || trimmed.length > 24) {
-      setError("Přezdívka musí mít 2 až 24 znaků.");
+    // R33: stejné pravidlo jako u pozdější změny přezdívky.
+    const trimmed = normalizeNickname(nickname);
+    if (!validateNickname(trimmed).ok) {
+      setError(NICKNAME_LENGTH_MESSAGE);
       return;
     }
     setBusy(true);
@@ -162,8 +164,16 @@ export function PlayerAuthGate() {
       body: JSON.stringify({ child_name: trimmed, avatar })
     }).catch(() => null);
     if (!profileResponse?.ok) {
+      const profilePayload = (await profileResponse?.json().catch(() => null)) as
+        | { code?: string; message?: string }
+        | null;
       setBusy(false);
-      setError("Profil se nepodařilo uložit. Zkus to prosím znovu.");
+      // R33: obsazená přezdívka není technická chyba – hráč má vědět, že si má vybrat jinou.
+      setError(
+        profilePayload?.code === "nickname_taken" || profilePayload?.code === "invalid_child_name"
+          ? profilePayload.message || "Tahle přezdívka už je obsazená. Zkus jinou."
+          : "Profil se nepodařilo uložit. Zkus to prosím znovu."
+      );
       return;
     }
 
@@ -392,6 +402,7 @@ export function PlayerAuthGate() {
             autoComplete="off"
             className={inputClass}
           />
+          <span className="block text-xs text-mist">{NICKNAME_HINT}</span>
         </label>
         <div className="mt-4">
           <span className="text-sm text-mist">Vyber si avatara</span>

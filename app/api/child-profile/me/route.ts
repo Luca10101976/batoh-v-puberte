@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { DEFAULT_AVATAR_ID, isStorableAvatarValue } from "@/lib/avatars";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
+import {
+  NICKNAME_LENGTH_MESSAGE,
+  NICKNAME_TAKEN_MESSAGE,
+  fallbackNickname,
+  isNicknameConflict,
+  nicknameIlikePattern,
+  normalizeNickname,
+  validateNickname
+} from "@/lib/nickname";
 
 type ChildProfileDto = {
   child_name: string;
@@ -358,7 +367,7 @@ export async function PATCH(request: Request) {
   }
 
   const payload = (await request.json().catch(() => null)) as PatchPayload | null;
-  const childName = typeof payload?.child_name === "string" ? payload.child_name.trim() : "";
+  const childName = typeof payload?.child_name === "string" ? normalizeNickname(payload.child_name) : "";
   const profileCode = typeof payload?.profile_code === "string" ? payload.profile_code.trim().toUpperCase() : "";
   const playerCode = typeof payload?.player_code === "string" ? payload.player_code.trim().toUpperCase() : "";
   const avatar = typeof payload?.avatar === "string" ? payload.avatar.trim() : "";
@@ -371,8 +380,9 @@ export async function PATCH(request: Request) {
     return jsonNoStore({ ok: false, code: "no_changes" }, 400);
   }
 
-  if (hasNameUpdate && (!childName || childName.length < 2 || childName.length > 40)) {
-    return jsonNoStore({ ok: false, code: "invalid_child_name" }, 400);
+  // R33: stejné pravidlo délky při registraci i při pozdější změně (2–24 znaků).
+  if (hasNameUpdate && !validateNickname(childName).ok) {
+    return jsonNoStore({ ok: false, code: "invalid_child_name", message: NICKNAME_LENGTH_MESSAGE }, 400);
   }
   if (
     hasAvatarUpdate &&
@@ -397,11 +407,12 @@ export async function PATCH(request: Request) {
   let targetRow = canonical;
 
   if (!targetRow?.id) {
-    const safeChildName = childName || (user.email?.split("@")[0] || "Hráč").slice(0, 40);
+    let safeChildName = childName || fallbackNickname(user.email?.split("@")[0] ?? "Hráč");
     let profileCodeSeed = playerCode || profileCode || generateProfileCode();
     let created = false;
+    let nicknameAttempt = 0;
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
       const legacyInsert = await adminClient.from("child_profiles").insert({
         parent_user_id: user.id,
         child_name: safeChildName,
@@ -420,6 +431,17 @@ export async function PATCH(request: Request) {
           .eq("parent_user_id", user.id)
           .eq("profile_code", profileCodeSeed);
         break;
+      }
+
+      if (isNicknameConflict(legacyInsert.error)) {
+        // R33: přezdívka musí být jedinečná. Hráč, který si jméno zadal sám,
+        // dostane hlášku; automaticky odvozené jméno se zkusí s příponou.
+        if (hasNameUpdate) {
+          return jsonNoStore({ ok: false, code: "nickname_taken", message: NICKNAME_TAKEN_MESSAGE }, 409);
+        }
+        nicknameAttempt += 1;
+        safeChildName = fallbackNickname(user.email?.split("@")[0] ?? "Hráč", nicknameAttempt);
+        continue;
       }
 
       if (legacyInsert.error.code === "23505") {
@@ -453,10 +475,28 @@ export async function PATCH(request: Request) {
   // Keep row ordering deterministic when multiple legacy rows exist.
   updateData.updated_at = new Date().toISOString();
 
+  // R33: dřív než se zápis pokusí, řekne se hráči srozumitelně, že je přezdívka
+  // obsazená. Poslední slovo má stejně unikátní index v databázi (níže).
+  if (hasNameUpdate) {
+    const { data: takenRows } = await adminClient
+      .from("child_profiles")
+      .select("id")
+      .ilike("child_name", nicknameIlikePattern(childName))
+      .neq("id", targetRow.id)
+      .limit(1);
+    if ((takenRows as Array<{ id: string }> | null)?.length) {
+      return jsonNoStore({ ok: false, code: "nickname_taken", message: NICKNAME_TAKEN_MESSAGE }, 409);
+    }
+  }
+
   const updateResult = await adminClient
     .from("child_profiles")
     .update(updateData)
     .eq("id", targetRow.id);
+
+  if (isNicknameConflict(updateResult.error)) {
+    return jsonNoStore({ ok: false, code: "nickname_taken", message: NICKNAME_TAKEN_MESSAGE }, 409);
+  }
 
   if (updateResult.error) {
     if (updateResult.error.code === "42703" && (hasAvatarUpdate || hasAvatarConfigUpdate)) {

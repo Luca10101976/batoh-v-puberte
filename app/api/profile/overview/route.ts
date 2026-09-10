@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
+import { totalsByProfile, type LeaderboardProgressRow } from "@/lib/leaderboard-model";
+import { loadPublishedGameScores } from "@/lib/leaderboard-server";
 import { getAuthenticatedUser, getOwnedChildProfile, getOwnedChildProfiles, normalizeCode } from "@/app/api/expeditions/_shared";
 
 type OutgoingFriendshipRow = {
@@ -89,6 +91,30 @@ export async function GET(request: NextRequest) {
   const ownProfile = await getOwnedChildProfile(auth.admin, auth.user.id);
   if (!ownProfile?.id) {
     return jsonNoStore({ ok: false, error: "missing_own_profile" }, 403);
+  }
+
+  // R33: celkové body hráče počítá vždy server ze stejného modelu jako žebříček.
+  // Profil je dřív bral z localStorage, takže mohl ukazovat jiné číslo než žebříček.
+  let totalScore = 0;
+  let completedGames = 0;
+  try {
+    const publishedScores = await loadPublishedGameScores(auth.admin);
+    const publishedLocationIds = Array.from(publishedScores.keys());
+    if (publishedLocationIds.length > 0) {
+      const { data: progressRows } = await auth.admin
+        .from("child_location_progress")
+        .select("profile_code, location_id, best_score, penalty_points, status, first_completed_at")
+        .eq("profile_code", ownProfile.profile_code)
+        .in("location_id", publishedLocationIds);
+      const totals = totalsByProfile(
+        ((progressRows as LeaderboardProgressRow[] | null) ?? []),
+        publishedScores
+      ).get(normalizeCode(ownProfile.profile_code));
+      totalScore = totals?.score ?? 0;
+      completedGames = totals?.completed ?? 0;
+    }
+  } catch (error) {
+    console.error("[profile/overview] score", error);
   }
 
   const ownProfiles = await getOwnedChildProfiles(auth.admin, auth.user.id);
@@ -192,6 +218,8 @@ export async function GET(request: NextRequest) {
   if (sessions.length === 0) {
     return jsonNoStore({
       ok: true,
+      totalScore,
+      completedGames,
       myCode: ownProfile.player_code || ownProfile.profile_code,
       profile_id: canonicalProfile?.id ?? ownProfile.id,
       profile: canonicalProfile
@@ -247,6 +275,8 @@ export async function GET(request: NextRequest) {
 
   return jsonNoStore({
     ok: true,
+    totalScore,
+    completedGames,
     myCode: ownProfile.player_code || ownProfile.profile_code,
     profile_id: canonicalProfile?.id ?? ownProfile.id,
     profile: canonicalProfile

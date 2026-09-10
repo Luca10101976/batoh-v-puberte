@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { constantTimeEquals } from "@/lib/constant-time";
 import { locations } from "@/lib/mock-data";
 import { getGameplayLocation, getGameplayLocationForExport, getPublishedLocationIds } from "@/lib/gameplay-server";
+import { loadPrintAssets } from "@/lib/print-assets";
+import { buildPrintDocument, type PrintableLocation } from "@/lib/print-document";
+import { renderPrintPdf } from "@/lib/print-pdf";
 import type { GameplayEpisode, GameplayTask , PublicGameplayEpisode, PublicGameplayTask } from "@/lib/gameplay-types";
 
 type ExportRow = {
@@ -111,144 +114,19 @@ function toCsv(rows: ExportRow[]) {
   return "\uFEFF" + lines.join("\n");
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatStopCount(count: number) {
-  if (count === 1) {
-    return "1 zastavení";
-  }
-  if (count >= 2 && count <= 4) {
-    return `${count} zastavení`;
-  }
-  return `${count} zastavení`;
-}
-
-type PrintableLocation = {
-  id: string;
-  city: string;
-  name: string;
-  teaser: string;
-  introStory: string;
-  story: string;
-  episodes: PublicGameplayEpisode[];
-};
-
 function isPresent<T>(location: T | null): location is T {
   return location !== null;
 }
 
-function renderPrintableTask(task: PublicGameplayTask, taskIndex: number) {
-  const options =
-    task.options && task.options.length > 0
-      ? `<div class="task-meta"><strong>Možnosti:</strong> ${escapeHtml(task.options.join(" | "))}</div>`
-      : "";
-  const answerLine =
-    task.type === "photo"
-      ? `<div class="answer-line">Splněno na místě: .................................................................</div>`
-      : `<div class="answer-line">Odpověď: ....................................................................................</div>`;
-
-  return `
-    <li class="task-card">
-      <div class="task-head">Úkol ${taskIndex + 1} • ${escapeHtml(task.title)}</div>
-      <div class="task-copy">${escapeHtml(task.content)}</div>
-      ${options}
-      ${answerLine}
-    </li>
-  `;
-}
-
 /**
- * R27: ilustrace Traki v tiskovém sešitu.
+ * R27: tiskový sešit odchází jako hotové PDF.
  *
- * Sešit má vlastní výtvarnou identitu, ne fotky skutečných míst z databáze – ty
- * zůstávají beze změny v online hře. Používá se schválená sada samolepek Traki
- * (lib/illustrations.ts) a jen tam, kde ilustrace znamená totéž co v aplikaci:
- * blok u papírové hry, rozcestník u přechodu na zastávku, konfety u konce hry.
- *
- * Ilustrace se tisknou malé a přes optimalizátor obrázků, aby sešit nestál
- * zbytečný inkoust.
+ * Dřív se posílalo HTML, které si ilustrace tahalo z /_next/image. Po stažení na
+ * disk se z nich staly rozbité obrázky, protože stránka už neměla svůj původ.
+ * PDF se sází na serveru (lib/print-pdf.ts) a font i ilustrace nese uvnitř, takže
+ * stažený soubor vypadá stejně i bez internetu, bez postope.cz a bez Supabase.
  */
-function trakiIllustration(
-  name: "blok" | "rozcestnik" | "konfety" | "batoh" | "mapa" | "pohar",
-  size: 96 | 128 | 256
-) {
-  // Šířka musí být jedna z povolených velikostí Next.js (imageSizes), jinak
-  // optimalizátor vrátí 400 a v tisku by zůstalo prázdné místo.
-  return `/_next/image?url=${encodeURIComponent(`/illustrations/traki/${name}.webp`)}&w=${size}&q=75`;
-}
-
-/**
- * Vizuál konkrétní zastávky. Sada Traki dnes obsahuje ilustrace HERNÍCH STAVŮ,
- * ne obrázky jednotlivých míst, takže se sem zatím nic nedosazuje – vybrat
- * zastávce ilustraci je autorské rozhodnutí. Až vzniknou, stačí odtud vrátit
- * `<figure class="stop-visual">`; styl je připravený.
- */
-function renderPrintableStopVisual(_episode: PublicGameplayEpisode) {
-  return "";
-}
-
-function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: number) {
-  const taskList = episode.tasks.map((task, taskIndex) => renderPrintableTask(task, taskIndex)).join("");
-
-  return `
-    <section class="episode-card">
-      <div class="episode-kicker">Zastavení ${episodeIndex + 1}</div>
-      <div class="episode-head">
-        <img class="traki-icon" src="${escapeHtml(trakiIllustration("rozcestnik", 96))}" alt="" />
-        <h3>${escapeHtml(episode.name)}</h3>
-      </div>
-      ${renderPrintableStopVisual(episode)}
-      <p class="episode-intro">${escapeHtml(episode.intro)}</p>
-      <p class="episode-bg">${escapeHtml(episode.background)}</p>
-      <ol class="tasks-list">${taskList}</ol>
-    </section>
-  `;
-}
-
-function renderPrintableLocation(location: PrintableLocation) {
-  const episodeSections = location.episodes.map((episode, episodeIndex) => renderPrintableEpisode(episode, episodeIndex)).join("");
-
-  return `
-    <section class="location-page">
-      <header class="location-hero">
-        <div class="location-kicker">${escapeHtml(location.city)} • ${escapeHtml(formatStopCount(location.episodes.length))}</div>
-        <h2>${escapeHtml(location.name)}</h2>
-        <p>${escapeHtml(location.teaser)}</p>
-      </header>
-      <section class="story-card">
-        <div class="story-head">
-          <img class="traki-icon" src="${escapeHtml(trakiIllustration("mapa", 96))}" alt="" />
-          <h3>Příběh mise</h3>
-        </div>
-        <p>${escapeHtml(location.introStory)}</p>
-        <p>${escapeHtml(location.story)}</p>
-      </section>
-      ${episodeSections}
-      <section class="final-card">
-        <h3>Závěr mise</h3>
-        <p>Konec příběhu se dozvíš v aplikaci, až tam svoje odpovědi přepíšeš a hru dokončíš.</p>
-      </section>
-      <section class="score-box">
-        <div class="score-head">
-          <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("konfety", 128))}" alt="" />
-          <div class="score-title">Hotovo? Zbývá poslední krok</div>
-        </div>
-        <div>Tenhle list patří: ...............................................................</div>
-        <div>Doma otevři stejnou hru na www.postope.cz a odpovědi z papíru do ní postupně přepiš.</div>
-        <div>Body, výsledek i konec příběhu spočítá Traki za tebe. Na papíře nic sčítat nemusíš.</div>
-      </section>
-    </section>
-  `;
-}
-
-async function buildPrintableHtml(locationId?: string) {
+async function buildPrintablePdf(locationId?: string) {
   const printableIds = locationId ? [locationId] : await getPublishedLocationIds();
   const gameplayLocations = (await Promise.all(printableIds.map((id) => getGameplayLocation(id)))).filter(
     isPresent
@@ -263,265 +141,10 @@ async function buildPrintableHtml(locationId?: string) {
     episodes: location.episodes
   }));
 
-  const title = printableLocations.length === 1 ? printableLocations[0].name : "Traki na stopě tajemství - herní sešit";
-
-  const locationSections =
-    printableLocations.length > 0
-      ? printableLocations.map((location) => renderPrintableLocation(location)).join("")
-      : `
-        <section class="location-page">
-          <section class="story-card">
-            <h3>Tisková verze není dostupná</h3>
-            <p>Pro tuhle misi teď nemáme připravený živý tiskový export.</p>
-          </section>
-        </section>
-      `;
-
-  return `<!doctype html>
-<html lang="cs">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(title)} - tisk</title>
-    <style>
-      @page { size: A4; margin: 12mm; }
-      * { box-sizing: border-box; }
-      body {
-        font-family: "Inter", "Segoe UI", "Arial", sans-serif;
-        line-height: 1.45;
-        color: #112038;
-        margin: 0;
-        background: #f5f8ff;
-      }
-      h1, h2, h3 { margin: 0; line-height: 1.2; }
-      p { margin: 0; }
-      .sheet-header {
-        border-radius: 16px;
-        padding: 14px 16px;
-        margin-bottom: 12px;
-        color: #fff;
-        background: linear-gradient(135deg, #0f2142 0%, #1f3a71 70%, #3a4f87 100%);
-      }
-      .sheet-title { font-size: 24px; font-weight: 800; }
-      .sheet-sub { margin-top: 6px; font-size: 13px; color: rgba(255,255,255,0.9); }
-      .location-page {
-        page-break-after: always;
-        border: 1px solid #d9e5ff;
-        border-radius: 16px;
-        background: #fff;
-        overflow: hidden;
-        margin-bottom: 10px;
-      }
-      .location-page:last-child { page-break-after: auto; }
-      .location-hero {
-        padding: 16px;
-        color: #fff;
-        background: radial-gradient(circle at top right, rgba(182,240,122,0.28), transparent 45%), linear-gradient(135deg, #0f2142 0%, #1f3a71 70%, #2e4f82 100%);
-      }
-      .location-kicker {
-        font-size: 11px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.82);
-      }
-      .location-hero h2 { margin-top: 8px; font-size: 28px; }
-      .location-hero p { margin-top: 6px; font-size: 14px; color: rgba(255,255,255,0.92); }
-      .story-card, .episode-card, .final-card, .score-box {
-        margin: 12px;
-        border: 1px solid #dfe8ff;
-        border-radius: 14px;
-        padding: 12px;
-        background: #fbfdff;
-      }
-      .story-card h3, .episode-card h3, .final-card h3 { font-size: 17px; margin-bottom: 8px; }
-      .story-card p + p { margin-top: 8px; }
-      .episode-kicker {
-        display: inline-block;
-        padding: 3px 8px;
-        border-radius: 999px;
-        font-size: 10px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: #1f3a71;
-        background: #e8f0ff;
-        margin-bottom: 8px;
-      }
-      .episode-intro {
-        margin-top: 8px;
-        font-weight: 700;
-      }
-      .episode-bg {
-        margin-top: 8px;
-        color: #2c3f60;
-      }
-      .tasks-list {
-        margin: 10px 0 0;
-        padding: 0;
-        list-style: none;
-      }
-      .task-card {
-        border: 1px dashed #c6d6ff;
-        border-radius: 12px;
-        padding: 10px;
-        background: #ffffff;
-      }
-      .task-card + .task-card { margin-top: 8px; }
-      .task-head { font-size: 14px; font-weight: 800; margin-bottom: 5px; }
-      .task-copy { font-size: 14px; }
-      .task-meta {
-        margin-top: 6px;
-        font-size: 13px;
-        color: #38548c;
-      }
-      .answer-line {
-        margin-top: 8px;
-        font-size: 14px;
-        color: #2a3f6b;
-      }
-      .final-title { font-weight: 800; margin-bottom: 6px; }
-      .final-card p + p { margin-top: 8px; }
-      .score-box {
-        border-color: #b9d595;
-        background: #f8fff0;
-      }
-      .score-title {
-        font-size: 15px;
-        font-weight: 800;
-        color: #324f1a;
-        margin-bottom: 8px;
-      }
-      .score-box div + div { margin-top: 6px; }
-      .print-note {
-        margin: 0 2px 10px;
-        font-size: 12px;
-        color: #556b90;
-      }
-      .howto {
-        margin: 0 0 12px;
-        border: 1px solid #b9d595;
-        border-radius: 14px;
-        padding: 12px 14px;
-        background: #f8fff0;
-        page-break-inside: avoid;
-      }
-      .howto-title {
-        font-size: 15px;
-        font-weight: 800;
-        color: #324f1a;
-        margin-bottom: 8px;
-      }
-      .howto-steps {
-        margin: 0;
-        padding-left: 18px;
-        font-size: 13px;
-        color: #2c3f60;
-      }
-      .howto-steps li + li { margin-top: 4px; }
-      .howto-note {
-        margin-top: 8px;
-        font-size: 12px;
-        color: #556b90;
-      }
-      /* R27: připravené místo pro budoucí ilustraci Traki u zastávky.
-         Pevná maximální výška drží tisk v rozumné spotřebě papíru a inkoustu,
-         object-fit zachová poměr stran na výšku i na šířku. Dnes se nepoužívá,
-         protože fotografie skutečných míst do tisku nepatří. */
-      /* R27: ilustrace Traki. Malé, s prostorem kolem, ať sešit nestojí inkoust
-         a ať se nadpis nikdy nerozjede na druhý řádek pod obrázek. */
-      .traki-icon {
-        width: 11mm;
-        height: 11mm;
-        object-fit: contain;
-        flex: 0 0 auto;
-      }
-      .traki-icon-lg { width: 14mm; height: 14mm; }
-      .traki-icon-xl { width: 16mm; height: 16mm; }
-      .episode-head,
-      .howto-head,
-      .score-head,
-      .story-head {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .episode-head h3,
-      .story-head h3 { margin: 0; }
-      .story-head { margin-bottom: 8px; }
-      .howto-head { margin-bottom: 8px; }
-      .howto-head .howto-title { margin-bottom: 0; }
-      .score-head { margin-bottom: 8px; }
-      .score-head .score-title { margin-bottom: 0; }
-      .sheet-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-      .sheet-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-      .sheet-footer .cta-title { flex: 1 1 auto; }
-      .sheet-footer .cta-url,
-      .sheet-footer .cta-sub { flex: 1 1 100%; }
-      .sheet-header .sheet-title { flex: 1 1 auto; }
-      .sheet-header .sheet-sub { flex: 1 1 100%; }
-      .sheet-header .traki-icon-xl { flex: 0 0 auto; }
-      .stop-visual {
-        margin: 8px 0 0;
-        page-break-inside: avoid;
-      }
-      .stop-visual img {
-        display: block;
-        width: 100%;
-        max-height: 52mm;
-        object-fit: contain;
-        border-radius: 12px;
-      }
-      .episode-card { page-break-inside: avoid; }
-      .sheet-footer {
-        border-radius: 16px;
-        padding: 14px 16px;
-        margin-top: 4px;
-        color: #fff;
-        background: linear-gradient(135deg, #0f2142 0%, #1f3a71 70%, #3a4f87 100%);
-        page-break-inside: avoid;
-      }
-      .sheet-footer .cta-title { font-size: 16px; font-weight: 800; }
-      .sheet-footer .cta-url {
-        margin-top: 6px;
-        font-size: 20px;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        color: #b6f07a;
-      }
-      .sheet-footer .cta-sub { margin-top: 6px; font-size: 12px; color: rgba(255,255,255,0.88); }
-    </style>
-  </head>
-  <body>
-    <header class="sheet-header">
-      <img class="traki-icon traki-icon-xl" src="${escapeHtml(trakiIllustration("batoh", 256))}" alt="" />
-      <div class="sheet-title">Traki na stopě tajemství - tisková hra</div>
-      <div class="sheet-sub">Vytiskni si sešit, hraj venku podle papíru a doma svoje odpovědi přepiš do aplikace na www.postope.cz</div>
-    </header>
-    <section class="howto">
-      <div class="howto-head">
-        <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("blok", 128))}" alt="" />
-        <div class="howto-title">Jak se hraje s papírem</div>
-      </div>
-      <ol class="howto-steps">
-        <li><strong>Venku</strong> běž zastávku po zastávce a svoje odpovědi piš rovnou do listu.</li>
-        <li><strong>Nevíš?</strong> Nech řádek prázdný a jdi dál. Doma ti Traki nabídne nápovědu.</li>
-        <li><strong>Doma</strong> otevři stejnou hru na www.postope.cz a odpovědi postupně přepiš.</li>
-        <li><strong>Traki</strong> je vyhodnotí, spočítá body a ukáže ti konec příběhu.</li>
-      </ol>
-      <p class="howto-note">
-        V aplikaci máš na každý úkol tři pokusy. Po třetí špatné odpovědi se úkol uzavře jako Nevím,
-        takže si na papíře nech i variantu, které věříš nejvíc.
-      </p>
-      <p class="howto-note">Tip: ideální je oboustranný tisk.</p>
-    </section>
-    ${locationSections}
-    <footer class="sheet-footer">
-      <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("pohar", 128))}" alt="" />
-      <div class="cta-title">Bavilo tě to? Zahraj si další hry v aplikaci</div>
-      <div class="cta-url">www.postope.cz</div>
-      <div class="cta-sub">Body za odpovědi, žebříček s kamarády a nové mise. Funguje na mobilu, bez instalace a zdarma.</div>
-    </footer>
-  </body>
-</html>`;
+  const printDocument = buildPrintDocument(printableLocations);
+  const assets = await loadPrintAssets();
+  const bytes = await renderPrintPdf(printDocument, assets);
+  return { bytes, printDocument };
 }
 
 async function buildRows(locationId?: string): Promise<ExportRow[]> {
@@ -630,13 +253,15 @@ export async function GET(request: Request) {
   const format = url.searchParams.get("format") ?? "csv";
   const locationId = url.searchParams.get("locationId") ?? "";
 
-  if (format === "print") {
-    const html = await buildPrintableHtml(locationId || undefined);
-    const fileName = locationId ? `batoh-v-puberte-${locationId}-tisk.html` : "batoh-v-puberte-tiskovy-sesit.html";
-    return new NextResponse(html, {
+  if (format === "print" || format === "pdf") {
+    const { bytes } = await buildPrintablePdf(locationId || undefined);
+    const fileName = locationId ? `traki-tiskovy-sesit-${locationId}.pdf` : "traki-tiskovy-sesit.pdf";
+    return new NextResponse(Buffer.from(bytes), {
       headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${fileName}"`
+        "Content-Type": "application/pdf",
+        "Content-Length": String(bytes.byteLength),
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
       }
     });
   }

@@ -31,6 +31,11 @@ const contentSecurityPolicy = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // R27: tiskové PDF si font a ilustrace čte z assets/print za běhu. Bez tohohle
+  // zápisu by je serverless funkce na Vercelu neměla u sebe a tisk by spadl.
+  outputFileTracingIncludes: {
+    "/api/export/game-content": ["./assets/print/**/*"]
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "8mb"

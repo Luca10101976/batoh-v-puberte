@@ -10,61 +10,79 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const PRINT = "app/api/export/game-content/route.ts";
+const DOC = "lib/print-document.ts";
+const PDF = "lib/print-pdf.ts";
 
 // ---------------------------------------------------------------------------
 // A. Sešit obsahuje, co hráč venku potřebuje
 // ---------------------------------------------------------------------------
 
 test("A1 – sešit nese herní obsah zastávky i úkolu", () => {
-  const src = read(PRINT);
-  for (const field of ["episode.name", "episode.intro", "episode.background", "task.title", "task.content", "task.options"]) {
+  const src = read(DOC);
+  for (const field of [
+    "episode.name",
+    "episode.intro",
+    "episode.background",
+    "task.title",
+    "task.content",
+    "task.options"
+  ]) {
     assert.ok(src.includes(field), `v tisku chybí ${field}`);
   }
 });
 
 test("A2 – u každého úkolu je místo na vlastní odpověď", () => {
-  const src = read(PRINT);
-  assert.match(src, /class="answer-line">Odpověď: \./);
+  const src = read(DOC);
+  assert.match(src, /type: "answer", label: taskAnswerLabel\(task\)/);
   assert.match(src, /Splněno na místě/, "fotoúkol má mít vlastní řádek");
+  // Řádek na odpověď musí mít výšku na ruční psaní, ne jen na text.
+  assert.match(read(PDF), /h: size \* TEXT_LINE \+ 12/);
 });
 
 test("A3 – sešit vysvětluje, že se odpovědi doma přepíšou do aplikace", () => {
-  const src = read(PRINT);
-  assert.match(src, /class="howto"/, "chybí blok s postupem");
+  const src = read(DOC);
+  assert.match(src, /Jak se hraje s papírem/, "chybí blok s postupem");
   assert.match(src, /odpovědi postupně přepiš/i);
   assert.match(src, /www\.postope\.cz/);
   assert.match(src, /spočítá body/i, "hráč se musí dozvědět, že body počítá aplikace");
 });
 
 test("A4 – sešit upozorňuje na tři pokusy", () => {
-  const src = read(PRINT);
+  const src = read(DOC);
   assert.match(src, /tři pokusy/i);
   assert.match(src, /po třetí špatné odpovědi/i);
 });
 
 test("A5 – sešit už nenutí hráče počítat body na papíře", () => {
-  const src = read(PRINT);
-  assert.ok(!/Body celkem: \./.test(src), "zůstala kolonka na ruční součet bodů");
-  assert.ok(!/Správně: \./.test(src), "zůstala kolonka na ruční počítání správných");
+  const src = read(DOC);
+  assert.ok(!/Body celkem/.test(src), "zůstala kolonka na ruční součet bodů");
+  assert.ok(!/Správně: /.test(src), "zůstala kolonka na ruční počítání správných");
   assert.match(src, /Na papíře nic sčítat nemusíš/i);
 });
 
-test("A6 – tisk nepoužívá fotografie skutečných míst", () => {
-  const src = read(PRINT);
-  assert.ok(!/renderPrintableStopPhoto/.test(src), "zůstala funkce pro tisk fotky");
-  assert.ok(!/class="stop-photo"/.test(src), "zůstala fotka zastávky");
-  assert.ok(!/Podle téhle fotky poznáš místo/.test(src), "zůstal popisek k fotce");
-  assert.ok(!/episode\.illustrationImage/.test(src), "tisk pořád čte obrázek zastávky");
-  // Jediné obrázky v sešitu smí být vlastní ilustrace Traki ze statických souborů.
-  for (const match of src.matchAll(/_next\/image\?url=\$\{encodeURIComponent\(([^)]*)\)/g)) {
-    assert.match(match[1], /illustrations\/traki/, `tisk sahá na cizí obrázek: ${match[1]}`);
+test("A6 – tisk nepoužívá fotografie skutečných míst ani nic ze sítě", () => {
+  // U route se kontroluje jen tisková větev – administrační export s fotkami
+  // a odpověďmi za heslem zůstává beze změny.
+  const printBranch = (() => {
+    const src = read(PRINT);
+    return src.slice(src.indexOf("function isPresent"), src.indexOf("async function buildRows"));
+  })();
+
+  // Komentáře popisují i to, co se dělat NESMÍ (proč vznikl bug s /_next/image),
+  // takže se hlídá jen skutečný kód.
+  const withoutComments = (value: string) => value.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+  for (const [file, raw] of [[PRINT, printBranch], [DOC, read(DOC)], [PDF, read(PDF)]] as const) {
+    const src = withoutComments(raw);
+    assert.ok(!/illustrationImage/.test(src), `${file}: tisk sahá na obrázek zastávky`);
+    assert.ok(!/_next\/image/.test(src), `${file}: tisk pořád jde přes optimalizátor obrázků`);
+    assert.ok(!/supabase/i.test(src), `${file}: v tisku zůstal odkaz na úložiště`);
+    assert.ok(!/https?:\/\//.test(src), `${file}: v tisku zůstala externí adresa`);
   }
-  assert.ok(!/supabase/i.test(src), "v tisku zůstal odkaz na fotku z úložiště");
 });
 
 test("A6b – sešit používá ilustrace Traki, a jen ty se schváleným významem", () => {
-  const src = read(PRINT);
-  assert.match(src, /function trakiIllustration/);
+  const src = read(DOC);
   // Batoh = start hry, blok = papírová hra, rozcestník = přechod na zastávku,
   // konfety = konec. Stejný význam jako v aplikaci (lib/illustrations.ts).
   for (const [name, where] of [
@@ -75,43 +93,50 @@ test("A6b – sešit používá ilustrace Traki, a jen ty se schváleným význa
     ["mapa", "příběh mise"],
     ["pohar", "patička o žebříčku"]
   ] as const) {
-    assert.match(src, new RegExp(`trakiIllustration\\("${name}"`), `chybí ilustrace ${name} (${where})`);
+    assert.match(src, new RegExp(`icon: "${name}"`), `chybí ilustrace ${name} (${where})`);
+    assert.ok(
+      fs.existsSync(path.join(ROOT, `assets/print/illustrations/${name}.png`)),
+      `tiskový soubor ilustrace ${name} neexistuje`
+    );
     assert.ok(
       fs.existsSync(path.join(ROOT, `public/illustrations/traki/${name}.webp`)),
-      `soubor ilustrace ${name} neexistuje`
+      `ilustrace ${name} pro aplikaci neexistuje`
     );
-  }
-  // Šířky musí být povolené velikosti Next.js, jinak optimalizátor vrátí 400.
-  for (const width of src.match(/trakiIllustration\("\w+", (\d+)\)/g) ?? []) {
-    const size = Number(width.match(/(\d+)\)/)![1]);
-    assert.ok([96, 128, 256].includes(size), `nepovolená šířka obrázku: ${size}`);
   }
 });
 
 test("A6c – ilustrace nerozbíjejí tiskový layout", () => {
-  const src = read(PRINT);
-  assert.match(src, /\.traki-icon \{[\s\S]*?width: 11mm/, "ilustrace musí mít pevnou malou velikost");
-  assert.match(src, /object-fit: contain/, "ilustrace se nemá ořezávat");
-  const flexBlock = src.slice(src.indexOf(".episode-head,"), src.indexOf(".episode-head,") + 220);
-  assert.match(flexBlock, /display: flex/, "nadpis a ikona mají stát vedle sebe");
-  assert.match(flexBlock, /align-items: center/);
+  const src = read(PDF);
+  const sizes = src.match(/const TITLE_ICON = \{ xl: mm\((\d+)\), lg: mm\((\d+)\), md: mm\((\d+)\) \}/);
+  assert.ok(sizes, "chybí velikosti ilustrací");
+  for (const size of sizes.slice(1).map(Number)) {
+    assert.ok(size >= 8 && size <= 18, `ilustrace ${size} mm je mimo rozumnou tiskovou velikost`);
+  }
+  // Ikona stojí vedle nadpisu a nikdy ho nepřekrývá.
+  assert.match(src, /const textX = x \+ iconSize \+ gap;/);
+  assert.match(src, /const textWidth = width - iconSize - gap;/);
 });
 
-test("A7 – místo pro budoucí ilustraci Traki je připravené, ale prázdné", () => {
-  const src = read(PRINT);
-  assert.match(src, /function renderPrintableStopVisual/, "chybí místo pro vizuál zastávky");
-  assert.match(src, /\$\{renderPrintableStopVisual\(episode\)\}/, "místo se nevykresluje u zastávky");
-  const fn = src.slice(src.indexOf("function renderPrintableStopVisual"), src.indexOf("function renderPrintableEpisode"));
-  assert.match(fn, /return "";/, "dnes se nemá tisknout nic");
-  assert.ok(!/<img/.test(fn), "žádný zástupný obrázek se nevymýšlí");
-  assert.match(src, /\.stop-visual \{/, "chybí připravený styl pro ilustraci");
+test("A7 – fonty a ilustrace pro tisk leží v repozitáři, ne na CDN", () => {
+  for (const file of [
+    "assets/print/fonts/DejaVuSans.ttf",
+    "assets/print/fonts/DejaVuSans-Bold.ttf",
+    "assets/print/fonts/LICENSE-DejaVu.txt"
+  ]) {
+    assert.ok(fs.existsSync(path.join(ROOT, file)), `chybí ${file}`);
+  }
+  // A serverless funkce je musí mít u sebe, jinak tisk na produkci spadne.
+  const config = read("next.config.mjs");
+  assert.match(config, /outputFileTracingIncludes/);
+  assert.match(config, /"\/api\/export\/game-content": \["\.\/assets\/print\/\*\*\/\*"\]/);
 });
 
-test("A8 – tisk drží rozumnou velikost a nelomí zastávku", () => {
-  const src = read(PRINT);
-  assert.match(src, /max-height: 52mm/, "vizuál nemá mít neomezenou výšku");
-  assert.match(src, /object-fit: contain/, "ilustrace se nemá ořezávat");
-  assert.match(src, /\.episode-card \{ page-break-inside: avoid; \}/, "zastávka se nemá lámat přes stránky");
+test("A8 – tisk drží zastávku i úkol pohromadě", () => {
+  const doc = read(DOC);
+  assert.match(doc, /keepTogether: true,\n    keepHead: items\.length/, "zastávka se nemá lámat");
+  assert.match(doc, /return \{ variant: "task", items, keepTogether: true \};/, "úkol se nemá lámat");
+  const pdf = read(PDF);
+  assert.match(pdf, /const fitsOnEmptyPage = height <= CONTENT_BOTTOM - CONTENT_TOP;/);
 });
 
 test("A9 – fotky v databázi a v online hře zůstávají nedotčené", () => {
@@ -125,42 +150,52 @@ test("A9 – fotky v databázi a v online hře zůstávají nedotčené", () => 
 // ---------------------------------------------------------------------------
 
 test("B1 – tisková větev nesahá na server-only data", () => {
-  const src = read(PRINT);
-  const printPart = src.slice(src.indexOf("type PrintableLocation"), src.indexOf("async function buildRows"));
-  for (const forbidden of [
-    "correctAnswers",
-    "correct_answer",
-    "hintText",
-    "hint_text",
-    "minCorrectMatches",
-    "endingTitle",
-    "endingStory",
-    "playerMessage"
-  ]) {
-    assert.ok(!printPart.includes(forbidden), `tisková verze pracuje s ${forbidden}`);
+  for (const file of [DOC, PDF]) {
+    const src = read(file);
+    for (const forbidden of [
+      "correctAnswers",
+      "correct_answer",
+      "hintText",
+      "hint_text",
+      "minCorrectMatches",
+      "endingTitle",
+      "endingStory",
+      "playerMessage"
+    ]) {
+      assert.ok(!src.includes(forbidden), `${file}: tisková verze pracuje s ${forbidden}`);
+    }
   }
 });
 
 test("B2 – tisk staví na veřejné podobě hry, ne na exportní", () => {
   const src = read(PRINT);
-  const build = src.slice(src.indexOf("async function buildPrintableHtml"), src.indexOf("async function buildRows"));
+  const build = src.slice(src.indexOf("async function buildPrintablePdf"), src.indexOf("async function buildRows"));
   assert.match(build, /getGameplayLocation\(/, "tisk musí brát obsah veřejnou cestou");
   assert.ok(!/getGameplayLocationForExport/.test(build), "tisk nesmí sáhnout na verzi s odpověďmi");
-  assert.match(src, /PrintableLocation\[\]/);
+  assert.match(build, /PrintableLocation\[\]/);
 });
 
 test("B3 – typ tiskové hry závěr vůbec nemá", () => {
-  const src = read(PRINT);
-  const type = src.slice(src.indexOf("type PrintableLocation"), src.indexOf("function isPresent"));
+  const src = read(DOC);
+  const type = src.slice(src.indexOf("export type PrintableLocation"), src.indexOf("export function formatStopCount"));
   assert.ok(!/ending|playerMessage/i.test(type), "typ tiskové hry pořád nese závěr");
+  assert.match(type, /episodes: PublicGameplayEpisode\[\]/, "tisk musí stavět na veřejném typu");
 });
 
 test("B4 – nápověda zůstává funkcí aplikace", () => {
-  const src = read(PRINT);
-  assert.ok(!/hint/i.test(src.slice(src.indexOf("function renderPrintableTask"), src.indexOf("function renderPrintableEpisode"))));
+  const src = read(DOC);
+  const taskBlock = src.slice(src.indexOf("function buildTaskBlock"), src.indexOf("function buildEpisodeBlock"));
+  assert.ok(!/hint/i.test(taskBlock), "do tištěného úkolu se dostala nápověda");
   // A v aplikaci pořád stojí za body: pravidlo R25 se nemění.
-  const rules = read("lib/game-rules.ts");
-  assert.match(rules, /POINTS_PER_TASK_WITH_HINT = 5/);
+  assert.match(read("lib/game-rules.ts"), /POINTS_PER_TASK_WITH_HINT = 5/);
+});
+
+test("B5 – tiskový soubor je PDF, ne stažitelné HTML", () => {
+  const src = read(PRINT);
+  assert.match(src, /"Content-Type": "application\/pdf"/);
+  assert.match(src, /traki-tiskovy-sesit-\$\{locationId\}\.pdf/);
+  assert.ok(!/buildPrintableHtml/.test(src), "zůstala stará HTML větev tisku");
+  assert.ok(!/text\/html/.test(src), "tisk pořád umí vrátit HTML");
 });
 
 // ---------------------------------------------------------------------------
@@ -169,7 +204,7 @@ test("B4 – nápověda zůstává funkcí aplikace", () => {
 
 test("C1 – papírová cesta žije v tiskové sekci detailu hry", () => {
   const detail = read("components/location-detail-screen.tsx");
-  assert.match(detail, /format=print&locationId=/);
+  assert.match(detail, /format=pdf&locationId=/);
   assert.match(detail, /Vytiskni si sešit/);
   assert.match(detail, /Doma je přepiš do téhle hry/);
 });

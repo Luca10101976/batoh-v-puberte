@@ -157,10 +157,10 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
         </ol>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <a
-            href={`/api/export/game-content?format=print&locationId=${location.id}`}
+            href={`/api/export/game-content?format=pdf&locationId=${location.id}`}
             className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
           >
-            Stáhnout tiskovou verzi
+            Stáhnout tiskové PDF
           </a>
           {model.primaryAction === "play" ? (
             <Link

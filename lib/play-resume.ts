@@ -75,20 +75,20 @@ export function resolveResumeTarget(args: {
     return { episodeIndex: 0, taskIndex: 0, source: "computed" };
   }
 
-  // Pozice z adresy je jen nápověda pro odkaz zvenčí. Použije se, když na ni
-  // opravdu leží neuzavřený úkol; zastaralý odkaz hráče na hotový úkol nevrátí.
+  const firstOpen = flat.find((item) => !closed.has(item.id));
+
+  // R26/Q1: pozice z adresy nesmí hráče posunout dopředu. Respektuje se jen tehdy,
+  // když ukazuje přesně na úkol, který je stejně na řadě – tedy nikdy jako zkratka.
+  // Dřív stačilo, aby na požadované pozici ležel neuzavřený úkol, a šlo tak přeskočit
+  // celé zastávky (?episode=5&task=1).
   const requestedEpisodeIndex = args.requestedEpisodeIndex ?? null;
-  if (requestedEpisodeIndex !== null) {
+  if (requestedEpisodeIndex !== null && firstOpen) {
     const requestedTaskIndex = args.requestedTaskIndex ?? 0;
-    const requested = flat.find(
-      (item) => item.episodeIndex === requestedEpisodeIndex && item.taskIndex === requestedTaskIndex
-    );
-    if (requested && !closed.has(requested.id)) {
-      return { episodeIndex: requested.episodeIndex, taskIndex: requested.taskIndex, source: "requested" };
+    if (firstOpen.episodeIndex === requestedEpisodeIndex && firstOpen.taskIndex === requestedTaskIndex) {
+      return { episodeIndex: firstOpen.episodeIndex, taskIndex: firstOpen.taskIndex, source: "requested" };
     }
   }
 
-  const firstOpen = flat.find((item) => !closed.has(item.id));
   if (firstOpen) {
     return { episodeIndex: firstOpen.episodeIndex, taskIndex: firstOpen.taskIndex, source: "computed" };
   }

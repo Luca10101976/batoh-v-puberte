@@ -10,6 +10,7 @@ import {
 import { resolveAnswerAttempt } from "@/lib/task-attempt";
 import { MAX_TASK_ATTEMPTS, POINTS_PER_TASK } from "@/lib/game-rules";
 import { pointsForTask } from "@/lib/mission-completion";
+import { resolveServerTaskAvailability, taskAvailabilityResponse } from "@/lib/task-order-server";
 
 type ChildProfileRow = {
   id: string;
@@ -134,6 +135,22 @@ export async function POST(request: NextRequest) {
   const { run } = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
   if (!run) {
     return NextResponse.json({ ok: false, error: "run_unavailable" }, { status: 500 });
+  }
+
+  // R26/Q1: úkol mimo pořadí se odmítá DŘÍV, než se cokoli zapíše. Nevznikne
+  // řádek, nepřičte se pokus, nezmění se nápověda ani body. Přeskočení zastávky
+  // přes adresu ?episode=&task= i přímým voláním API tím končí.
+  const availability = await resolveServerTaskAvailability(admin, {
+    runId: run.id,
+    locationId,
+    childProfileId: ownProfile.id,
+    taskId
+  });
+  // Uzavřený úkol tu chybou není – to je souběh dvou zařízení z R24 a řeší se níž
+  // vrácením uloženého výsledku.
+  const orderRejection = taskAvailabilityResponse(availability, { allowClosed: true });
+  if (orderRejection) {
+    return NextResponse.json(orderRejection.body, { status: orderRejection.status });
   }
 
 

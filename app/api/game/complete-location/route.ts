@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access-server";
-import { getGameplayLocation } from "@/lib/gameplay-server";
+import { getCatalog, getGameplayEnding, getGameplayLocation } from "@/lib/gameplay-server";
+import { getLocationMaxScore } from "@/lib/game-rules";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { completeRunForParticipants } from "@/lib/game-completion";
 import { findActiveRunForPlayer, getRunParticipantIds } from "@/lib/game-run";
@@ -212,9 +213,49 @@ export async function POST(request: NextRequest) {
     console.warn("child_security_events insert failed", auditWrite.error.code ?? auditWrite.error.message);
   }
 
+  // R26/Q6: závěrečnou obrazovku musí umět vykreslit server. Klient si už nic
+  // nepřepočítává – dostane hotové skóre, rekord, závěr hry i případné odemčení.
+  const mine = outcome.participants.find((entry) => entry.profileCode === normalizeCode(ownProfile.profile_code));
+  const ending = await getGameplayEnding(locationId);
+  const unlockedGame = mine?.firstCompletion ? await resolveUnlockedGame(locationId) : null;
+
   return NextResponse.json({
     ok: true,
     participantCodes: outcome.completedCodes,
-    firstCompletionProfileCodes: outcome.firstCompletionCodes
+    firstCompletionProfileCodes: outcome.firstCompletionCodes,
+    result: mine
+      ? {
+          score: mine.result.score,
+          maxScore: getLocationMaxScore(mine.result.totalTasks),
+          totalTasks: mine.result.totalTasks,
+          correctTasks: mine.result.correctTasks,
+          unknownTasks: mine.result.unknownTasks
+        }
+      : null,
+    bestScore: mine?.bestScore ?? null,
+    isNewBest: mine?.isNewBest ?? false,
+    ending,
+    unlockedGame
   });
+}
+
+/**
+ * R26: hra, kterou hráč tímhle dokončením odemkl. Bere se z katalogu, aby platila
+ * stejná pravidla jako u zámku (R22): jen publikovaná hra ve stejném městě.
+ */
+async function resolveUnlockedGame(locationId: string) {
+  try {
+    const catalog = await getCatalog();
+    const source = catalog.find((entry) => entry.locationId === locationId) ?? null;
+    const next = catalog.find(
+      (entry) =>
+        entry.unlockAfterLocationId === locationId &&
+        !entry.unlockPrerequisiteInvalid &&
+        (!source || entry.city === source.city)
+    );
+    return next ? { locationId: next.locationId, title: next.title } : null;
+  } catch {
+    // Informace navíc; když se nepodaří, hráč jen neuvidí zprávu o odemčení.
+    return null;
+  }
 }

@@ -78,6 +78,20 @@ export function StopForm({ stop, action }: StopFormProps) {
           />
 
           <label className="block space-y-2">
+            <span className="text-sm text-mist">Text po dokončení zastavení (nepovinné)</span>
+            <textarea
+              name="transition_text"
+              defaultValue={stop.transition_text ?? ""}
+              rows={3}
+              placeholder="Co hráč uvidí, až tuhle zastávku dokončí a půjde na další."
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            />
+            <span className="block text-xs text-mist">
+              Když necháš prázdné, aplikace použije obecný text.
+            </span>
+          </label>
+
+          <label className="block space-y-2">
             <span className="text-sm text-mist">Pořadí</span>
             <input
               name="order"

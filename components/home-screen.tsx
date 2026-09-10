@@ -12,7 +12,11 @@ import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { illustrationSrc } from "@/lib/illustrations";
 
-type HomeLocation = Omit<MapLocation, "episodes"> & { episodes: PublicGameplayEpisode[]; catalogOrder?: number };
+// R26: závěr hry (endingTitle/endingStory/playerMessage) se do prohlížeče neposílá.
+type HomeLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory" | "playerMessage"> & {
+  episodes: PublicGameplayEpisode[];
+  catalogOrder?: number;
+};
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);

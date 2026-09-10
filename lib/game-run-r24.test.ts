@@ -172,14 +172,25 @@ test("J: zastaralá adresa nevrátí hráče na už uzavřený úkol", () => {
   assert.deepEqual(target, { episodeIndex: 1, taskIndex: 0, source: "computed" });
 });
 
-test("J: adresa na neuzavřený úkol se respektuje", () => {
-  const target = resolveResumeTarget({
+test("J: adresa se respektuje jen tehdy, když míří na úkol, který je stejně na řadě", () => {
+  // ZMĚNA CHOVÁNÍ R26/Q1: do R25 stačilo, aby na požadované pozici ležel neuzavřený
+  // úkol, takže ?episode=3&task=1 přeskočil celé předchozí zastávky. Nově adresa
+  // hráče nikdy neposune dopředu.
+  const skipAhead = resolveResumeTarget({
     episodes,
     taskProgress: [{ task_id: "a1", status: "correct" }],
     requestedEpisodeIndex: 2,
     requestedTaskIndex: 0
   });
-  assert.deepEqual(target, { episodeIndex: 2, taskIndex: 0, source: "requested" });
+  assert.deepEqual(skipAhead, { episodeIndex: 0, taskIndex: 1, source: "computed" }, "adresa nesmí přeskočit pořadí");
+
+  const onCurrent = resolveResumeTarget({
+    episodes,
+    taskProgress: [{ task_id: "a1", status: "correct" }],
+    requestedEpisodeIndex: 0,
+    requestedTaskIndex: 1
+  });
+  assert.deepEqual(onCurrent, { episodeIndex: 0, taskIndex: 1, source: "requested" });
 });
 
 test("vše uzavřené vede na poslední krok, ne na začátek", () => {

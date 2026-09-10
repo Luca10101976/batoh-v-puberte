@@ -25,6 +25,8 @@ export type GameplayEpisode = {
   name: string;
   intro: string;
   background: string;
+  /** R26: autorský text po dokončení téhle zastávky. Prázdný = obecný text. Není spoiler. */
+  transitionText?: string;
   illustrationImage?: string;
   illustrationImageAlt?: string;
   tasks: GameplayTask[];
@@ -35,3 +37,10 @@ export type GameplayEpisode = {
 export type PublicGameplayTask = Omit<GameplayTask, "correctAnswers" | "hintText">;
 
 export type PublicGameplayEpisode = Omit<GameplayEpisode, "tasks"> & { tasks: PublicGameplayTask[] };
+
+/** R26: závěrečný obsah hry. Server ho vydá až po platném dokončení výpravy. */
+export type GameplayEnding = {
+  endingTitle: string;
+  endingStory: string;
+  playerMessage: string;
+};

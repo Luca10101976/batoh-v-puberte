@@ -3,7 +3,9 @@ import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access
 import { findActiveRunForPlayer, isMissingColumnError } from "@/lib/game-run";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
-import { getGameplayLocation } from "@/lib/gameplay-server";
+import { getGameplayEnding, getGameplayLocation } from "@/lib/gameplay-server";
+import { getLocationMaxScore } from "@/lib/game-rules";
+import { loadConfirmedStopTransitions } from "@/lib/stop-transition-server";
 import { isCompletedLocationProgress } from "@/lib/location-progress-state";
 
 type ChildProfileRow = {
@@ -136,17 +138,45 @@ export async function POST(request: NextRequest) {
     taskRows = (data as TaskProgressRow[] | null) ?? [];
   }
 
+  // R26/Q4: přechodová obrazovka musí přežít reload i druhé zařízení. Server proto
+  // vrací, které přechody hráč v téhle výpravě už odklikl; samotné „zastávka je
+  // hotová" se dál odvozuje z uzavřených úkolů, nikam se neukládá.
+  const confirmedStopTransitions = run
+    ? await loadConfirmedStopTransitions(admin, { runId: run.id, childProfileId: ownProfile.id })
+    : [];
+
   const { data: locationRow } = await admin
     .from("child_location_progress")
-    .select("status, first_completed_at, completed_at")
+    .select("status, first_completed_at, completed_at, best_score")
     .eq("profile_code", ownProfile.profile_code)
     .eq("location_id", locationId)
     .limit(1)
-    .maybeSingle<{ status?: "in_progress" | "completed" | null; first_completed_at?: string | null; completed_at?: string | null }>();
+    .maybeSingle<{
+      status?: "in_progress" | "completed" | null;
+      first_completed_at?: string | null;
+      completed_at?: string | null;
+      best_score?: number | null;
+    }>();
 
   // Dokončená hra bez běžící výpravy = nabídka opakovaného hraní: prázdný postup
   // je pro aplikaci signál, aby si vyžádala novou výpravu (reset-location-replay).
   const finishedWithoutRun = !run && isCompletedLocationProgress(locationRow);
+
+  // R26/Q8: dokončená hra bez běžící výpravy se NESMÍ sama znovu spustit. Server
+  // proto pošle hotový výsledek a aplikace nabídne vědomé „Hrát znovu“ místo toho,
+  // aby tiše založila novou výpravu.
+  const totalTasks = knownLocation.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
+  const completedSummary = finishedWithoutRun
+    ? {
+        bestScore: Math.max(0, locationRow?.best_score ?? 0),
+        maxScore: getLocationMaxScore(totalTasks),
+        totalTasks,
+        completedAt: locationRow?.completed_at ?? null,
+        firstCompletedAt: locationRow?.first_completed_at ?? null,
+        // Závěr hry vidí jen hráč, který ji opravdu dokončil.
+        ending: await getGameplayEnding(locationId)
+      }
+    : null;
 
   return NextResponse.json({
     ok: true,
@@ -156,6 +186,8 @@ export async function POST(request: NextRequest) {
       completed_at: locationRow?.completed_at ?? null
     },
     run: run ? { id: run.id, mode: run.mode, startedAt: run.started_at } : null,
+    confirmedStopTransitions,
+    completed: completedSummary,
     task_progress: finishedWithoutRun
       ? []
       : taskRows.map((row) => ({

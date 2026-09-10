@@ -25,6 +25,8 @@ export type MissionStopRow = {
   description: string | null;
   image_url: string | null;
   order: number;
+  /** R26: autorský text po dokončení téhle zastávky. Prázdný = obecný text. */
+  transition_text?: string | null;
 };
 
 export type MissionTaskRow = {

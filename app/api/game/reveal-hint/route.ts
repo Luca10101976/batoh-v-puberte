@@ -4,6 +4,7 @@ import { gameAccessHttpStatus, resolveServerGameAccess } from "@/lib/game-access
 import { getGameplayTask } from "@/lib/gameplay-server";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { ensureActiveRun, isMissingColumnError } from "@/lib/game-run";
+import { resolveServerTaskAvailability, taskAvailabilityResponse } from "@/lib/task-order-server";
 
 // R25: otevření nápovědy.
 //
@@ -117,6 +118,20 @@ export async function POST(request: NextRequest) {
   const { run } = await ensureActiveRun(admin, { childProfileId: ownProfile.id, locationId });
   if (!run) {
     return NextResponse.json({ ok: false, error: "run_unavailable" }, { status: 500 });
+  }
+
+  // R26/Q1: nápověda k budoucímu úkolu je stejné přeskočení pořadí jako odpověď.
+  // K uzavřenému úkolu se nevydá také – dodatečně otevřená nápověda by snížila
+  // hodnotu úkolu, který má hráč dávno zodpovězený.
+  const availability = await resolveServerTaskAvailability(admin, {
+    runId: run.id,
+    locationId,
+    childProfileId: ownProfile.id,
+    taskId
+  });
+  const orderRejection = taskAvailabilityResponse(availability);
+  if (orderRejection) {
+    return NextResponse.json(orderRejection.body, { status: orderRejection.status });
   }
 
   const nowIso = new Date().toISOString();

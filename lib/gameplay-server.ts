@@ -1,7 +1,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib/mock-data";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
-import type { GameplayEpisode, GameplayTask, PublicGameplayTask } from "@/lib/gameplay-types";
+import type { GameplayEnding, GameplayEpisode, GameplayTask, PublicGameplayTask } from "@/lib/gameplay-types";
 import { toPublicTask as stripServerOnlyTaskFields } from "@/lib/gameplay-public";
 import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 import { legacyLocationIdForMission, legacyMissionIdForLocation } from "@/lib/legacy-location-ids";
@@ -13,6 +13,7 @@ type MissionStopDbRow = {
   description: string | null;
   image_url: string | null;
   order: number;
+  transition_text?: string | null;
 };
 
 type MissionTaskDbRow = {
@@ -351,6 +352,7 @@ function buildEpisodesFromDb(stops: MissionStopDbRow[], tasks: MissionTaskDbRow[
       intro,
       background: backgroundParts.join("\n\n"),
       illustrationImage: stop.image_url || undefined,
+      transitionText: (stop.transition_text ?? "").trim() || undefined,
       clue: [],
       tasks: (tasksByStopId.get(stop.id) ?? [])
         .sort((a, b) => a.order - b.order)
@@ -416,11 +418,26 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
   if (!mission) {
     return null;
   }
-  const { data: stopsData, error: stopsError } = await supabase
-    .from("mission_stops")
-    .select("id, mission_id, title, description, image_url, order")
-    .eq("mission_id", mission.id)
-    .order("order", { ascending: true });
+  // R26: transition_text je autorský přechod po dokončení zastávky. Prostředí bez
+  // migrace R26 sloupec nemá – hra pak jede s obecným textem.
+  const stopQuery = (columns: string) =>
+    supabase
+      .from("mission_stops")
+      .select(columns)
+      .eq("mission_id", mission.id)
+      .order("order", { ascending: true }) as unknown as Promise<{
+      data: MissionStopDbRow[] | null;
+      error: { message?: string } | null;
+    }>;
+
+  let { data: stopsData, error: stopsError } = await stopQuery(
+    "id, mission_id, title, description, image_url, order, transition_text"
+  );
+  if (stopsError?.message?.toLowerCase().includes("transition_text")) {
+    ({ data: stopsData, error: stopsError } = await stopQuery(
+      "id, mission_id, title, description, image_url, order"
+    ));
+  }
 
   const stopIds = (stopsData ?? []).map((row) => row.id);
   const taskQuery = (columns: string) =>
@@ -631,12 +648,32 @@ export async function getGameplayLocation(locationId: string, catalog?: CatalogE
   if (!location) {
     return null;
   }
+  // R26: kromě odpovědí a nápověd tady zůstává i závěr hry. Do prohlížeče ho
+  // vydá až server po dokončení výpravy (getGameplayEnding).
+  const { endingTitle: _endingTitle, endingStory: _endingStory, playerMessage: _playerMessage, ...publicLocation } =
+    location;
   return {
-    ...location,
+    ...publicLocation,
     episodes: location.episodes.map((episode) => ({
       ...episode,
       tasks: episode.tasks.map(toPublicTask)
     }))
+  };
+}
+
+/**
+ * R26: závěrečný obsah hry. Volá se JEN po platném dokončení výpravy nebo když
+ * oprávněný hráč zobrazuje výsledek hry, kterou už dokončil.
+ */
+export async function getGameplayEnding(locationId: string): Promise<GameplayEnding | null> {
+  const location = await getGameplayLocationInternal(locationId);
+  if (!location) {
+    return null;
+  }
+  return {
+    endingTitle: location.endingTitle,
+    endingStory: location.endingStory,
+    playerMessage: location.playerMessage
   };
 }
 

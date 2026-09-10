@@ -1,6 +1,14 @@
-import type { MapLocation } from "@/lib/mock-data";
+// R20/R26: zámek hry podle katalogu. Modul potřebuje jen identitu hry a její
+// vazbu na předchozí hru, ne celý obsah – od R26 už veřejná podoba hry neobsahuje
+// závěr, takže by tvar MapLocation ani nesedl.
 
-export function getUnlockRequirement(location: MapLocation, allLocations: MapLocation[]) {
+export type UnlockableLocation = {
+  id: string;
+  name: string;
+  unlockedByPlaceId?: string | null;
+};
+
+export function getUnlockRequirement<T extends UnlockableLocation>(location: UnlockableLocation, allLocations: T[]) {
   const requiredId = location.unlockedByPlaceId;
   if (!requiredId) {
     return null;
@@ -10,9 +18,9 @@ export function getUnlockRequirement(location: MapLocation, allLocations: MapLoc
 }
 
 export function isLocationUnlockedByChain(
-  location: MapLocation,
+  location: UnlockableLocation,
   completedGameplayLocationIds: string[],
-  allLocations: MapLocation[],
+  allLocations: UnlockableLocation[],
   defaultUnlocked = false
 ) {
   if (defaultUnlocked) {

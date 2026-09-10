@@ -2,6 +2,7 @@ import { getLocationTaskIds } from "@/lib/task-validation";
 import { isMissionCompleted, scoreTaskProgress, type MissionResult } from "@/lib/mission-completion";
 import { deriveCompletionUpdate } from "@/lib/location-completion-state";
 import { finishRun, isMissingColumnError, loadRunTaskProgress } from "@/lib/game-run";
+import { isNewBestScore } from "@/lib/game-result";
 
 // R23: JEDINÁ cesta dokončení hry – pro sólo i pro skupinovou výpravu.
 //
@@ -27,6 +28,10 @@ export type ParticipantResult = {
   result: MissionResult;
   completed: boolean;
   firstCompletion: boolean;
+  /** R26: nejlepší historický výsledek po zápisu této výpravy. */
+  bestScore: number;
+  /** R26: vytvořila právě tahle výprava nový rekord? První dokončení je rekord vždy. */
+  isNewBest: boolean;
 };
 
 export type CompleteRunOutcome =
@@ -96,7 +101,9 @@ export async function completeRunForParticipants(
       profileCode: normalizeCode(profile.profile_code),
       result,
       completed: isMissionCompleted(result),
-      firstCompletion: false
+      firstCompletion: false,
+      bestScore: result.score,
+      isNewBest: true
     };
   });
 
@@ -120,6 +127,11 @@ export async function completeRunForParticipants(
 
   for (const entry of finished) {
     const existing = existingByCode.get(entry.profileCode) ?? null;
+    // R26: rekord se posuzuje proti stavu PŘED zápisem, jinak by po uložení
+    // vypadal každý výsledek jako nový nejlepší.
+    const previousBest = typeof existing?.best_score === "number" ? existing.best_score : null;
+    entry.isNewBest = isNewBestScore(previousBest, entry.result.score);
+    entry.bestScore = Math.max(previousBest ?? 0, entry.result.score);
     const decision = deriveCompletionUpdate({
       existing,
       finalScore: entry.result.score,

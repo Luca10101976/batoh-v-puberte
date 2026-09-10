@@ -8,6 +8,15 @@ import { useAppState } from "@/components/app-state-provider";
 import { locations, type MapLocation } from "@/lib/mock-data";
 import { getUnlockRequirement } from "@/lib/location-unlock";
 import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
+import {
+  fallbackTransitionText,
+  flattenTasks,
+  resolveCurrentTask,
+  resolvePendingStopTransition,
+  type OrderedTaskRow
+} from "@/lib/task-order";
+import type { FinishSummary } from "@/lib/game-result";
+import type { GameplayEnding } from "@/lib/gameplay-types";
 import { hasHistoricalLocationCompletion, isActiveInProgressLocation, isCompletedLocationProgress } from "@/lib/location-progress-state";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { PublicGameplayEpisode, PublicGameplayTask } from "@/lib/gameplay-types";
@@ -19,7 +28,10 @@ type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
 const MAX_WRONG_ATTEMPTS_BEFORE_AUTO_UNKNOWN = 2;
 
-type PlayLocation = Omit<MapLocation, "episodes"> & { episodes: PublicGameplayEpisode[] };
+// R26: závěr hry přijde ze serveru až po dokončení výpravy, ne v datech stránky.
+type PlayLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory" | "playerMessage"> & {
+  episodes: PublicGameplayEpisode[];
+};
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
@@ -51,11 +63,23 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   const [status, setStatus] = useState<TaskStatus>("idle");
   const [message, setMessage] = useState("");
   const [finished, setFinished] = useState(false);
-  const [pendingEpisodeTransition, setPendingEpisodeTransition] = useState<{
-    fromName: string;
-    toName: string;
-    nextEpisodeIndex: number;
-  } | null>(null);
+  // R26: závěr a body přicházejí ze serveru; klient si nic nepřepočítává.
+  const [finishSummary, setFinishSummary] = useState<(FinishSummary & { ending: GameplayEnding | null }) | null>(null);
+  // R26/Q8: dokončená hra bez běžící výpravy – hotový výsledek místo tichého replaye.
+  const [completedSummary, setCompletedSummary] = useState<
+    | {
+        bestScore: number;
+        maxScore: number;
+        totalTasks: number;
+        completedAt: string | null;
+        ending: GameplayEnding | null;
+      }
+    | null
+  >(null);
+  // R26/Q4: přechody, které hráč v téhle výpravě už odklikl. Serverový stav.
+  const [confirmedStopIds, setConfirmedStopIds] = useState<string[]>([]);
+  const [confirmingTransition, setConfirmingTransition] = useState(false);
+  const [startingReplay, setStartingReplay] = useState(false);
   const [taskOutcomes, setTaskOutcomes] = useState<Record<string, "known" | "unknown">>({});
   const [wrongAttemptsByTask, setWrongAttemptsByTask] = useState<Record<string, number>>({});
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
@@ -80,12 +104,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       setIntroOpen(true);
     }
     setActiveMode("solo");
-
-    if (requestedEpisodeIndex !== null) {
-      setEpisodeIndex(requestedEpisodeIndex);
-      setTaskIndex(requestedTaskIndex ?? 0);
-    }
-  }, [requestedEpisodeIndex, requestedTaskIndex, searchParams, setActiveMode]);
+    // R26/Q1: číslo v adrese už obrazovku nikam neposouvá. Pozici určuje výhradně
+    // pravidlo pořadí nad uzavřenými úkoly výpravy, stejné jako na serveru.
+  }, [searchParams, setActiveMode]);
 
   const locationUnlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   const unlockRequirement = getUnlockRequirement(location, locations);
@@ -108,6 +129,26 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     .slice(0, episodeIndex)
     .reduce((sum, episode) => sum + episode.tasks.length, 0);
   const progress = Math.round(((completedTasksBeforeCurrent + taskIndex + 1) / totalTasks) * 100);
+  // R26: postup výpravy v podobě, které rozumí autoritativní pravidlo pořadí.
+  const taskProgressRows: OrderedTaskRow[] = useMemo(
+    () =>
+      Object.entries(taskOutcomes).map(([taskId, outcome]) => ({
+        task_id: taskId,
+        status: outcome === "known" ? ("correct" as const) : ("unknown" as const)
+      })),
+    [taskOutcomes]
+  );
+  // R26/Q4: přechodová obrazovka není stav v paměti, ale důsledek uzavřených úkolů
+  // a toho, co hráč potvrdil. Proto přežije reload i druhé zařízení.
+  const pendingTransition = useMemo(
+    () =>
+      resolvePendingStopTransition({
+        episodes: location.episodes,
+        taskProgress: taskProgressRows,
+        confirmedStopIds
+      }),
+    [confirmedStopIds, location.episodes, taskProgressRows]
+  );
   const historicallyCompleted = state.completedLocationIds.includes(location.id);
   const knownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "known").length;
   const unknownCount = Object.values(taskOutcomes).filter((outcome) => outcome === "unknown").length;
@@ -140,7 +181,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       setMessage("");
       setInput("");
       setFinished(false);
-      setPendingEpisodeTransition(null);
+      setFinishSummary(null);
+      setCompletedSummary(null);
+      setConfirmedStopIds([]);
 
       if (!supabase || !state.profileCode) {
         setResuming(false);
@@ -180,16 +223,36 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             }>;
             location?: { status?: "in_progress" | "completed" | null };
             run?: { id: string; mode: string; startedAt: string | null } | null;
+            confirmedStopTransitions?: string[];
+            completed?: {
+              bestScore: number;
+              maxScore: number;
+              totalTasks: number;
+              completedAt: string | null;
+              ending: GameplayEnding | null;
+            } | null;
           }
         | null;
 
       const rows = payload?.task_progress ?? [];
       const locationProgress = payload?.location ?? null;
+      setConfirmedStopIds(payload?.confirmedStopTransitions ?? []);
+
+      // R26/Q8: dokončená hra bez běžící výpravy se sama znovu nespustí. Hráč
+      // uvidí výsledek a novou výpravu založí až vědomým „Hrát znovu".
+      if (payload?.completed) {
+        setCompletedSummary(payload.completed);
+        setIntroOpen(false);
+        setResuming(false);
+        return;
+      }
 
       if (rows.length === 0) {
         // R24: o rozehranosti rozhoduje BĚŽÍCÍ VÝPRAVA, kterou vrací server.
         // Když žádná neběží (přímý vstup na adresu hry), zahájí se stejnou
         // operací jako tlačítko Hrát – žádná druhá cesta zakládání neexistuje.
+        // R26/Q8: startRun se tu volá jen pro hru, kterou hráč nikdy nedokončil.
+        // Dokončená hra bez výpravy se vyřídila výš a nový průchod nezakládá.
         if (!payload?.run) {
           await startRun(location.id);
         }
@@ -260,54 +323,83 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     void hydrateInProgressMission();
   }, [historicallyCompleted, location.episodes, location.id, requestedEpisodeIndex, requestedTaskIndex, startRun, state.profileCode, supabase, taskPositionById]);
 
+  // R26/Q6: skóre nevzniká v prohlížeči. Server vrátí hotový výsledek dokončené
+  // výpravy, nejlepší historický výsledek, jestli jde o rekord, závěr hry a
+  // případnou odemčenou hru – obrazovka to jen vykreslí.
   async function finishLocation() {
-    const participants = [SELF_MEMBER_ID];
-    const unknownTaskIds = Object.entries(taskOutcomes)
-      .filter(([, outcome]) => outcome === "unknown")
-      .map(([taskId]) => taskId);
-    const maxScore = getLocationMaxScore(totalTasks);
-    const score = knownCount * POINTS_PER_TASK;
-    const missingPoints = Math.max(0, maxScore - score);
-    completeLocation(location.id, {
-      participantIds: participants,
-      score,
-      maxScore,
-      penaltyPoints: missingPoints,
-      source: "gameplay"
-    });
-
-    if (supabase && state.profileCode) {
-      const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-
-      if (accessToken) {
-        const response = await fetch("/api/game/complete-location", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            profileCode: state.profileCode,
-            locationId: location.id,
-            expeditionId: null,
-            mode: "solo",
-            completedAt: new Date().toISOString(),
-            unknownTaskIds,
-            unknownCount,
-            source: "gameplay",
-            childName: state.profile.name
-          })
-        }).catch(() => null);
-
-        if (response?.ok) {
-          const payload = (await response.json()) as { participantCodes?: string[] };
-          const participantIds = (payload.participantCodes ?? []).map((code) => code.trim().toUpperCase());
-          if (participantIds.length > 0) {
-            completeLocation(location.id, { participantIds, score, maxScore, penaltyPoints: missingPoints, source: "gameplay" });
-          }
-        }
-      }
+    if (!supabase || !state.profileCode) {
+      setMessage("Nejdřív se prosím přihlas.");
+      return;
     }
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    if (!accessToken) {
+      setMessage("Přihlášení vypršelo. Přihlas se prosím znovu Traki klíčem.");
+      return;
+    }
+
+    const response = await fetch("/api/game/complete-location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        profileCode: state.profileCode,
+        locationId: location.id,
+        mode: "solo",
+        source: "gameplay"
+      })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setMessage("Hru se teď nepodařilo uzavřít. Zkus to prosím znovu.");
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          participantCodes?: string[];
+          result?: FinishSummary["result"] | null;
+          bestScore?: number | null;
+          isNewBest?: boolean;
+          ending?: GameplayEnding | null;
+          unlockedGame?: FinishSummary["unlockedGame"];
+        }
+      | null;
+
+    if (!payload?.result) {
+      setMessage("Hru se teď nepodařilo uzavřít. Zkus to prosím znovu.");
+      return;
+    }
+
+    setFinishSummary({
+      result: payload.result,
+      bestScore: payload.bestScore ?? payload.result.score,
+      isNewBest: Boolean(payload.isNewBest),
+      unlockedGame: payload.unlockedGame ?? null,
+      ending: payload.ending ?? null
+    });
+    setFinished(true);
+
+    // Lokální stav se aktualizuje serverovými čísly, ne vlastním výpočtem.
+    const participantIds = (payload.participantCodes ?? []).map((code) => code.trim().toUpperCase());
+    if (participantIds.length > 0) {
+      completeLocation(location.id, {
+        participantIds,
+        score: payload.result.score,
+        maxScore: payload.result.maxScore,
+        penaltyPoints: Math.max(0, payload.result.maxScore - payload.result.score),
+        source: "gameplay"
+      });
+    }
+  }
+
+  // R26/Q8: opakované hraní vzniká jedině tímhle kliknutím, nikdy reloadem.
+  async function handlePlayAgain() {
+    if (startingReplay) {
+      return;
+    }
+    setStartingReplay(true);
+    const started = await startRun(location.id);
+    setStartingReplay(false);
+    router.push(`/play/${location.id}?mode=solo${started.created ? "&intro=1" : ""}`);
   }
 
   async function submitTaskAnswer(action: "answer" | "mark_unknown" | "confirm_manual", answerValue?: string) {
@@ -351,7 +443,32 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       return null;
     }
 
-    if (recovery.kind === "network_error" || !recovery.response.ok) {
+    if (recovery.kind === "network_error") {
+      setStatus("wrong");
+      setMessage("Ověření odpovědi se nepodařilo. Zkus to znovu.");
+      return null;
+    }
+
+    // R26/Q2: server odmítl úkol mimo pořadí. Nic se nezapsalo, takže obrazovku
+    // jen vrátíme tam, kde hráč doopravdy je – nikdy ho nenecháme v rozbitém stavu.
+    if (recovery.response.status === 409) {
+      const rejection = (await recovery.response.json().catch(() => null)) as
+        | { error?: string; currentTaskId?: string | null; message?: string }
+        | null;
+      if (rejection?.error === "task_out_of_order") {
+        const target = rejection.currentTaskId ? taskPositionById.get(rejection.currentTaskId) : null;
+        if (target) {
+          setEpisodeIndex(target.episodeIndex);
+          setTaskIndex(target.taskIndex);
+        }
+        setInput("");
+        setStatus("idle");
+        setMessage(rejection.message ?? "Tenhle úkol ještě není na řadě.");
+        return null;
+      }
+    }
+
+    if (!recovery.response.ok) {
       setStatus("wrong");
       setMessage("Ověření odpovědi se nepodařilo. Zkus to znovu.");
       return null;
@@ -369,29 +486,28 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     };
   }
 
-  function advance() {
+  // R26: pozici neurčuje počítadlo v prohlížeči, ale stejné pravidlo pořadí, jaké
+  // vynucuje server – první neuzavřený úkol hry. Přechodová obrazovka se objeví
+  // sama, protože vyplývá z uzavřených úkolů zastávky.
+  function advance(closedTaskId?: string) {
     setInput("");
     setStatus("idle");
     setMessage("");
 
-    if (!isLastTask) {
-      setTaskIndex((current) => current + 1);
+    const progress: OrderedTaskRow[] = closedTaskId
+      ? [...taskProgressRows.filter((row) => row.task_id !== closedTaskId), { task_id: closedTaskId, status: "correct" }]
+      : taskProgressRows;
+    const next = resolveCurrentTask(location.episodes, progress);
+
+    if (!next) {
+      void (async () => {
+        await finishLocation();
+      })();
       return;
     }
 
-    if (!isLastEpisode) {
-      setPendingEpisodeTransition({
-        fromName: activeEpisode.name,
-        toName: location.episodes[episodeIndex + 1]?.name ?? "Další zastavení",
-        nextEpisodeIndex: episodeIndex + 1
-      });
-      return;
-    }
-
-    void (async () => {
-      await finishLocation();
-      setFinished(true);
-    })();
+    setEpisodeIndex(next.episodeIndex);
+    setTaskIndex(next.taskIndex);
   }
 
   // R24/D3: server je zdroj pravdy. Když úkol mezitím uzavřelo jiné zařízení,
@@ -561,7 +677,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "known" }));
     setStatus("manual");
     setMessage("");
-    advance();
+    advance(activeTask.id);
   }
 
   async function handlePhotoUnknownAndAdvance() {
@@ -580,17 +696,40 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     setTaskOutcomes((current) => ({ ...current, [activeTask.id]: "unknown" }));
     setStatus("unknown");
     setMessage("");
-    advance();
+    advance(activeTask.id);
   }
 
-  function continueToNextEpisode() {
-    if (!pendingEpisodeTransition) {
+  // R26/Q4: potvrzení se zapisuje k účastníkovi výpravy, takže obrazovka zůstane
+  // zavřená i po reloadu a na druhém zařízení. Volání je idempotentní.
+  async function continueToNextEpisode() {
+    if (!pendingTransition || confirmingTransition) {
       return;
     }
+    setConfirmingTransition(true);
+    const accessToken = supabase ? (await supabase.auth.getSession()).data.session?.access_token ?? "" : "";
+    if (accessToken && state.profileCode) {
+      const response = await fetch("/api/game/confirm-stop-transition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          profileCode: state.profileCode,
+          locationId: location.id,
+          stopId: pendingTransition.fromStopId
+        })
+      }).catch(() => null);
 
-    setEpisodeIndex(pendingEpisodeTransition.nextEpisodeIndex);
-    setTaskIndex(0);
-    setPendingEpisodeTransition(null);
+      if (!response?.ok) {
+        setConfirmingTransition(false);
+        setMessage("Přechod se nepodařilo uložit. Zkus to prosím znovu.");
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { confirmedStopTransitions?: string[] } | null;
+      setConfirmedStopIds(payload?.confirmedStopTransitions ?? [...confirmedStopIds, pendingTransition.fromStopId]);
+    } else {
+      setConfirmedStopIds((current) => [...current, pendingTransition.fromStopId]);
+    }
+
+    setConfirmingTransition(false);
     setStatus("idle");
     setMessage("");
     setInput("");
@@ -677,7 +816,36 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     );
   }
 
-  if (finished) {
+  // R26/Q6+Q8: závěr i výsledek pocházejí ze serveru. Stejná obrazovka slouží
+  // po dokončení hry i při návratu na hru, kterou má hráč dávno hotovou –
+  // v tom druhém případě bez skóre právě dohrané výpravy, protože žádná neběžela.
+  const endingView = finishSummary
+    ? {
+        ending: finishSummary.ending,
+        score: finishSummary.result.score,
+        maxScore: finishSummary.result.maxScore,
+        correctTasks: finishSummary.result.correctTasks,
+        unknownTasks: finishSummary.result.unknownTasks,
+        bestScore: finishSummary.bestScore,
+        isNewBest: finishSummary.isNewBest,
+        unlockedGame: finishSummary.unlockedGame,
+        justFinished: true
+      }
+    : completedSummary
+      ? {
+          ending: completedSummary.ending,
+          score: null,
+          maxScore: completedSummary.maxScore,
+          correctTasks: null,
+          unknownTasks: null,
+          bestScore: completedSummary.bestScore,
+          isNewBest: false,
+          unlockedGame: null,
+          justFinished: false
+        }
+      : null;
+
+  if ((finished || completedSummary) && endingView) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
         <section className="glass-card p-5">
@@ -690,32 +858,80 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
               className="h-[140px] w-[140px] object-contain"
             />
           </div>
-          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-coral">Závěrečné odhalení</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{location.endingTitle}</h1>
-          <p className="mt-4 text-sm leading-7 text-mist">{location.endingStory}</p>
+          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-coral">
+            {endingView.justFinished ? "Závěrečné odhalení" : "Hru už máš dohranou"}
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">{endingView.ending?.endingTitle ?? location.name}</h1>
+          {endingView.ending?.endingStory ? (
+            <p className="mt-4 text-sm leading-7 text-mist">{endingView.ending.endingStory}</p>
+          ) : null}
         </section>
+
+        {endingView.ending?.playerMessage ? (
+          <section className="glass-card p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-lime">Zpráva pro hráče</p>
+            <p className="mt-3 text-base leading-7 text-white/90">{endingView.ending.playerMessage}</p>
+          </section>
+        ) : null}
 
         <section className="glass-card p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-lime">Zpráva pro hráče</p>
-          <p className="mt-3 text-base leading-7 text-white/90">{location.playerMessage}</p>
-          <p className="mt-4 text-sm leading-6 text-mist">{completionLabel}</p>
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-2xl bg-white/5 p-3">
-              <div className="text-xl font-semibold text-lime">{knownCount}</div>
-              <div className="text-xs text-mist">Správně</div>
-            </div>
-            <div className="rounded-2xl bg-white/5 p-3">
-              <div className="text-xl font-semibold">{unknownCount}</div>
-              <div className="text-xs text-mist">Nevím</div>
-            </div>
-            <div className="rounded-2xl bg-white/5 p-3">
-              <div className="text-xl font-semibold">{knownCount * POINTS_PER_TASK}/{getLocationMaxScore(totalTasks)}</div>
-              <div className="text-xs text-mist">Body</div>
-            </div>
-          </div>
+          <p className="text-xs uppercase tracking-[0.24em] text-lime">Výsledek</p>
+          {endingView.score !== null ? (
+            <>
+              <p className="mt-3 text-4xl font-bold">
+                {endingView.score}
+                <span className="text-xl text-mist">/{endingView.maxScore}</span>
+              </p>
+              <p className="mt-1 text-sm text-mist">{completionLabel}</p>
+              {endingView.isNewBest ? (
+                <p className="mt-3 rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
+                  Nový nejlepší výsledek téhle hry.
+                </p>
+              ) : (
+                <p className="mt-3 text-sm text-mist">
+                  Tvůj nejlepší výsledek téhle hry zůstává {endingView.bestScore}/{endingView.maxScore}.
+                </p>
+              )}
+              {endingView.correctTasks !== null ? (
+                <p className="mt-3 text-sm text-mist">
+                  Správně: <span className="font-semibold text-white">{endingView.correctTasks}</span> • Nevím:{" "}
+                  <span className="font-semibold text-white">{endingView.unknownTasks}</span>
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="mt-3 text-4xl font-bold">
+                {endingView.bestScore}
+                <span className="text-xl text-mist">/{endingView.maxScore}</span>
+              </p>
+              <p className="mt-1 text-sm text-mist">Tvůj nejlepší výsledek téhle hry.</p>
+            </>
+          )}
         </section>
 
-        <Link href="/" className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">
+        {endingView.unlockedGame ? (
+          <section className="glass-card p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-coral">Odemkl jsi další hru</p>
+            <p className="mt-2 text-xl font-bold">{endingView.unlockedGame.title}</p>
+            <Link
+              href={`/locations/${endingView.unlockedGame.locationId}`}
+              className="mt-4 inline-flex w-full items-center justify-center rounded-[24px] border border-lime/40 bg-lime/10 px-5 py-4 text-center font-semibold text-lime"
+            >
+              Podívat se na ni
+            </Link>
+          </section>
+        ) : null}
+
+        {/* R26/Q8: novou výpravu založí jedině vědomé kliknutí hráče. */}
+        <button
+          onClick={() => void handlePlayAgain()}
+          disabled={startingReplay}
+          className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night disabled:opacity-70"
+        >
+          {startingReplay ? "Připravuju hru…" : "Hrát znovu"}
+        </button>
+        <Link href="/" className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4 text-center font-semibold">
           Vybrat další hru
         </Link>
         <div className="grid grid-cols-2 gap-3">
@@ -736,19 +952,27 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     );
   }
 
-  if (pendingEpisodeTransition) {
+  // Přechodová obrazovka nastupuje až ve chvíli, kdy hráč potvrdil výsledek
+  // posledního úkolu zastávky (status je zpět na „idle"). Jinak by hlášku
+  // o získaných bodech okamžitě překryla.
+  if (pendingTransition && status === "idle") {
+    // R26/Q5: autorský text zastávky, jinak obecná věta. Nic se za autora nevymýšlí.
+    const transitionText =
+      pendingTransition.transitionText ||
+      fallbackTransitionText(pendingTransition.fromStopName, pendingTransition.toStopName);
+
     return (
       <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
         <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
-          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Blok splněn</p>
+          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Zastávka hotová</p>
           <div className="mt-2 inline-flex rounded-full border border-lime/40 bg-night/35 px-3 py-1 text-xs font-semibold text-lime">
-            Zastavení {pendingEpisodeTransition.nextEpisodeIndex}/{location.episodes.length} dokončeno
+            Zastavení {pendingTransition.fromStopNumber}/{pendingTransition.stopCount} dokončeno
           </div>
           <div className="mt-5 rounded-2xl bg-night/45 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
-            <p className="mt-1 text-xl font-bold text-white">{pendingEpisodeTransition.fromName}</p>
+            <p className="mt-1 text-xl font-bold text-white">{pendingTransition.fromStopName}</p>
           </div>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex items-start gap-3">
             <Image
               src={illustrationSrc("rozcestnik")}
               alt=""
@@ -756,17 +980,21 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
               height={72}
               className="h-[72px] w-[72px] shrink-0 object-contain"
             />
-            <p className="text-base font-semibold text-white">Přechod na další zastavení</p>
+            <p className="text-base leading-7 text-white/90">{transitionText}</p>
           </div>
           <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-lime">Pokračuješ na</p>
-            <p className="mt-1 text-3xl font-bold text-white">{pendingEpisodeTransition.toName}</p>
+            <p className="mt-1 text-3xl font-bold text-white">{pendingTransition.toStopName}</p>
+            <p className="mt-1 text-xs text-mist">
+              Zastavení {pendingTransition.toStopNumber}/{pendingTransition.stopCount}
+            </p>
           </div>
           <button
-            onClick={continueToNextEpisode}
-            className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-base font-bold text-night"
+            onClick={() => void continueToNextEpisode()}
+            disabled={confirmingTransition}
+            className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-base font-bold text-night disabled:opacity-70"
           >
-            Pokračovat na další zastavení
+            {confirmingTransition ? "Ukládám…" : "Pokračovat na další zastavení"}
           </button>
         </section>
       </main>
@@ -1041,7 +1269,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 Nevím
               </button>
               <button
-                onClick={advance}
+                onClick={() => advance()}
                 disabled={!canAdvance}
                 className={`rounded-[24px] px-4 py-4 text-sm font-semibold transition-colors ${
                   canAdvance

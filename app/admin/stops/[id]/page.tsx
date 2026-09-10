@@ -36,11 +36,19 @@ export default async function StopEditPage({
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = getSupabaseServerClient();
-  const { data: stop, error: stopError } = await supabase
-    .from("mission_stops")
-    .select("id, mission_id, title, description, image_url, order")
-    .eq("id", id)
-    .maybeSingle<MissionStopRow>();
+  // R26: transition_text nemusí existovat v prostředí bez migrace R26.
+  const stopQuery = (columns: string) =>
+    supabase.from("mission_stops").select(columns).eq("id", id).maybeSingle() as unknown as Promise<{
+      data: MissionStopRow | null;
+      error: { message?: string } | null;
+    }>;
+
+  let { data: stop, error: stopError } = await stopQuery(
+    "id, mission_id, title, description, image_url, order, transition_text"
+  );
+  if (stopError?.message?.toLowerCase().includes("transition_text")) {
+    ({ data: stop, error: stopError } = await stopQuery("id, mission_id, title, description, image_url, order"));
+  }
 
   if (!stop || stopError) {
     return (

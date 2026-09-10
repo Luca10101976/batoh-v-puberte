@@ -13,7 +13,8 @@ import { illustrationSrc } from "@/lib/illustrations";
 // R21: zjednodušený detail hry – hero, název, krátký popis, „Začínáme“ (první zastávka), Hrát / zámek.
 // Data přicházejí z DB katalogu (R20); zastávky/úkoly zůstávají ve hře, jen se tu nevypisují.
 
-type DetailLocation = Omit<MapLocation, "episodes"> & {
+// R26: závěr hry se do prohlížeče neposílá, detail ho nepotřebuje.
+type DetailLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory" | "playerMessage"> & {
   episodes: PublicGameplayEpisode[];
   unlockRequirementName?: string | null;
 };

@@ -137,9 +137,6 @@ type PrintableLocation = {
   teaser: string;
   introStory: string;
   story: string;
-  endingTitle: string;
-  endingStory: string;
-  playerMessage: string;
   episodes: PublicGameplayEpisode[];
 };
 
@@ -199,9 +196,7 @@ function renderPrintableLocation(location: PrintableLocation) {
       ${episodeSections}
       <section class="final-card">
         <h3>Závěr mise</h3>
-        <p class="final-title">${escapeHtml(location.endingTitle)}</p>
-        <p>${escapeHtml(location.endingStory)}</p>
-        <p>${escapeHtml(location.playerMessage)}</p>
+        <p>Závěr hry se dozvíš v aplikaci, až odpovědi zadáš a hru dokončíš.</p>
       </section>
       <section class="score-box">
         <div class="score-title">Výsledek hráče</div>
@@ -226,9 +221,6 @@ async function buildPrintableHtml(locationId?: string) {
     teaser: location.teaser,
     introStory: location.introStory,
     story: location.story,
-    endingTitle: location.endingTitle,
-    endingStory: location.endingStory,
-    playerMessage: location.playerMessage,
     episodes: location.episodes
   }));
 

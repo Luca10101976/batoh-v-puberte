@@ -27,9 +27,24 @@ export function toPublicEpisode<T extends { tasks: SecretTaskFields[] }>(episode
   };
 }
 
-export function toPublicLocation<L extends { episodes: { tasks: SecretTaskFields[] }[] }>(location: L) {
+/** R26: závěr hry je spoiler. Do prohlížeče smí až po dokončení výpravy. */
+export const SERVER_ONLY_LOCATION_FIELDS = ["endingTitle", "endingStory", "playerMessage"] as const;
+
+export type EndingFields = {
+  endingTitle?: string;
+  endingStory?: string;
+  playerMessage?: string;
+};
+
+export function toPublicLocation<L extends EndingFields & { episodes: { tasks: SecretTaskFields[] }[] }>(location: L) {
+  const {
+    endingTitle: _endingTitle,
+    endingStory: _endingStory,
+    playerMessage: _playerMessage,
+    ...rest
+  } = location;
   return {
-    ...location,
+    ...rest,
     episodes: location.episodes.map((episode) => toPublicEpisode(episode))
   };
 }

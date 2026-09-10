@@ -119,6 +119,7 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
   const missionId = normalizeText(formData.get("mission_id"));
   const title = normalizeText(formData.get("title"));
   const description = normalizeText(formData.get("description"));
+  const transitionText = normalizeText(formData.get("transition_text"));
   const imageUrl = normalizeText(formData.get("image_url"));
   const existingImageUrl = normalizeText(formData.get("existing_image_url"));
   const imageFileValue = formData.get("image_file");
@@ -184,7 +185,9 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
           title,
           description,
           image_url: resolvedImageUrl,
-          order
+          order,
+          // R26: autorský text přechodu; prázdný znamená obecný text v aplikaci.
+          transition_text: transitionText
         })
         .eq("id", stopId)
         .eq("mission_id", missionId);

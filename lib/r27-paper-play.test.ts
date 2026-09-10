@@ -49,24 +49,36 @@ test("A5 – sešit už nenutí hráče počítat body na papíře", () => {
   assert.match(src, /Na papíře nic sčítat nemusíš/i);
 });
 
-test("A6 – fotka zastávky se tiskne, když ji hra má", () => {
+test("A6 – tisk nepoužívá fotografie skutečných míst", () => {
   const src = read(PRINT);
-  assert.match(src, /function renderPrintableStopPhoto/);
-  assert.match(src, /episode\.illustrationImage/);
-  assert.match(src, /_next\/image\?url=/, "fotka má jít přes optimalizátor, ne v originále");
+  assert.ok(!/renderPrintableStopPhoto/.test(src), "zůstala funkce pro tisk fotky");
+  assert.ok(!/class="stop-photo"/.test(src), "zůstala fotka zastávky");
+  assert.ok(!/Podle téhle fotky poznáš místo/.test(src), "zůstal popisek k fotce");
+  assert.ok(!/_next\/image\?url=/.test(src), "tisk pořád sahá na obrázky z databáze");
+  assert.ok(!/episode\.illustrationImage/.test(src), "tisk pořád čte obrázek zastávky");
 });
 
-test("A7 – hra bez fotky se vytiskne normálně", () => {
+test("A7 – místo pro budoucí ilustraci Traki je připravené, ale prázdné", () => {
   const src = read(PRINT);
-  const fn = src.slice(src.indexOf("function renderPrintableStopPhoto"), src.indexOf("function renderPrintableEpisode"));
-  assert.match(fn, /if \(!source\) \{\s*return "";/, "chybí větev pro zastávku bez fotky");
+  assert.match(src, /function renderPrintableStopVisual/, "chybí místo pro vizuál zastávky");
+  assert.match(src, /\$\{renderPrintableStopVisual\(episode\)\}/, "místo se nevykresluje u zastávky");
+  const fn = src.slice(src.indexOf("function renderPrintableStopVisual"), src.indexOf("function renderPrintableEpisode"));
+  assert.match(fn, /return "";/, "dnes se nemá tisknout nic");
+  assert.ok(!/<img/.test(fn), "žádný zástupný obrázek se nevymýšlí");
+  assert.match(src, /\.stop-visual \{/, "chybí připravený styl pro ilustraci");
 });
 
-test("A8 – tisk drží rozumnou velikost a poměr stran", () => {
+test("A8 – tisk drží rozumnou velikost a nelomí zastávku", () => {
   const src = read(PRINT);
-  assert.match(src, /max-height: 52mm/, "fotka nemá mít neomezenou výšku");
-  assert.match(src, /object-fit: cover/, "má se zachovat poměr stran");
+  assert.match(src, /max-height: 52mm/, "vizuál nemá mít neomezenou výšku");
+  assert.match(src, /object-fit: contain/, "ilustrace se nemá ořezávat");
   assert.match(src, /\.episode-card \{ page-break-inside: avoid; \}/, "zastávka se nemá lámat přes stránky");
+});
+
+test("A9 – fotky v databázi a v online hře zůstávají nedotčené", () => {
+  // Tisk je jediné místo, kde se fotky nepoužívají; hra i Mozek s nimi pracují dál.
+  assert.match(read("lib/gameplay-server.ts"), /illustrationImage: stop\.image_url \|\| undefined/);
+  assert.match(read("components/admin/stop-form.tsx"), /Fotografie zastavení/);
 });
 
 // ---------------------------------------------------------------------------

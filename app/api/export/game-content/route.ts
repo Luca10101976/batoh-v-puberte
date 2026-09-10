@@ -165,22 +165,18 @@ function renderPrintableTask(task: PublicGameplayTask, taskIndex: number) {
 }
 
 /**
- * R27: fotka zastávky pomáhá poznat místo v terénu. Jde přes optimalizátor obrázků,
- * takže se netiskne originál (u některých zastávek přes 4 MB), ale zmenšená varianta.
- * Zastávka bez fotky se vytiskne úplně normálně, jen bez ní.
+ * R27: místo pro vizuál zastávky v tiskovém sešitu.
+ *
+ * Fotografie skutečných míst se do tisku ZÁMĚRNĚ nedávají – tiskové hry mají mít
+ * vlastní výtvarnou identitu Traki, ne fotky z databáze. Ty zůstávají beze změny
+ * v online hře, tahle funkce je jen nepoužívá.
+ *
+ * Až budou hotové ilustrace Traki pro jednotlivé zastávky, vrátí se odtud
+ * `<figure class="stop-visual">` s vybranou ilustrací. Do té doby se netiskne nic
+ * a žádný zástupný obrázek se nevymýšlí – prázdné místo je lepší než cizí vizuál.
  */
-function renderPrintableStopPhoto(episode: PublicGameplayEpisode) {
-  const source = (episode.illustrationImage ?? "").trim();
-  if (!source) {
-    return "";
-  }
-  const optimized = `/_next/image?url=${encodeURIComponent(source)}&w=640&q=70`;
-  return `
-      <figure class="stop-photo">
-        <img src="${escapeHtml(optimized)}" alt="${escapeHtml(episode.name)}" loading="lazy" />
-        <figcaption>Podle téhle fotky poznáš místo.</figcaption>
-      </figure>
-  `;
+function renderPrintableStopVisual(_episode: PublicGameplayEpisode) {
+  return "";
 }
 
 function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: number) {
@@ -190,7 +186,7 @@ function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: nu
     <section class="episode-card">
       <div class="episode-kicker">Zastavení ${episodeIndex + 1}</div>
       <h3>${escapeHtml(episode.name)}</h3>
-      ${renderPrintableStopPhoto(episode)}
+      ${renderPrintableStopVisual(episode)}
       <p class="episode-intro">${escapeHtml(episode.intro)}</p>
       <p class="episode-bg">${escapeHtml(episode.background)}</p>
       <ol class="tasks-list">${taskList}</ol>
@@ -402,24 +398,20 @@ async function buildPrintableHtml(locationId?: string) {
         font-size: 12px;
         color: #556b90;
       }
-      /* R27: fotka zastávky. Pevná maximální výška drží tisk v rozumné spotřebě
-         a object-fit zachová poměr stran u fotek na výšku i na šířku. */
-      .stop-photo {
+      /* R27: připravené místo pro budoucí ilustraci Traki u zastávky.
+         Pevná maximální výška drží tisk v rozumné spotřebě papíru a inkoustu,
+         object-fit zachová poměr stran na výšku i na šířku. Dnes se nepoužívá,
+         protože fotografie skutečných míst do tisku nepatří. */
+      .stop-visual {
         margin: 8px 0 0;
         page-break-inside: avoid;
       }
-      .stop-photo img {
+      .stop-visual img {
         display: block;
         width: 100%;
         max-height: 52mm;
-        object-fit: cover;
+        object-fit: contain;
         border-radius: 12px;
-        border: 1px solid #dfe8ff;
-      }
-      .stop-photo figcaption {
-        margin-top: 4px;
-        font-size: 11px;
-        color: #6b7f9f;
       }
       .episode-card { page-break-inside: avoid; }
       .sheet-footer {

@@ -76,6 +76,9 @@ test("hráčské UI nikde nemluví o přihlášení jako o herní akci", () => {
     const where = path.relative(root, file);
     assert.ok(!/Přihlásit a hrát/.test(src), `${where}: zůstal popisek „Přihlásit a hrát“`);
     assert.ok(!/Po kliknutí se otevře přihlášení hráče/.test(src), `${where}: zůstala věta o přihlášení hráče`);
+    assert.ok(!/Tiskovku si stáhneš i bez přihlášení/.test(src), `${where}: zůstala věta o přihlášení u tiskové verze`);
+    assert.ok(!/Hry si můžeš projít hned/.test(src), `${where}: zůstala věta o přihlášení na titulní stránce`);
+    assert.ok(!/Přihlášení hráče se otevře/.test(src), `${where}: zůstalo vysvětlování, kdy se otevře přihlášení`);
     assert.ok(!/login_and_play/.test(src), `${where}: zůstala větev zrušené akce`);
   }
 });

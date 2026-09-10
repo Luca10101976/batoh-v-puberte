@@ -232,12 +232,6 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
           </p>
         </div>
 
-        {!state.registrationCompleted ? (
-          <p className="mt-3 text-sm leading-6 text-mist">
-            Hry si můžeš projít hned. Přihlášení hráče se otevře až ve chvíli, kdy budeš chtít opravdu hrát.
-          </p>
-        ) : null}
-
         {cityLocations.length === 0 ? (
           <div className="mt-5 flex items-center gap-4 rounded-2xl bg-white/5 p-4">
             <Image

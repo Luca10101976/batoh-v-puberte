@@ -165,15 +165,30 @@ function renderPrintableTask(task: PublicGameplayTask, taskIndex: number) {
 }
 
 /**
- * R27: místo pro vizuál zastávky v tiskovém sešitu.
+ * R27: ilustrace Traki v tiskovém sešitu.
  *
- * Fotografie skutečných míst se do tisku ZÁMĚRNĚ nedávají – tiskové hry mají mít
- * vlastní výtvarnou identitu Traki, ne fotky z databáze. Ty zůstávají beze změny
- * v online hře, tahle funkce je jen nepoužívá.
+ * Sešit má vlastní výtvarnou identitu, ne fotky skutečných míst z databáze – ty
+ * zůstávají beze změny v online hře. Používá se schválená sada samolepek Traki
+ * (lib/illustrations.ts) a jen tam, kde ilustrace znamená totéž co v aplikaci:
+ * blok u papírové hry, rozcestník u přechodu na zastávku, konfety u konce hry.
  *
- * Až budou hotové ilustrace Traki pro jednotlivé zastávky, vrátí se odtud
- * `<figure class="stop-visual">` s vybranou ilustrací. Do té doby se netiskne nic
- * a žádný zástupný obrázek se nevymýšlí – prázdné místo je lepší než cizí vizuál.
+ * Ilustrace se tisknou malé a přes optimalizátor obrázků, aby sešit nestál
+ * zbytečný inkoust.
+ */
+function trakiIllustration(
+  name: "blok" | "rozcestnik" | "konfety" | "batoh" | "mapa" | "pohar",
+  size: 96 | 128 | 256
+) {
+  // Šířka musí být jedna z povolených velikostí Next.js (imageSizes), jinak
+  // optimalizátor vrátí 400 a v tisku by zůstalo prázdné místo.
+  return `/_next/image?url=${encodeURIComponent(`/illustrations/traki/${name}.webp`)}&w=${size}&q=75`;
+}
+
+/**
+ * Vizuál konkrétní zastávky. Sada Traki dnes obsahuje ilustrace HERNÍCH STAVŮ,
+ * ne obrázky jednotlivých míst, takže se sem zatím nic nedosazuje – vybrat
+ * zastávce ilustraci je autorské rozhodnutí. Až vzniknou, stačí odtud vrátit
+ * `<figure class="stop-visual">`; styl je připravený.
  */
 function renderPrintableStopVisual(_episode: PublicGameplayEpisode) {
   return "";
@@ -185,7 +200,10 @@ function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: nu
   return `
     <section class="episode-card">
       <div class="episode-kicker">Zastavení ${episodeIndex + 1}</div>
-      <h3>${escapeHtml(episode.name)}</h3>
+      <div class="episode-head">
+        <img class="traki-icon" src="${escapeHtml(trakiIllustration("rozcestnik", 96))}" alt="" />
+        <h3>${escapeHtml(episode.name)}</h3>
+      </div>
       ${renderPrintableStopVisual(episode)}
       <p class="episode-intro">${escapeHtml(episode.intro)}</p>
       <p class="episode-bg">${escapeHtml(episode.background)}</p>
@@ -205,7 +223,10 @@ function renderPrintableLocation(location: PrintableLocation) {
         <p>${escapeHtml(location.teaser)}</p>
       </header>
       <section class="story-card">
-        <h3>Příběh mise</h3>
+        <div class="story-head">
+          <img class="traki-icon" src="${escapeHtml(trakiIllustration("mapa", 96))}" alt="" />
+          <h3>Příběh mise</h3>
+        </div>
         <p>${escapeHtml(location.introStory)}</p>
         <p>${escapeHtml(location.story)}</p>
       </section>
@@ -215,7 +236,10 @@ function renderPrintableLocation(location: PrintableLocation) {
         <p>Konec příběhu se dozvíš v aplikaci, až tam svoje odpovědi přepíšeš a hru dokončíš.</p>
       </section>
       <section class="score-box">
-        <div class="score-title">Hotovo? Zbývá poslední krok</div>
+        <div class="score-head">
+          <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("konfety", 128))}" alt="" />
+          <div class="score-title">Hotovo? Zbývá poslední krok</div>
+        </div>
         <div>Tenhle list patří: ...............................................................</div>
         <div>Doma otevři stejnou hru na www.postope.cz a odpovědi z papíru do ní postupně přepiš.</div>
         <div>Body, výsledek i konec příběhu spočítá Traki za tebe. Na papíře nic sčítat nemusíš.</div>
@@ -402,6 +426,39 @@ async function buildPrintableHtml(locationId?: string) {
          Pevná maximální výška drží tisk v rozumné spotřebě papíru a inkoustu,
          object-fit zachová poměr stran na výšku i na šířku. Dnes se nepoužívá,
          protože fotografie skutečných míst do tisku nepatří. */
+      /* R27: ilustrace Traki. Malé, s prostorem kolem, ať sešit nestojí inkoust
+         a ať se nadpis nikdy nerozjede na druhý řádek pod obrázek. */
+      .traki-icon {
+        width: 11mm;
+        height: 11mm;
+        object-fit: contain;
+        flex: 0 0 auto;
+      }
+      .traki-icon-lg { width: 14mm; height: 14mm; }
+      .traki-icon-xl { width: 16mm; height: 16mm; }
+      .episode-head,
+      .howto-head,
+      .score-head,
+      .story-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .episode-head h3,
+      .story-head h3 { margin: 0; }
+      .story-head { margin-bottom: 8px; }
+      .howto-head { margin-bottom: 8px; }
+      .howto-head .howto-title { margin-bottom: 0; }
+      .score-head { margin-bottom: 8px; }
+      .score-head .score-title { margin-bottom: 0; }
+      .sheet-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .sheet-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .sheet-footer .cta-title { flex: 1 1 auto; }
+      .sheet-footer .cta-url,
+      .sheet-footer .cta-sub { flex: 1 1 100%; }
+      .sheet-header .sheet-title { flex: 1 1 auto; }
+      .sheet-header .sheet-sub { flex: 1 1 100%; }
+      .sheet-header .traki-icon-xl { flex: 0 0 auto; }
       .stop-visual {
         margin: 8px 0 0;
         page-break-inside: avoid;
@@ -435,11 +492,15 @@ async function buildPrintableHtml(locationId?: string) {
   </head>
   <body>
     <header class="sheet-header">
+      <img class="traki-icon traki-icon-xl" src="${escapeHtml(trakiIllustration("batoh", 256))}" alt="" />
       <div class="sheet-title">Traki na stopě tajemství - tisková hra</div>
       <div class="sheet-sub">Vytiskni si sešit, hraj venku podle papíru a doma svoje odpovědi přepiš do aplikace na www.postope.cz</div>
     </header>
     <section class="howto">
-      <div class="howto-title">Jak se hraje s papírem</div>
+      <div class="howto-head">
+        <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("blok", 128))}" alt="" />
+        <div class="howto-title">Jak se hraje s papírem</div>
+      </div>
       <ol class="howto-steps">
         <li><strong>Venku</strong> běž zastávku po zastávce a svoje odpovědi piš rovnou do listu.</li>
         <li><strong>Nevíš?</strong> Nech řádek prázdný a jdi dál. Doma ti Traki nabídne nápovědu.</li>
@@ -454,6 +515,7 @@ async function buildPrintableHtml(locationId?: string) {
     </section>
     ${locationSections}
     <footer class="sheet-footer">
+      <img class="traki-icon traki-icon-lg" src="${escapeHtml(trakiIllustration("pohar", 128))}" alt="" />
       <div class="cta-title">Bavilo tě to? Zahraj si další hry v aplikaci</div>
       <div class="cta-url">www.postope.cz</div>
       <div class="cta-sub">Body za odpovědi, žebříček s kamarády a nové mise. Funguje na mobilu, bez instalace a zdarma.</div>

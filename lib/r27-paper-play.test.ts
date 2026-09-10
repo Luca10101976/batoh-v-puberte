@@ -54,8 +54,47 @@ test("A6 – tisk nepoužívá fotografie skutečných míst", () => {
   assert.ok(!/renderPrintableStopPhoto/.test(src), "zůstala funkce pro tisk fotky");
   assert.ok(!/class="stop-photo"/.test(src), "zůstala fotka zastávky");
   assert.ok(!/Podle téhle fotky poznáš místo/.test(src), "zůstal popisek k fotce");
-  assert.ok(!/_next\/image\?url=/.test(src), "tisk pořád sahá na obrázky z databáze");
   assert.ok(!/episode\.illustrationImage/.test(src), "tisk pořád čte obrázek zastávky");
+  // Jediné obrázky v sešitu smí být vlastní ilustrace Traki ze statických souborů.
+  for (const match of src.matchAll(/_next\/image\?url=\$\{encodeURIComponent\(([^)]*)\)/g)) {
+    assert.match(match[1], /illustrations\/traki/, `tisk sahá na cizí obrázek: ${match[1]}`);
+  }
+  assert.ok(!/supabase/i.test(src), "v tisku zůstal odkaz na fotku z úložiště");
+});
+
+test("A6b – sešit používá ilustrace Traki, a jen ty se schváleným významem", () => {
+  const src = read(PRINT);
+  assert.match(src, /function trakiIllustration/);
+  // Batoh = start hry, blok = papírová hra, rozcestník = přechod na zastávku,
+  // konfety = konec. Stejný význam jako v aplikaci (lib/illustrations.ts).
+  for (const [name, where] of [
+    ["batoh", "hlavička sešitu"],
+    ["blok", "návod k papírové hře"],
+    ["rozcestnik", "nadpis zastávky"],
+    ["konfety", "závěrečný blok"],
+    ["mapa", "příběh mise"],
+    ["pohar", "patička o žebříčku"]
+  ] as const) {
+    assert.match(src, new RegExp(`trakiIllustration\\("${name}"`), `chybí ilustrace ${name} (${where})`);
+    assert.ok(
+      fs.existsSync(path.join(ROOT, `public/illustrations/traki/${name}.webp`)),
+      `soubor ilustrace ${name} neexistuje`
+    );
+  }
+  // Šířky musí být povolené velikosti Next.js, jinak optimalizátor vrátí 400.
+  for (const width of src.match(/trakiIllustration\("\w+", (\d+)\)/g) ?? []) {
+    const size = Number(width.match(/(\d+)\)/)![1]);
+    assert.ok([96, 128, 256].includes(size), `nepovolená šířka obrázku: ${size}`);
+  }
+});
+
+test("A6c – ilustrace nerozbíjejí tiskový layout", () => {
+  const src = read(PRINT);
+  assert.match(src, /\.traki-icon \{[\s\S]*?width: 11mm/, "ilustrace musí mít pevnou malou velikost");
+  assert.match(src, /object-fit: contain/, "ilustrace se nemá ořezávat");
+  const flexBlock = src.slice(src.indexOf(".episode-head,"), src.indexOf(".episode-head,") + 220);
+  assert.match(flexBlock, /display: flex/, "nadpis a ikona mají stát vedle sebe");
+  assert.match(flexBlock, /align-items: center/);
 });
 
 test("A7 – místo pro budoucí ilustraci Traki je připravené, ale prázdné", () => {

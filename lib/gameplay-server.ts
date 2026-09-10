@@ -37,7 +37,6 @@ type MissionDbRow = {
   hero_image_url?: string;
   difficulty?: "lehka" | "stredni" | "tezka";
   duration_min?: number;
-  points?: number;
   is_published?: boolean;
   short_description?: string | null;
   catalog_order?: number | null;
@@ -268,7 +267,7 @@ async function fetchPublishedMissionById(
     supabase
     .from("missions")
     .select(
-      "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, ending_title, ending_text, ending_player_message"
+      "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published, ending_title, ending_text, ending_player_message"
     )
       .eq("id", missionId)
   ).maybeSingle<MissionDbRow>();
@@ -285,7 +284,7 @@ async function fetchPublishedMissionById(
     const queryWithoutEnding = await withPublishFilter(
       supabase
         .from("missions")
-        .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published")
+        .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published")
         .eq("id", missionId)
     ).maybeSingle<MissionDbRow>();
     if (!queryWithoutEnding.error) {
@@ -300,7 +299,7 @@ async function fetchPublishedMissionById(
   const queryWithoutHero = await withPublishFilter(
     supabase
       .from("missions")
-      .select("id, title, city, intro_text, difficulty, duration_min, points, is_published")
+      .select("id, title, city, intro_text, difficulty, duration_min, is_published")
       .eq("id", missionId)
   ).maybeSingle<MissionDbRow>();
 
@@ -452,8 +451,8 @@ export async function getGameplayEpisodes(
 // ---------------------------------------------------------------------------
 
 const CATALOG_COLUMNS =
-  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, points, catalog_order, is_published, unlock_after_mission_id";
-const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published";
+  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, catalog_order, is_published, unlock_after_mission_id";
+const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published";
 
 /** Historický slug hry podle UUID mise (stabilní mapa); jinak UUID mise. */
 function resolveCatalogLocationId(row: CatalogMissionRow) {

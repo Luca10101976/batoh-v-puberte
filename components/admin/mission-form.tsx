@@ -233,7 +233,6 @@ export function MissionForm({
           ) : null}
         </label>
 
-        <input type="hidden" name="points" value={mission?.points ?? 0} />
       </section>
 
       {state.success ? (

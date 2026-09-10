@@ -264,3 +264,28 @@ function fakeAdmin(data: {
     }
   };
 }
+
+// ---------------------------------------------------------------------------
+// H. R39: body hry se neukládají, odvozují se
+// ---------------------------------------------------------------------------
+
+test("H1 – uložený sloupec s body hry zanikl", () => {
+  const migration = read("supabase/migrations/20260910180000_r39_drop_stored_mission_points.sql");
+  assert.match(migration, /alter table public\.missions drop column if exists points;/);
+});
+
+test("H2 – nikdo body hry neukládá ani nečte", () => {
+  const offenders = PRODUCTION_FILES.filter((file) => {
+    const src = code(file);
+    // Hledá se sloupec missions.points, ne penalty_points ani POINTS_PER_TASK.
+    return /\bpoints\b/.test(src.replace(/penalty_points|POINTS_PER_TASK|maxPoints|earnedPoints|points_/g, ""));
+  });
+  assert.deepEqual(offenders, [], `uložené body hry používají: ${offenders.join(", ")}`);
+});
+
+test("H3 – Mozek počítá body hry z jejích úkolů", () => {
+  const page = code("app/admin/missions/page.tsx");
+  assert.match(page, /maxScoreByMission/);
+  assert.match(page, /POINTS_PER_TASK/);
+  assert.match(page, /from\("mission_tasks"\)/);
+});

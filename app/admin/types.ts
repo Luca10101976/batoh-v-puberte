@@ -9,7 +9,6 @@ export type MissionRow = {
   hero_image_url?: string | null;
   difficulty: MissionDifficulty;
   duration_min: number;
-  points: number;
   is_published: boolean;
   /** R25: autorský závěr hry. */
   ending_title?: string | null;

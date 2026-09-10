@@ -20,7 +20,6 @@ export type CatalogMissionRow = {
   hero_image_url?: string | null;
   difficulty?: string | null;
   duration_min?: number | null;
-  points?: number | null;
   catalog_order?: number | null;
   is_published?: boolean | null;
   unlock_after_mission_id?: string | null;
@@ -37,7 +36,6 @@ export type CatalogEntry = {
   heroImageUrl: string | null;
   difficulty: string | null;
   durationMin: number | null;
-  points: number | null;
   catalogOrder: number;
   /**
    * locationId hry, kterou je nutné dokončit; null = dostupná bez podmínky.
@@ -102,7 +100,6 @@ export function buildCatalog(
         heroImageUrl: (row.hero_image_url ?? "").trim() || null,
         difficulty: row.difficulty ?? null,
         durationMin: typeof row.duration_min === "number" && Number.isFinite(row.duration_min) ? row.duration_min : null,
-        points: typeof row.points === "number" && Number.isFinite(row.points) ? row.points : null,
         catalogOrder: toOrder(row.catalog_order),
         unlockAfterLocationId: row.unlock_after_mission_id
           ? requiredRow

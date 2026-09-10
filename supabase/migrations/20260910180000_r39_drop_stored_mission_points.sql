@@ -1,0 +1,14 @@
+-- R39: body hry se nesmí ukládat jako druhá pravda.
+--
+-- missions.points bylo ručně uložené číslo, které nikdo nepřepočítával. Před
+-- odstraněním drželo u Klamovky 120 bodů (skutečnost podle úkolů 190) a
+-- u Budějovic 180 (skutečnost 130). Do hráčského rozhraní se nedostávalo, ale
+-- v Mozku se zobrazovalo v přehledu her, takže administrátorka viděla nepravdu.
+--
+-- Maximum hry je odvozená hodnota: počet jejích úkolů × body za úkol. Počítá ho
+-- žebříček (R33), profil (R38) i Mozek. Uložený sloupec proto zaniká – nemá co
+-- držet a nemá se z čeho stát druhý zdroj pravdy.
+--
+-- Migrace nemaže žádnou odpověď hráče, žádný výsledek, žádný profil ani žádný
+-- text hry. Ruší jediný sloupec s odvozeným číslem, které bylo navíc nesprávné.
+alter table public.missions drop column if exists points;

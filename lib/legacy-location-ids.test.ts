@@ -27,7 +27,6 @@ const mission = (over: Partial<CatalogMissionRow> & { id: string }): CatalogMiss
   hero_image_url: "",
   difficulty: "stredni",
   duration_min: 50,
-  points: 120,
   catalog_order: 0,
   is_published: true,
   unlock_after_mission_id: null,

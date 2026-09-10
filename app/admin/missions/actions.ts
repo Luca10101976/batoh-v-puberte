@@ -60,7 +60,6 @@ async function parseMission(formData: FormData) {
   const shortDescription = normalizeText(formData.get("short_description"));
   const difficultyRaw = normalizeText(formData.get("difficulty")) as MissionDifficulty;
   const duration = parsePositiveInt(normalizeText(formData.get("duration_min")));
-  const points = parsePositiveInt(normalizeText(formData.get("points"))) ?? 0;
   const catalogOrder = parsePositiveInt(normalizeText(formData.get("catalog_order")));
   const unlockAfter = normalizeText(formData.get("unlock_after_mission_id"));
   const endingTitle = normalizeText(formData.get("ending_title"));
@@ -103,7 +102,6 @@ async function parseMission(formData: FormData) {
       short_description: shortDescription,
       difficulty: difficultyRaw,
       duration_min: duration as number,
-      points,
       catalog_order: catalogOrder as number,
       unlock_after_mission_id: unlockAfter || null,
       ending_title: endingTitle,

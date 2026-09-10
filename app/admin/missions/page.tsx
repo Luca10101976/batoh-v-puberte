@@ -2,6 +2,7 @@ import Link from "next/link";
 import { toggleMissionPublishAction } from "@/app/admin/missions/actions";
 import type { MissionRow, MissionStopRow } from "@/app/admin/types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { POINTS_PER_TASK } from "@/lib/game-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function AdminMissionsPage({
   const [{ data, error }, { data: stopsData, error: stopsError }] = await Promise.all([
     supabase
       .from("missions")
-      .select("id, title, city, difficulty, is_published, created_at, intro_text, duration_min, points")
+      .select("id, title, city, difficulty, is_published, created_at, intro_text, duration_min")
       .order("created_at", { ascending: false }),
     supabase
       .from("mission_stops")
@@ -48,6 +49,27 @@ export default async function AdminMissionsPage({
 
   const dbMissions = ((data ?? []) as MissionRow[]) ?? [];
   const dbStops = ((stopsData ?? []) as MissionStopRow[]) ?? [];
+
+  // R39: body hry jsou odvozená hodnota – počet úkolů × body za úkol. Dřív tu
+  // stálo ručně uložené číslo v missions.points, které nikdo nepřepočítával,
+  // takže u Klamovky ukazovalo 120 místo skutečných 190.
+  const maxScoreByMission = new Map<string, number>();
+  if (dbStops.length > 0) {
+    const missionByStop = new Map(dbStops.map((stop) => [stop.id, stop.mission_id]));
+    const { data: taskRows } = await supabase
+      .from("mission_tasks")
+      .select("stop_id")
+      .in(
+        "stop_id",
+        dbStops.map((stop) => stop.id)
+      );
+    for (const task of ((taskRows as Array<{ stop_id: string }> | null) ?? [])) {
+      const missionId = missionByStop.get(task.stop_id);
+      if (missionId) {
+        maxScoreByMission.set(missionId, (maxScoreByMission.get(missionId) ?? 0) + POINTS_PER_TASK);
+      }
+    }
+  }
   const status = statusText(resolvedSearchParams?.status);
 
   // R38: prázdná databáze je prostě prázdný stav. Dřív se sem nalil obsah z kódu
@@ -151,7 +173,8 @@ export default async function AdminMissionsPage({
                   </div>
 
                   <p className="mt-2 text-sm text-mist">
-                    {mission.city} • obtížnost: {mission.difficulty} • {mission.duration_min} min • {mission.points} bodů
+                    {mission.city} • obtížnost: {mission.difficulty} • {mission.duration_min} min •{" "}
+                    {maxScoreByMission.get(mission.id) ?? 0} bodů
                   </p>
 
                   <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">

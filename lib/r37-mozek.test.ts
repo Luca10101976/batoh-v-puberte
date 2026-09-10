@@ -283,6 +283,19 @@ test("D5 – hlášky jsou srozumitelné a skloňují se", () => {
   assert.equal(describeUsage(NO_USAGE), "Tuhle hru zatím nikdo nehrál.");
 });
 
+test("D5b – využití se čte ze skutečných sloupců a chyba se nepřehlédne", () => {
+  const server = read("lib/mission-usage-server.ts");
+  // child_game_sessions drží hru ve sloupci location_id, ne mission_id.
+  assert.match(server, /"child_game_sessions"[\s\S]{0,120}eq\("location_id"/);
+  assert.ok(!/"child_game_sessions"[\s\S]{0,120}eq\("mission_id"/.test(server), "špatný sloupec pro běžící výpravy");
+  assert.match(server, /error \|\| typeof count !== "number"/, "chybějící počet se musí poznat");
+
+  // Fail-closed: neznámé využití se bere jako používaná hra.
+  for (const page of ["app/admin/missions/[id]/page.tsx", "app/admin/stops/[id]/page.tsx"]) {
+    assert.match(read(page), /playersWithResult: 1/, `${page}: fallback musí být fail-closed`);
+  }
+});
+
 test("D6 – mazání se potvrzuje a server potvrzení ověřuje", () => {
   const missions = read("app/admin/missions/actions.ts");
   assert.match(missions, /const confirmed = normalizeText\(formData\.get\("confirm"\)\) === "smazat"/);

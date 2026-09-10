@@ -16,10 +16,12 @@ export function locationIdForMission(missionId: string) {
 
 async function countRows(admin: any, table: string, apply: (query: any) => any) {
   const { count, error } = await apply(admin.from(table).select("*", { count: "exact", head: true }));
-  if (error) {
-    throw new Error(`${table}_count_failed: ${error.message}`);
+  if (error || typeof count !== "number") {
+    // Fail-closed: bez spolehlivého čísla se hra musí tvářit jako používaná,
+    // jinak by se dala smazat na základě nedostupné informace.
+    throw new Error(`${table}_count_failed: ${error?.message || error?.code || "bez počtu"}`);
   }
-  return count ?? 0;
+  return count;
 }
 
 export async function getMissionUsage(admin: any, missionId: string): Promise<MissionUsage> {
@@ -27,7 +29,7 @@ export async function getMissionUsage(admin: any, missionId: string): Promise<Mi
 
   const [activeRuns, answers, resultRows] = await Promise.all([
     countRows(admin, "child_game_sessions", (query: any) =>
-      query.eq("mission_id", locationId).in("status", ["waiting", "active"])
+      query.eq("location_id", locationId).in("status", ["waiting", "active"])
     ),
     countRows(admin, "child_task_progress", (query: any) => query.eq("location_id", locationId)),
     admin.from("child_location_progress").select("profile_code").eq("location_id", locationId)
@@ -55,7 +57,7 @@ export async function getTaskUsage(admin: any, missionId: string, taskIds: strin
   const locationId = locationIdForMission(missionId);
   const [activeRuns, answers] = await Promise.all([
     countRows(admin, "child_game_sessions", (query: any) =>
-      query.eq("mission_id", locationId).in("status", ["waiting", "active"])
+      query.eq("location_id", locationId).in("status", ["waiting", "active"])
     ),
     countRows(admin, "child_task_progress", (query: any) =>
       query.eq("location_id", locationId).in("task_id", taskIds)

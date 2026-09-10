@@ -84,7 +84,9 @@ export default async function MissionDetailPage({
   const [allCities, activeCities, usage] = await Promise.all([
     loadCities(supabase),
     loadActiveCities(supabase),
-    getMissionUsage(supabase, mission.id).catch(() => ({ activeRuns: 0, playersWithResult: 0, answers: 0 }))
+    // Fail-closed: když se využití hry nepodaří zjistit, tváří se jako používaná.
+    // Nabídnout mazání na základě chybějící informace by bylo horší než neochota.
+    getMissionUsage(supabase, mission.id).catch(() => ({ activeRuns: 0, playersWithResult: 1, answers: 0 }))
   ]);
 
   // Vypnuté město se u nových her nenabízí, ale hra, která v něm už je, ho musí

@@ -96,9 +96,10 @@ export default async function StopEditPage({
   const status = statusText(resolvedSearchParams?.status);
   const tasks = ((tasksData ?? []) as MissionTaskRow[]) ?? [];
   // R37: než administrátorka do úkolů zasáhne, musí vědět, jestli je hra v provozu.
+  // Fail-closed: neznámé využití se považuje za používanou hru.
   const usage = await getMissionUsage(supabase, stop.mission_id).catch(() => ({
     activeRuns: 0,
-    playersWithResult: 0,
+    playersWithResult: 1,
     answers: 0
   }));
   const isUsed = usage.activeRuns > 0 || usage.playersWithResult > 0 || usage.answers > 0;

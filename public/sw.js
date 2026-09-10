@@ -1,4 +1,4 @@
-const CACHE_NAME = "traki-na-stope-v5";
+const CACHE_NAME = "traki-na-stope-v6";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/", "/offline", "/manifest.webmanifest", "/icon.png", "/apple-icon.png"];
 
@@ -43,6 +43,14 @@ self.addEventListener("fetch", (event) => {
 
   // Never cache Next.js build assets. Caching these can mix old/new chunks after deploy.
   if (requestUrl.pathname.startsWith("/_next/")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // R27: predbezne dotazy Nextu (?_rsc=...) se pri skutecne navigaci nikdy nepouziji,
+  // protoze ta ma jinou adresu. Drive se ukladaly a cache tim rostla bez uzitku.
+  // Traki nema offline hrani; pro hrani bez internetu slouzi tiskova verze hry.
+  if (requestUrl.searchParams.has("_rsc")) {
     event.respondWith(fetch(event.request));
     return;
   }

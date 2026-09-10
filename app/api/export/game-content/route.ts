@@ -164,6 +164,25 @@ function renderPrintableTask(task: PublicGameplayTask, taskIndex: number) {
   `;
 }
 
+/**
+ * R27: fotka zastávky pomáhá poznat místo v terénu. Jde přes optimalizátor obrázků,
+ * takže se netiskne originál (u některých zastávek přes 4 MB), ale zmenšená varianta.
+ * Zastávka bez fotky se vytiskne úplně normálně, jen bez ní.
+ */
+function renderPrintableStopPhoto(episode: PublicGameplayEpisode) {
+  const source = (episode.illustrationImage ?? "").trim();
+  if (!source) {
+    return "";
+  }
+  const optimized = `/_next/image?url=${encodeURIComponent(source)}&w=640&q=70`;
+  return `
+      <figure class="stop-photo">
+        <img src="${escapeHtml(optimized)}" alt="${escapeHtml(episode.name)}" loading="lazy" />
+        <figcaption>Podle téhle fotky poznáš místo.</figcaption>
+      </figure>
+  `;
+}
+
 function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: number) {
   const taskList = episode.tasks.map((task, taskIndex) => renderPrintableTask(task, taskIndex)).join("");
 
@@ -171,6 +190,7 @@ function renderPrintableEpisode(episode: PublicGameplayEpisode, episodeIndex: nu
     <section class="episode-card">
       <div class="episode-kicker">Zastavení ${episodeIndex + 1}</div>
       <h3>${escapeHtml(episode.name)}</h3>
+      ${renderPrintableStopPhoto(episode)}
       <p class="episode-intro">${escapeHtml(episode.intro)}</p>
       <p class="episode-bg">${escapeHtml(episode.background)}</p>
       <ol class="tasks-list">${taskList}</ol>
@@ -196,14 +216,13 @@ function renderPrintableLocation(location: PrintableLocation) {
       ${episodeSections}
       <section class="final-card">
         <h3>Závěr mise</h3>
-        <p>Závěr hry se dozvíš v aplikaci, až odpovědi zadáš a hru dokončíš.</p>
+        <p>Konec příběhu se dozvíš v aplikaci, až tam svoje odpovědi přepíšeš a hru dokončíš.</p>
       </section>
       <section class="score-box">
-        <div class="score-title">Výsledek hráče</div>
-        <div>Jméno: ...............................................................</div>
-        <div>Správně: ............</div>
-        <div>Nevím: ............</div>
-        <div>Body celkem: ............</div>
+        <div class="score-title">Hotovo? Zbývá poslední krok</div>
+        <div>Tenhle list patří: ...............................................................</div>
+        <div>Doma otevři stejnou hru na www.postope.cz a odpovědi z papíru do ní postupně přepiš.</div>
+        <div>Body, výsledek i konec příběhu spočítá Traki za tebe. Na papíře nic sčítat nemusíš.</div>
       </section>
     </section>
   `;
@@ -357,6 +376,52 @@ async function buildPrintableHtml(locationId?: string) {
         font-size: 12px;
         color: #556b90;
       }
+      .howto {
+        margin: 0 0 12px;
+        border: 1px solid #b9d595;
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: #f8fff0;
+        page-break-inside: avoid;
+      }
+      .howto-title {
+        font-size: 15px;
+        font-weight: 800;
+        color: #324f1a;
+        margin-bottom: 8px;
+      }
+      .howto-steps {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        color: #2c3f60;
+      }
+      .howto-steps li + li { margin-top: 4px; }
+      .howto-note {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #556b90;
+      }
+      /* R27: fotka zastávky. Pevná maximální výška drží tisk v rozumné spotřebě
+         a object-fit zachová poměr stran u fotek na výšku i na šířku. */
+      .stop-photo {
+        margin: 8px 0 0;
+        page-break-inside: avoid;
+      }
+      .stop-photo img {
+        display: block;
+        width: 100%;
+        max-height: 52mm;
+        object-fit: cover;
+        border-radius: 12px;
+        border: 1px solid #dfe8ff;
+      }
+      .stop-photo figcaption {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #6b7f9f;
+      }
+      .episode-card { page-break-inside: avoid; }
       .sheet-footer {
         border-radius: 16px;
         padding: 14px 16px;
@@ -379,9 +444,22 @@ async function buildPrintableHtml(locationId?: string) {
   <body>
     <header class="sheet-header">
       <div class="sheet-title">Traki na stopě tajemství - tisková hra</div>
-      <div class="sheet-sub">Vytiskni, hraj venku, doma přepiš výsledek do aplikace na www.postope.cz</div>
+      <div class="sheet-sub">Vytiskni si sešit, hraj venku podle papíru a doma svoje odpovědi přepiš do aplikace na www.postope.cz</div>
     </header>
-    <p class="print-note">Tip: ideální je oboustranný tisk. Odpovědi piš přímo do listu.</p>
+    <section class="howto">
+      <div class="howto-title">Jak se hraje s papírem</div>
+      <ol class="howto-steps">
+        <li><strong>Venku</strong> běž zastávku po zastávce a svoje odpovědi piš rovnou do listu.</li>
+        <li><strong>Nevíš?</strong> Nech řádek prázdný a jdi dál. Doma ti Traki nabídne nápovědu.</li>
+        <li><strong>Doma</strong> otevři stejnou hru na www.postope.cz a odpovědi postupně přepiš.</li>
+        <li><strong>Traki</strong> je vyhodnotí, spočítá body a ukáže ti konec příběhu.</li>
+      </ol>
+      <p class="howto-note">
+        V aplikaci máš na každý úkol tři pokusy. Po třetí špatné odpovědi se úkol uzavře jako Nevím,
+        takže si na papíře nech i variantu, které věříš nejvíc.
+      </p>
+      <p class="howto-note">Tip: ideální je oboustranný tisk.</p>
+    </section>
     ${locationSections}
     <footer class="sheet-footer">
       <div class="cta-title">Bavilo tě to? Zahraj si další hry v aplikaci</div>

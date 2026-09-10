@@ -50,6 +50,11 @@ const nextConfig = {
         ]
       : []
   },
+  // R27: /paper-score byla samostatná papírová obrazovka. Papírová cesta teď žije
+  // v tiskové sekci na detailu hry, takže stará adresa vede na výběr her.
+  async redirects() {
+    return [{ source: "/paper-score", destination: "/", permanent: false }];
+  },
   async headers() {
     return [
       {

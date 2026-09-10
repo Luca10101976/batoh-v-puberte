@@ -50,7 +50,6 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
   const needsManualRefresh =
     isAdminRoute ||
     pathname?.startsWith("/play") ||
-    pathname?.startsWith("/paper-score") ||
     pathname?.startsWith("/profile");
 
   const refreshToLatestVersion = useCallback(() => {

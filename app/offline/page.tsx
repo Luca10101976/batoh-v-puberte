@@ -18,7 +18,12 @@ export default function OfflinePage() {
         <p className="mt-3 text-xs uppercase tracking-[0.24em] text-coral">Offline režim</p>
         <h1 className="mt-3 text-2xl font-bold">Teď jsi bez internetu</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Až se vrátí připojení, hra se zase normálně načte. Klidně se vrať zpět a zkus to za chvíli.
+          Hrát se v Traki dá jen s připojením. Až se signál vrátí, hra se normálně načte a naváže tam, kde jsi
+          skončil.
+        </p>
+        <p className="mt-3 text-sm leading-6 text-mist">
+          Chystáš se někam, kde signál nebývá? Stáhni si příště u hry tiskovou verzi, vezmi ji s sebou a odpovědi
+          přepiš do aplikace, až budeš zpátky online.
         </p>
       </section>
     </main>

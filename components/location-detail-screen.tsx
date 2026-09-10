@@ -134,13 +134,27 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
           />
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
-            <h2 className="mt-2 text-xl font-semibold">Vytiskni si hru, ale vyhodnoť ji až v aplikaci</h2>
+            <h2 className="mt-2 text-xl font-semibold">Hraj podle papíru, vyhodnoť v aplikaci</h2>
           </div>
         </div>
         <p className="mt-2 text-sm leading-6 text-mist">
-          Tisková verze kopíruje stejné otázky jako hra. V terénu si na papír zapisuj odpovědi a doma je zadej do
-          aplikace, aby vznikl skutečný výsledek a případné odemčení další hry.
+          Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon.
         </p>
+        {/* R27: papírová cesta je tři kroky a končí v normální hře. Žádná zvláštní
+            papírová obrazovka ani ruční počítání bodů. */}
+        <ol className="mt-4 space-y-2 text-sm leading-6 text-white/90">
+          <li>
+            <span className="font-semibold text-white">1. Vytiskni si sešit</span> a vezmi ho ven.
+          </li>
+          <li>
+            <span className="font-semibold text-white">2. Venku piš odpovědi rovnou do papíru.</span> Co nevíš, nech
+            prázdné.
+          </li>
+          <li>
+            <span className="font-semibold text-white">3. Doma je přepiš do téhle hry.</span> Body, nápovědy i konec
+            příběhu pak fungují úplně stejně jako při hraní v aplikaci.
+          </li>
+        </ol>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <a
             href={`/api/export/game-content?format=print&locationId=${location.id}`}

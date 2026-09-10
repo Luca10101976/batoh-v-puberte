@@ -118,9 +118,6 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
             {model.primaryAction === "replay" ? (
               <p className="mt-3 text-sm text-mist">Tuhle hru už máš dokončenou. Nejlepší výsledek si novým průchodem nezhoršíš.</p>
             ) : null}
-            {model.primaryAction === "login_and_play" ? (
-              <p className="mt-3 text-sm text-mist">Po kliknutí se otevře přihlášení hráče a teprve pak samotná hra.</p>
-            ) : null}
           </>
         )}
       </section>
@@ -159,11 +156,6 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
             </Link>
           ) : null}
         </div>
-        {model.primaryAction === "login_and_play" ? (
-          <p className="mt-3 text-sm leading-6 text-mist">
-            Tiskovku si stáhneš i bez přihlášení. Hraní v appce se odemkne až po přihlášení hráče.
-          </p>
-        ) : null}
       </section>
     </main>
   );

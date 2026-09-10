@@ -52,7 +52,7 @@ test("F: souběžný start nesmí skončit chybou serveru", () => {
 
 test("C: dokončená hra + Hrát znovu založí novou výpravu", () => {
   const model = read("lib/location-detail-model.ts");
-  assert.match(model, /: input\.completed\s*\n\s*\? "replay"/);
+  assert.match(model, /playerState\.completed\s*\n?\s*\? "replay"/);
   assert.match(model, /replay: "Hrát znovu"/);
   // Hrát znovu volá tutéž operaci zahájení jako Hrát – nová výprava vznikne proto,
   // že po dokončení žádná neběží.
@@ -62,7 +62,7 @@ test("C: dokončená hra + Hrát znovu založí novou výpravu", () => {
 
 test("D: rozehraná hra nabídne Pokračovat a novou výpravu nezaloží", () => {
   const model = read("lib/location-detail-model.ts");
-  assert.match(model, /input\.hasActiveRun\s*\n?\s*\? "continue"/);
+  assert.match(model, /playerState\.hasActiveRun\s*\n?\s*\? "continue"/);
   assert.match(model, /continue: "Pokračovat"/);
 });
 
@@ -84,7 +84,8 @@ test("D: model rozliší všechny čtyři stavy hráče", async () => {
     "běžící výprava má přednost před dokončením"
   );
   assert.equal(buildLocationDetailModel({ ...base, unlocked: false }).primaryAction, "locked");
-  assert.equal(buildLocationDetailModel({ ...base, registered: false }).primaryLabel, "Přihlásit a hrát");
+  // Zařízení bez hráče začíná hru jako každý jiný začátek; identita není herní akce.
+  assert.equal(buildLocationDetailModel({ ...base, registered: false }).primaryLabel, "Hrát");
 });
 
 // ---------------------------------------------------------------------------

@@ -23,7 +23,14 @@ export type LocationDetailInput = {
   unlockRequirementName?: string | null;
   /** Výsledek fail-closed vyhodnocení zámku (R20) */
   unlocked: boolean;
-  /** Hráč má dokončenou registraci (může hrát bez přihlašovacího kroku) */
+  /**
+   * Hráč má na tomhle zařízení dokončenou registraci.
+   *
+   * Popisek hlavní akce to NEOVLIVŇUJE – z pohledu hry se pořád jde „Hrát“ a
+   * případné založení hráče si aplikace vyřídí až po kliknutí. Slouží jen k tomu,
+   * aby zařízení bez hráče nikdy nenabídlo Pokračovat ani Hrát znovu, protože
+   * rozehranost i dokončení jsou vlastnost konkrétního hráče.
+   */
   registered: boolean;
   /** R24: hráč má právě běžící výpravu této hry (zdroj: běžící sessions, ne nejlepší výsledek) */
   hasActiveRun?: boolean;
@@ -41,7 +48,7 @@ export type LocationDetailModel = {
   locked: boolean;
   /** Text pro zamčenou hru, např. „Nejdřív dokonči: Park Klamovka“ */
   lockMessage: string | null;
-  primaryAction: "play" | "continue" | "replay" | "login_and_play" | "locked";
+  primaryAction: "play" | "continue" | "replay" | "locked";
   /** Popisek hlavního tlačítka podle stavu hráče (R24) */
   primaryLabel: string;
 };
@@ -59,24 +66,27 @@ export function buildLocationDetailModel(input: LocationDetailInput): LocationDe
   const lockMessage = locked ? `Nejdřív dokonči: ${requirement || "předchozí hru"}` : null;
 
   // R24: rozehranost se bere z běžící výpravy, ne z nejlepšího výsledku.
-  //   běžící výprava      -> Pokračovat
+  //   běžící výprava        -> Pokračovat
   //   dokončeno, nic neběží -> Hrát znovu (vznikne nová výprava)
-  //   jinak               -> Hrát
+  //   jinak                 -> Hrát
+  //
+  // Hlavní akce popisuje STAV HRY, ne stav přihlášení. Dřív tu byla čtvrtá
+  // možnost „Přihlásit a hrát“ pro zařízení bez hráče; technická potřeba
+  // identity ale do názvu herní akce nepatří a hráč ji po kliknutí stejně
+  // vyřídí cestou, kterou aplikace zvolí sama.
+  const playerState = input.registered ? input : { hasActiveRun: false, completed: false };
   const primaryAction: LocationDetailModel["primaryAction"] = locked
     ? "locked"
-    : !input.registered
-      ? "login_and_play"
-      : input.hasActiveRun
-        ? "continue"
-        : input.completed
-          ? "replay"
-          : "play";
+    : playerState.hasActiveRun
+      ? "continue"
+      : playerState.completed
+        ? "replay"
+        : "play";
 
   const PRIMARY_LABELS: Record<LocationDetailModel["primaryAction"], string> = {
     play: "Hrát",
     continue: "Pokračovat",
     replay: "Hrát znovu",
-    login_and_play: "Přihlásit a hrát",
     locked: ""
   };
 

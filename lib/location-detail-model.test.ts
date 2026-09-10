@@ -25,8 +25,59 @@ test("dostupná hra: tlačítko Hrát, žádný štítek ODEMČENO", () => {
   assert.ok(!JSON.stringify(m).toLowerCase().includes("odemčeno"));
 });
 
-test("nepřihlášený hráč: „Přihlásit a hrát“, hra dostupná", () => {
-  assert.equal(buildLocationDetailModel({ ...base, registered: false }).primaryAction, "login_and_play");
+test("zařízení bez hráče: hlavní akce je „Hrát“, ne přihlášení", () => {
+  // Hlavní akce popisuje stav hry. Identitu si aplikace vyřídí až po kliknutí.
+  const m = buildLocationDetailModel({ ...base, registered: false });
+  assert.equal(m.primaryAction, "play");
+  assert.equal(m.primaryLabel, "Hrát");
+  assert.ok(!JSON.stringify(m).includes("Přihlásit"), "název herní akce nesmí mluvit o přihlášení");
+});
+
+test("zařízení bez hráče nikdy nenabídne Pokračovat ani Hrát znovu", () => {
+  // Rozehranost i dokončení patří konkrétnímu hráči; bez něj se hra začíná od začátku.
+  assert.equal(buildLocationDetailModel({ ...base, registered: false, hasActiveRun: true }).primaryLabel, "Hrát");
+  assert.equal(buildLocationDetailModel({ ...base, registered: false, completed: true }).primaryLabel, "Hrát");
+});
+
+test("zamčená hra zůstane zamčená i na zařízení bez hráče", () => {
+  const m = buildLocationDetailModel({ ...base, registered: false, unlocked: false, unlockRequirementName: "Park Klamovka" });
+  assert.equal(m.primaryAction, "locked");
+  assert.equal(m.primaryLabel, "");
+  assert.equal(m.lockMessage, "Nejdřív dokonči: Park Klamovka");
+});
+
+test("hráčské UI nikde nemluví o přihlášení jako o herní akci", () => {
+  const root = path.resolve(import.meta.dirname, "..");
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith(".test.ts")) {
+        files.push(full);
+      }
+    }
+  };
+  walk(path.join(root, "components"));
+  walk(path.join(root, "app"));
+  walk(path.join(root, "lib"));
+
+  assert.ok(files.length > 20, `test nic neprochází – souborů ${files.length}`);
+
+  for (const file of files) {
+    // Komentáře se nepočítají – ty smějí vysvětlovat, co se zrušilo a proč.
+    const src = fs
+      .readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+    const where = path.relative(root, file);
+    assert.ok(!/Přihlásit a hrát/.test(src), `${where}: zůstal popisek „Přihlásit a hrát“`);
+    assert.ok(!/Po kliknutí se otevře přihlášení hráče/.test(src), `${where}: zůstala věta o přihlášení hráče`);
+    assert.ok(!/login_and_play/.test(src), `${where}: zůstala větev zrušené akce`);
+  }
 });
 
 test("zamčená hra: nejde spustit a ukazuje prerequisite (skutečný název z katalogu)", () => {

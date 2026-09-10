@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { MobileAppCard } from "@/components/mobile-app-card";
-import { locations } from "@/lib/mock-data";
-import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib/avatars";
 import { AvatarPreview } from "@/components/avatar-preview";
 import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
@@ -107,10 +105,9 @@ export function ProfileScreen() {
       return null;
     }
   }, []);
-  const unlockedCount = useMemo(
-    () => locations.filter((location) => isLocationUnlocked(location.id, location.unlocked)).length,
-    [isLocationUnlocked]
-  );
+  // R38: kolik her Traki nabízí, ví katalog v databázi. Dřív se počítal seznam
+  // z obsahu v kódu, který o hrách vytvořených v Mozku nevěděl.
+  const [publishedGamesCount, setPublishedGamesCount] = useState(0);
   const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
   // Dokud server neodpoví, ukáže se poslední známý lokální součet; jakmile
   // dorazí autoritativní číslo, přebije ho.
@@ -150,13 +147,11 @@ export function ProfileScreen() {
     const rows = knownIds
       .map((locationId) => {
         const run = runByLocation.get(locationId) ?? null;
-        const location = locations.find((item) => item.id === locationId) ?? null;
-        const name = location?.name ?? run?.title ?? locationId;
-        const city = location?.city ?? run?.city ?? "";
-        const maxPoints = Math.max(
-          state.locationMaxScores[locationId] ?? 0,
-          getLocationMaxScore(getLocationTaskCount(locationId))
-        );
+        // R38: název, město a maximum hry pocházejí z databáze (přes profilové API).
+        const game = state.playedGames[locationId] ?? null;
+        const name = game?.name ?? run?.title ?? locationId;
+        const city = game?.city ?? run?.city ?? "";
+        const maxPoints = Math.max(state.locationMaxScores[locationId] ?? 0, game?.maxScore ?? 0);
         const earnedPoints = Math.max(0, state.locationBestScores[locationId] ?? 0);
         const isActive = Boolean(run);
         const isCompleted = completedIds.has(locationId);
@@ -655,10 +650,14 @@ export function ProfileScreen() {
       friends?: Array<{ code: string; name: string; addedAt?: string }>;
       session?: ActiveExpedition | null;
       totalScore?: number;
+      publishedGames?: number;
     };
 
     if (typeof payload.totalScore === "number") {
       setServerScore(Math.max(0, Math.floor(payload.totalScore)));
+    }
+    if (typeof payload.publishedGames === "number") {
+      setPublishedGamesCount(Math.max(0, Math.floor(payload.publishedGames)));
     }
 
     const effectiveProfile = payload.profile;
@@ -1281,7 +1280,7 @@ export function ProfileScreen() {
 
         <div className="mt-5 grid grid-cols-3 gap-3">
           <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-xl font-semibold">{unlockedCount}</div>
+            <div className="text-xl font-semibold">{publishedGamesCount}</div>
             <div className="text-xs text-mist">Hry</div>
           </div>
           <div className="rounded-2xl bg-white/5 p-3">

@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EMPTY_FORM_STATE, FormState, MissionDifficulty } from "@/app/admin/types";
-import { bootstrapMozekContent } from "@/app/admin/missions/bootstrap";
 import {
   findMissionPublishBlockers,
   type PublishTaskInput,
@@ -568,15 +567,4 @@ export async function deleteStopAction(formData: FormData) {
 
   revalidatePath(`/mozek/missions/${missionId}`);
   redirect(`/mozek/missions/${missionId}?status=stop_deleted`);
-}
-
-export async function enableMozekEditingAction() {
-  const result = await bootstrapMozekContent();
-
-  if (!result.ok) {
-    redirect("/mozek?status=import_failed");
-  }
-
-  revalidatePath("/mozek");
-  redirect(`/mozek?status=${result.alreadyReady ? "already_ready" : "import_enabled"}`);
 }

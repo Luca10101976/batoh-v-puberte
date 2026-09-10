@@ -5,8 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
-import { locations, type MapLocation } from "@/lib/mock-data";
-import { getUnlockRequirement } from "@/lib/location-unlock";
+import type { MapLocation } from "@/lib/gameplay-types";
 import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
 import {
   fallbackTransitionText,
@@ -109,7 +108,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   }, [searchParams, setActiveMode]);
 
   const locationUnlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
-  const unlockRequirement = getUnlockRequirement(location, locations);
+  // R38: název vyžadované hry spočítal server z katalogu v databázi (R21).
+  // Dřív se dohledával v obsahu v kódu, takže hru z Mozku neuměl pojmenovat.
+  const unlockRequirementName = location.unlockRequirementName ?? null;
   const taskPositionById = useMemo(() => {
     const map = new Map<string, { episodeIndex: number; taskIndex: number }>();
     location.episodes.forEach((episode, epIndex) => {
@@ -743,7 +744,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{location.name}</h1>
           <p className="mt-3 text-sm leading-6 text-mist">{location.shortDescription ?? location.teaser}</p>
           <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/90">
-            Odemkneš po dokončení: <span className="font-semibold">{unlockRequirement?.name ?? "předchozího místa"}</span>
+            Odemkneš po dokončení: <span className="font-semibold">{unlockRequirementName ?? "předchozí hry"}</span>
           </p>
         </section>
         <Link href={`/locations/${location.id}`} className="rounded-[24px] bg-lime px-5 py-4 text-center font-semibold text-night">

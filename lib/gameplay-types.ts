@@ -44,3 +44,40 @@ export type GameplayEnding = {
   endingStory: string;
   playerMessage: string;
 };
+
+/**
+ * R38: tvar hry tak, jak ji vydá server. Dřív tenhle typ žil v lib/mock-data.ts
+ * vedle obsahu Klamovky a Budějovic, takže kvůli němu musel zůstat v produkčním
+ * bundlu i celý herní obsah v kódu. Data teď pocházejí výhradně z databáze.
+ */
+export type MapLocation = {
+  id: string;
+  city: string;
+  name: string;
+  teaser: string;
+  shortDescription?: string;
+  unlockedByPlaceId?: string | null;
+  subtitle: string;
+  story: string;
+  image: string;
+  unlocked: boolean;
+  difficulty: "Lehká" | "Střední" | "Vyšší";
+  distance: string;
+  duration: string;
+  vibe: string[];
+  lat: number;
+  lng: number;
+  map: { x: number; y: number };
+  introLabel: string;
+  introStory: string;
+  endingTitle: string;
+  endingStory: string;
+  playerMessage: string;
+  interludes: string[];
+  episodes: GameplayEpisode[];
+  catalogOrder?: number;
+  /** Tvar města pro větu „Hry v …"; spravuje se v Mozku (R37). */
+  cityLocative?: string;
+  /** Název hry, kterou je potřeba dohrát dřív (R21/R22). */
+  unlockRequirementName?: string | null;
+};

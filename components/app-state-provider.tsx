@@ -12,9 +12,6 @@ import {
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
-import { locations } from "@/lib/mock-data";
-import { isLocationUnlockedByChain } from "@/lib/location-unlock";
-import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 import { DEFAULT_AVATAR_ID } from "@/lib/avatars";
 
 type SquadMember = {
@@ -56,6 +53,8 @@ type AppState = {
   lastCompletedAt: Record<string, string>;
   locationPenaltyPoints: Record<string, number>;
   locationBestScores: Record<string, number>;
+  /** R38: název, město a maximum bodů hry z databáze (pro historii v profilu). */
+  playedGames: Record<string, { name: string; city: string; maxScore: number }>;
   locationMaxScores: Record<string, number>;
   groupCompletionMembers: Record<string, string[]>;
   currentExpeditionId: string | null;
@@ -179,6 +178,7 @@ const initialState: AppState = {
   locationPenaltyPoints: {},
   locationBestScores: {},
   locationMaxScores: {},
+  playedGames: {},
   groupCompletionMembers: {},
   currentExpeditionId: null,
   activeMode: "solo",
@@ -343,6 +343,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           activeMission: parsed.activeMission ?? null,
           locationPenaltyPoints: parsed.locationPenaltyPoints ?? {},
           locationBestScores: (parsed as Partial<AppState>).locationBestScores ?? {},
+          playedGames: (parsed as Partial<AppState>).playedGames ?? {},
           locationMaxScores: (parsed as Partial<AppState>).locationMaxScores ?? {},
           groupCompletionMembers: parsed.groupCompletionMembers ?? {},
           currentExpeditionId: parsed.currentExpeditionId ?? null,
@@ -431,6 +432,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         avatar?: string | null;
         avatar_config?: AvatarConfig | null;
       } | null = null;
+      let remoteGames: Array<{ locationId: string; name: string; city: string; maxScore: number }> = [];
       let remoteRows: Array<{
         location_id: string;
         completed_at: string;
@@ -466,6 +468,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   avatar_config?: AvatarConfig | null;
                 } | null;
                 profile_id?: string | null;
+                games?: Array<{ locationId: string; name: string; city: string; maxScore: number }>;
                 progress?: Array<{
                   location_id: string;
                   completed_at: string;
@@ -480,6 +483,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
           childProfile = payload?.profile ? { ...payload.profile, profile_id: payload.profile_id ?? null } : null;
           remoteRows = payload?.progress ?? [];
+          remoteGames = payload?.games ?? [];
         }
       }
 
@@ -537,6 +541,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         // stavu a je vždy prázdné.
         const activeMission = null;
 
+        // R38: maximum hry přichází z databáze (počet úkolů × body za úkol).
+        // Dřív se dopočítávalo z obsahu v kódu, takže u Klamovky vycházelo 180
+        // místo skutečných 190.
+        const playedGames: AppState["playedGames"] = {};
+        remoteGames.forEach((game) => {
+          playedGames[game.locationId] = { name: game.name, city: game.city, maxScore: game.maxScore };
+        });
+
         remoteRows.forEach((row) => {
           lastCompletedAt[row.location_id] = row.completed_at;
           if (typeof row.penalty_points === "number" && row.penalty_points >= 0) {
@@ -547,12 +559,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }
           const bestScore = locationBestScores[row.location_id];
           const missingPoints = locationPenaltyPoints[row.location_id];
-          if (typeof bestScore === "number" && typeof missingPoints === "number") {
+          const dbMaxScore = playedGames[row.location_id]?.maxScore ?? 0;
+          if (dbMaxScore > 0) {
+            locationMaxScores[row.location_id] = dbMaxScore;
+          } else if (typeof bestScore === "number" && typeof missingPoints === "number") {
             locationMaxScores[row.location_id] = bestScore + missingPoints;
           } else if (typeof bestScore === "number") {
-            locationMaxScores[row.location_id] = Math.max(bestScore, getLocationMaxScore(getLocationTaskCount(row.location_id)));
-          } else {
-            locationMaxScores[row.location_id] = getLocationMaxScore(getLocationTaskCount(row.location_id));
+            locationMaxScores[row.location_id] = bestScore;
           }
         });
 
@@ -848,7 +861,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         [locationId]: Math.max(
           options?.maxScore ?? 0,
           current.locationMaxScores[locationId] ?? 0,
-          getLocationMaxScore(getLocationTaskCount(locationId))
+          options?.maxScore ?? 0
         )
       },
       completedLocationIds: current.completedLocationIds.includes(locationId)
@@ -894,11 +907,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (requiredLocationId !== undefined) {
         return requiredLocationId ? state.completedGameplayLocationIds.includes(requiredLocationId) : true;
       }
-      const location = locations.find((item) => item.id === locationId);
-      if (!location) {
-        return defaultUnlocked;
-      }
-      return isLocationUnlockedByChain(location, state.completedGameplayLocationIds, locations, defaultUnlocked);
+      // R38: bez katalogového zámku z databáze se rozhoduje jen podle výchozí
+      // hodnoty. Dřív se tu sahalo do obsahu v kódu, který o hrách z Mozku neví.
+      return defaultUnlocked;
     },
     [state.completedGameplayLocationIds]
   );

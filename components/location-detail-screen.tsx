@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import type { MapLocation } from "@/lib/mock-data";
+import type { MapLocation } from "@/lib/gameplay-types";
 import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { buildLocationDetailModel } from "@/lib/location-detail-model";
 import { illustrationSrc } from "@/lib/illustrations";

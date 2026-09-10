@@ -10,8 +10,6 @@
     "typecheck": "tsc --noEmit",
     "env:pull": "vercel env pull .env.local --environment=development",
     "test": "node --test --experimental-strip-types lib/*.test.ts",
-    "score:migrate:dry-run": "node --experimental-strip-types scripts/recalculate-historical-scores.mjs --dry-run",
-    "score:migrate:apply": "node --experimental-strip-types scripts/recalculate-historical-scores.mjs --apply",
     "verify:runtime-readonly": "node scripts/verify-runtime-readonly.mjs",
     "test:home-resume": "node --test --experimental-strip-types lib/home-resume.test.ts"
   },

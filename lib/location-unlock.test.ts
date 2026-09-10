@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getUnlockRequirement, isLocationUnlockedByChain } from "./location-unlock.ts";
-import type { MapLocation } from "./mock-data.ts";
+import type { MapLocation } from "./gameplay-types.ts";
 
 const loc = (id: string, unlockedByPlaceId: string | null): MapLocation =>
   ({ id, unlockedByPlaceId, city: "Praha", name: id, unlocked: false } as unknown as MapLocation);

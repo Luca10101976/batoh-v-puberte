@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimitSafe, getRequestIpAddress } from "@/lib/rate-limit";
 import { totalsByProfile, type LeaderboardProgressRow } from "@/lib/leaderboard-model";
 import { loadPublishedGameScores } from "@/lib/leaderboard-server";
+import { getCatalog } from "@/lib/gameplay-server";
 import { getAuthenticatedUser, getOwnedChildProfile, getOwnedChildProfiles, normalizeCode } from "@/app/api/expeditions/_shared";
 
 type OutgoingFriendshipRow = {
@@ -97,6 +98,13 @@ export async function GET(request: NextRequest) {
   // Profil je dřív bral z localStorage, takže mohl ukazovat jiné číslo než žebříček.
   let totalScore = 0;
   let completedGames = 0;
+  // R38: počet nabízených her přichází z katalogu v databázi, ne z obsahu v kódu.
+  let publishedGames = 0;
+  try {
+    publishedGames = (await getCatalog()).length;
+  } catch (error) {
+    console.error("[profile/overview] catalog", error);
+  }
   try {
     const publishedScores = await loadPublishedGameScores(auth.admin);
     const publishedLocationIds = Array.from(publishedScores.keys());
@@ -220,6 +228,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       totalScore,
       completedGames,
+      publishedGames,
       myCode: ownProfile.player_code || ownProfile.profile_code,
       profile_id: canonicalProfile?.id ?? ownProfile.id,
       profile: canonicalProfile
@@ -277,6 +286,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     totalScore,
     completedGames,
+    publishedGames,
     myCode: ownProfile.player_code || ownProfile.profile_code,
     profile_id: canonicalProfile?.id ?? ownProfile.id,
     profile: canonicalProfile

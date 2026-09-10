@@ -1,22 +1,12 @@
 import Link from "next/link";
-import { enableMozekEditingAction, toggleMissionPublishAction } from "@/app/admin/missions/actions";
+import { toggleMissionPublishAction } from "@/app/admin/missions/actions";
 import type { MissionRow, MissionStopRow } from "@/app/admin/types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { locations, nearbyMissions } from "@/lib/mock-data";
-import { getLocationMaxScore, getLocationTaskCount } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
 function statusText(status?: string) {
   switch (status) {
-    case "bootstrapped":
-      return { text: "✅ Mozek jsme naplnili aktuálním obsahem webu.", tone: "ok" as const };
-    case "import_enabled":
-      return { text: "✅ Obsah webu jsme propsali do databáze. Teď už jde normálně editovat.", tone: "ok" as const };
-    case "already_ready":
-      return { text: "✅ Databázový obsah už je připravený. Editace je zapnutá.", tone: "ok" as const };
-    case "import_failed":
-      return { text: "❌ Nepodařilo se převést obsah webu do databáze.", tone: "error" as const };
     case "published":
       return { text: "✅ Mise je publikovaná a viditelná pro hráče.", tone: "ok" as const };
     case "unpublished":
@@ -34,57 +24,6 @@ function statusText(status?: string) {
     default:
       return null;
   }
-}
-
-function mockMissionId(locationId: string) {
-  return `mock-${locationId}`;
-}
-
-function mockStopId(locationId: string, episodeId: string) {
-  return `mock-${locationId}-${episodeId}`;
-}
-
-function getFallbackMissions(): MissionRow[] {
-  return nearbyMissions.flatMap((mission, index) => {
-    const location = locations.find((item) => item.id === mission.locationId);
-    if (!location) {
-      return [];
-    }
-
-    return {
-      id: mockMissionId(location.id),
-      title: mission.name,
-      city: location.city,
-      intro_text: location.introStory || location.story || location.teaser,
-      difficulty: location.difficulty === "Lehká" ? "lehka" : location.difficulty === "Vyšší" ? "tezka" : "stredni",
-      duration_min: Math.max(
-        ...((location.duration.match(/\d+/g) ?? ["45"])
-          .map((item) => Number(item))
-          .filter((item) => Number.isFinite(item)) || [45])
-      ),
-      points: getLocationMaxScore(getLocationTaskCount(location.id)),
-      is_published: true,
-      created_at: new Date(Date.UTC(2024, 0, index + 1)).toISOString()
-    };
-  });
-}
-
-function getFallbackStops(): MissionStopRow[] {
-  return nearbyMissions.flatMap((mission) => {
-    const location = locations.find((item) => item.id === mission.locationId);
-    if (!location) {
-      return [];
-    }
-
-    return location.episodes.map((episode, index) => ({
-      id: mockStopId(location.id, episode.id),
-      mission_id: mockMissionId(location.id),
-      title: episode.name,
-      description: [episode.intro, episode.background].filter(Boolean).join("\n\n"),
-      image_url: episode.illustrationImage || location.image,
-      order: index + 1
-    }));
-  });
 }
 
 export default async function AdminMissionsPage({
@@ -111,9 +50,10 @@ export default async function AdminMissionsPage({
   const dbStops = ((stopsData ?? []) as MissionStopRow[]) ?? [];
   const status = statusText(resolvedSearchParams?.status);
 
-  const isUsingFallbackContent = !error && !stopsError && dbMissions.length === 0;
-  const missions = isUsingFallbackContent ? getFallbackMissions() : dbMissions;
-  const allStops = isUsingFallbackContent ? getFallbackStops() : dbStops;
+  // R38: prázdná databáze je prostě prázdný stav. Dřív se sem nalil obsah z kódu
+  // a šlo ho jedním tlačítkem publikovat mimo kontrolu hratelnosti z R37.
+  const missions = dbMissions;
+  const allStops = dbStops;
 
   const stopsByMission = new Map<string, MissionStopRow[]>();
   allStops.forEach((stop) => {
@@ -175,24 +115,6 @@ export default async function AdminMissionsPage({
         </section>
       ) : null}
 
-      {isUsingFallbackContent ? (
-        <section className="rounded-2xl border border-sky/30 bg-sky/10 px-4 py-3 text-sm text-sky">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p>
-              Databáze je zatím prázdná, takže Mozek teď ukazuje aktuální obsah přímo z webu. Pro skutečnou editaci ho potřebujeme jedním krokem propsat do databáze.
-            </p>
-            <form action={enableMozekEditingAction}>
-              <button
-                type="submit"
-                className="rounded-xl bg-sky px-4 py-2 text-sm font-semibold text-night"
-              >
-                Zapnout editaci
-              </button>
-            </form>
-          </div>
-        </section>
-      ) : null}
-
       {error ? (
         <section className="rounded-2xl border border-coral/30 bg-coral/10 px-4 py-3 text-sm text-coral">
           Nepodařilo se načíst mise: {error.message}
@@ -239,12 +161,7 @@ export default async function AdminMissionsPage({
                 </div>
 
                 <div className="grid w-full gap-3 sm:w-56">
-                  {mission.id.startsWith("mock-") ? (
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm text-mist">
-                      Náhled živého obsahu webu. Jakmile mise poběží z databáze, objeví se tu i plná editace.
-                    </div>
-                  ) : (
-                    <>
+                  <>
                       <form action={toggleMissionPublishAction}>
                         <input type="hidden" name="mission_id" value={mission.id} />
                         <input type="hidden" name="next_published" value={mission.is_published ? "false" : "true"} />
@@ -277,8 +194,7 @@ export default async function AdminMissionsPage({
                       >
                         Náhled hry
                       </Link>
-                    </>
-                  )}
+                  </>
                 </div>
               </div>
 
@@ -312,11 +228,6 @@ export default async function AdminMissionsPage({
                             </p>
                           </div>
 
-                          {stop.id.startsWith("mock-") ? (
-                            <div className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-center text-sm text-mist">
-                              Náhled z webu
-                            </div>
-                          ) : (
                             <div className="grid w-full gap-2 sm:w-44">
                               <Link
                                 href={`/mozek/stops/${stop.id}`}
@@ -331,7 +242,6 @@ export default async function AdminMissionsPage({
                                 Pořadí a mazání
                               </Link>
                             </div>
-                          )}
                         </div>
                       </div>
                     ))}

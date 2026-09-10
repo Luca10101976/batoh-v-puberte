@@ -6,7 +6,7 @@ import Image from "next/image";
 import { CitySelector } from "@/components/city-selector";
 import { useAppState } from "@/components/app-state-provider";
 import { buildResumeMissionCard, type ResumeMissionCard } from "@/lib/home-resume";
-import type { MapLocation } from "@/lib/mock-data";
+import type { MapLocation } from "@/lib/gameplay-types";
 import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-unlock";
 import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { constantTimeEquals } from "@/lib/constant-time";
-import { locations } from "@/lib/mock-data";
 import { getGameplayLocation, getGameplayLocationForExport, getPublishedLocationIds } from "@/lib/gameplay-server";
 import { loadPrintAssets } from "@/lib/print-assets";
 import { buildPrintDocument, type PrintableLocation } from "@/lib/print-document";

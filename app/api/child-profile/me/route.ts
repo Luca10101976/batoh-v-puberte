@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_AVATAR_ID, isStorableAvatarValue } from "@/lib/avatars";
 import { createClient } from "@supabase/supabase-js";
+import { loadPlayedGames, type PlayedGameInfo } from "@/lib/played-games-server";
 import { checkRateLimit, getRequestIpAddress } from "@/lib/rate-limit";
 import {
   NICKNAME_LENGTH_MESSAGE,
@@ -311,11 +312,27 @@ export async function GET(request: Request) {
       );
   }
 
+  // R38: název, město a maximum bodů hry dodá databáze. Profil je dřív bral
+  // z obsahu v kódu, takže hru z Mozku neuměl pojmenovat a u Klamovky počítal
+  // maximum 180 místo 190.
+  let games: PlayedGameInfo[] = [];
+  if (includeProgress && progressRows.length > 0) {
+    try {
+      games = await loadPlayedGames(
+        adminClient,
+        progressRows.map((row) => row.location_id)
+      );
+    } catch (error) {
+      console.error("[child-profile/me] games", error);
+    }
+  }
+
   return jsonNoStore({
     ok: true,
     profile,
     profile_id: toStr(rawProfile.id) || null,
-    progress: progressRows
+    progress: progressRows,
+    games
   });
 }
 

@@ -1,5 +1,4 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { locations, nearbyMissions, type Episode, type MapLocation } from "@/lib/mock-data";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
 import type { GameplayEnding, GameplayEpisode, GameplayTask, PublicGameplayTask } from "@/lib/gameplay-types";
 import { toPublicTask as stripServerOnlyTaskFields } from "@/lib/gameplay-public";
@@ -77,6 +76,9 @@ type DbBackedLocationSeed = {
   interludes: string[];
   catalogOrder: number;
 };
+
+/** Neutrální zástup, když hra nemá vlastní obrázek. Systémová ilustrace Traki, ne obsah jiné hry. */
+const NEUTRAL_GAME_IMAGE = "/illustrations/traki/mapa.webp";
 
 function mapDifficultyLabel(value?: "lehka" | "stredni" | "tezka") {
   if (value === "lehka") {
@@ -209,10 +211,10 @@ function buildDbBackedLocationSeed(
   // R20: popis karty = short_description, jinak první věta intro (katalogová vrstva)
   const teaserSource = catalogEntry?.teaser || firstSentence(introStory) || `${mission.city} městská mise`;
   const teaser = truncateText(teaserSource, 96);
-  const image =
-    mission.hero_image_url?.trim() ||
-    fallbackImage?.trim() ||
-    "/images/klamovka-chramek.jpeg";
+  // R38: titulní obrázek je obsah hry a patří do databáze. Když ho hra nemá,
+  // použije se její vlastní první fotka, a teprve pak neutrální ilustrace Traki.
+  // Nikdy ne fotka jiné hry – přesně to dřív dávalo Budějovicím obrázek Klamovky.
+  const image = mission.hero_image_url?.trim() || fallbackImage?.trim() || NEUTRAL_GAME_IMAGE;
 
   return {
     id: mission.id,
@@ -314,10 +316,6 @@ function getCanonicalMission(locationId: string) {
   return missionId ? { missionId } : null;
 }
 
-function getLegacyEpisode(location: MapLocation, stopOrder: number) {
-  return location.episodes[stopOrder - 1] ?? null;
-}
-
 function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): GameplayTask {
   const questionParts = splitQuestion(task.question);
   const correctnessRule = parseTaskCorrectnessRule(task.correct_answer, task.min_correct_matches);
@@ -378,48 +376,6 @@ function buildEpisodesFromDb(stops: MissionStopDbRow[], tasks: MissionTaskDbRow[
         .map((task) => buildTaskFromDb(stop, task))
     };
   });
-}
-
-function buildEpisodesFromMock(episodes: Episode[]): GameplayEpisode[] {
-  return episodes.map((episode) => ({
-    id: episode.id,
-    name: episode.name,
-    intro: episode.intro,
-    background: episode.background,
-    illustrationImage: episode.illustrationImage,
-    illustrationImageAlt: episode.illustrationImageAlt,
-    clue: episode.clue,
-    tasks: episode.tasks.map((task) => {
-      const options = task.options;
-      // R25: obsah v kódu už nikdy nedodává správné odpovědi. Autoritou je databáze.
-      const rawAnswers: string[] = [];
-      const mappedType = task.type === "choice" ? "vyber" : task.type === "photo" ? "otevrena" : "otevrena";
-      const canonicalChoiceAnswer =
-        task.type === "choice"
-          ? getCanonicalCorrectAnswer({
-              id: task.id,
-              type: mappedType,
-              question: `${task.title}\n\n${task.content}`.trim(),
-              correct_answer: rawAnswers.join("\n"),
-              options
-            })
-          : null;
-
-      return {
-        id: task.id,
-        type: task.type === "choice" ? "choice" : task.type === "photo" ? "photo" : "question",
-        typeLabel: task.typeLabel,
-        title: task.title,
-        content: task.content,
-        options,
-        illustrationImage: task.illustrationImage,
-        illustrationImageAlt: task.illustrationImageAlt,
-        correctAnswers: task.type === "choice" ? (canonicalChoiceAnswer ? [canonicalChoiceAnswer] : []) : rawAnswers,
-        minCorrectMatches: undefined,
-        legacyTaskId: task.id
-      };
-    })
-  }));
 }
 
 export async function getGameplayEpisodes(
@@ -519,13 +475,14 @@ function catalogUnlockedByPlaceId(entry: CatalogEntry | null) {
   return entry.unlockPrerequisiteInvalid ? INVALID_PREREQUISITE : entry.unlockAfterLocationId;
 }
 
+/**
+ * R38: název vyžadované hry („Nejdřív dohraj: …") přichází výhradně z katalogu
+ * v databázi. Dřív se hledal nejdřív v obsahu v kódu, takže hra přejmenovaná
+ * v Mozku se tady pořád ukazovala starým jménem.
+ */
 function resolveLocationDisplayName(locationId: string | null | undefined, catalog: CatalogEntry[]) {
   if (!locationId) {
     return null;
-  }
-  const mock = locations.find((item) => item.id === locationId);
-  if (mock) {
-    return mock.name;
   }
   return catalog.find((entry) => entry.locationId === locationId)?.title ?? null;
 }
@@ -555,16 +512,16 @@ export async function getCatalog(): Promise<CatalogEntry[]> {
 }
 
 /**
- * Publikované hry pro gameplay gating. Zdrojem je katalog (DB); při nedostupné DB
- * se zachovává dosavadní chování (mock ID), aby výpadek DB nezablokoval rozehranou hru.
+ * R38: publikované hry určuje výhradně katalog v databázi.
+ *
+ * Dřív se při nedostupné databázi vracel pevný seznam z kódu. To znamenalo, že
+ * výpadek databáze prohlásil za publikovanou i rozepsanou hru (Budějovice) –
+ * tedy pravý opak toho, co má fail-safe dělat. Chyba se proto propaguje
+ * a volající ji řeší jako chybu, ne jako jinou verzi katalogu.
  */
 export async function getPublishedLocationIds() {
-  try {
-    const catalog = await getCatalog();
-    return Array.from(new Set(catalog.map((entry) => entry.locationId)));
-  } catch {
-    return nearbyMissions.map((mission) => mission.locationId);
-  }
+  const catalog = await getCatalog();
+  return Array.from(new Set(catalog.map((entry) => entry.locationId)));
 }
 
 /**
@@ -572,16 +529,11 @@ export async function getPublishedLocationIds() {
  * Smí ji volat jen server. Do prohlížeče se nikdy nesmí dostat.
  */
 async function getGameplayLocationInternal(locationId: string, catalog?: CatalogEntry[]) {
-  const location = locations.find((item) => item.id === locationId) ?? null;
   const canonical = getCanonicalMission(locationId);
-  let catalogEntries: CatalogEntry[] = catalog ?? [];
-  if (!catalog) {
-    try {
-      catalogEntries = await getCatalog();
-    } catch {
-      catalogEntries = [];
-    }
-  }
+  // R38: katalog je jediný zdroj. Když ho nejde načíst, chyba se propaguje –
+  // nikdy se nesmí potichu použít stará kopie hry z kódu.
+  const catalogEntries: CatalogEntry[] = catalog ?? (await getCatalog());
+
   const resolvedEntry = resolveCatalogEntryForLocation(catalogEntries, locationId);
   if (resolvedEntry.isAlias) {
     // R21: UUID mise, která má kanonický slug, není samostatná adresa – jinak by šel
@@ -589,72 +541,36 @@ async function getGameplayLocationInternal(locationId: string, catalog?: Catalog
     return null;
   }
   const catalogEntry = resolvedEntry.entry;
+
   if (canonical) {
-    const publishedLocationIds = catalog
-      ? catalogEntries.map((entry) => entry.locationId)
-      : await getPublishedLocationIds();
+    const publishedLocationIds = catalogEntries.map((entry) => entry.locationId);
     if (!publishedLocationIds.includes(locationId)) {
       return null;
     }
   }
 
-  let mission: MissionDbRow | null = null;
-  if (canonical || !location) {
-    try {
-      const supabase = getSupabaseServerClient();
-      mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId);
-    } catch {
-      mission = null;
-    }
-  }
-
+  const supabase = getSupabaseServerClient();
+  const mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId);
   const episodes = await getGameplayEpisodes(locationId);
-  const cityMap = await loadCityMap();
 
-  if (!location) {
-    if (!mission || !episodes) {
-      return null;
-    }
-
-    const fallbackImage = episodes.find((episode) => episode.illustrationImage)?.illustrationImage;
-    const cityMeta = resolveCityMeta(cityMap, mission.city);
-    return {
-      ...buildDbBackedLocationSeed(mission, episodes, cityMeta, fallbackImage, catalogEntry),
-      // R37: tvar města pro větu „Hry v …" přichází z Mozku, ne z mapy v kódu.
-      cityLocative: cityMeta.locative,
-      // R21: název vyžadované hry pro detail („Nejdřív dokonči: …“)
-      unlockRequirementName: resolveLocationDisplayName(catalogEntry?.unlockAfterLocationId, catalogEntries),
-      episodes
-    };
+  // R38: hra bez obsahu v databázi se prostě nezobrazí. Žádná náhradní verze.
+  if (!mission || !episodes) {
+    return null;
   }
+
+  const cityMap = await loadCityMap();
+  const cityMeta = resolveCityMeta(cityMap, mission.city);
+  const fallbackImage = episodes.find((episode) => episode.illustrationImage)?.illustrationImage;
 
   return {
-    ...location,
-    cityLocative: resolveCityMeta(cityMap, mission?.city ?? location.city).locative,
-    // R20: katalogová pole z DB (popis karty, zámek, pořadí); hero fallback = stávající obrázek
-    teaser: catalogEntry?.teaser ? truncateText(catalogEntry.teaser, 96) : location.teaser,
-    shortDescription: catalogEntry?.teaser || location.shortDescription,
-    unlockedByPlaceId: catalogEntry ? catalogUnlockedByPlaceId(catalogEntry) : location.unlockedByPlaceId ?? null,
-    unlockRequirementName: resolveLocationDisplayName(
-      catalogEntry ? catalogEntry.unlockAfterLocationId : location.unlockedByPlaceId ?? null,
-      catalogEntries
-    ),
-    catalogOrder: catalogEntry?.catalogOrder ?? 0,
-    subtitle: mission?.title ?? location.subtitle,
-    introStory: mission?.intro_text ?? location.introStory,
-    // R25: autorský závěr se přesunul do databáze; obsah v kódu je jen záloha,
-    // dokud ho R38 neodstraní úplně.
-    endingTitle: (mission?.ending_title ?? "").trim() || location.endingTitle,
-    endingStory: (mission?.ending_text ?? "").trim() || location.endingStory,
-    playerMessage: (mission?.ending_player_message ?? "").trim() || location.playerMessage,
-    story: mission?.intro_text ? "" : location.story,
-    image: mission?.hero_image_url?.trim() ? mission.hero_image_url : location.image,
-    duration:
-      typeof mission?.duration_min === "number" && Number.isFinite(mission.duration_min)
-        ? `${mission.duration_min} min`
-        : location.duration,
-    difficulty: mapDifficultyLabel(mission?.difficulty) ?? location.difficulty,
-    episodes: episodes ?? buildEpisodesFromMock(location.episodes)
+    ...buildDbBackedLocationSeed(mission, episodes, cityMeta, fallbackImage, catalogEntry),
+    // Historická hra si drží svůj slug: pod ním má uložený postup i výsledky.
+    id: locationId,
+    // R37: tvar města pro větu „Hry v …" přichází z Mozku, ne z mapy v kódu.
+    cityLocative: cityMeta.locative,
+    // R21: název vyžadované hry pro detail („Nejdřív dokonči: …")
+    unlockRequirementName: resolveLocationDisplayName(catalogEntry?.unlockAfterLocationId, catalogEntries),
+    episodes
   };
 }
 
@@ -722,10 +638,9 @@ export async function getGameplayTask(locationId: string, taskId: string) {
     }
   }
 
+  // R38: úkol existuje jen tehdy, když ho má databáze.
   const episodes = await getGameplayEpisodes(locationId);
-  const sourceEpisodes = episodes ?? buildEpisodesFromMock(locations.find((item) => item.id === locationId)?.episodes ?? []);
-
-  for (const episode of sourceEpisodes) {
+  for (const episode of episodes ?? []) {
     const found = episode.tasks.find((task) => task.id === taskId);
     if (found) {
       return found;
@@ -744,7 +659,9 @@ export async function getGameplayTaskIds(locationId: string) {
     }
   }
 
+  // R38: seznam úkolů určuje výhradně databáze. Prázdný seznam znamená, že hra
+  // obsah nemá – nikdy se nedoplní z kódu, protože id úkolů by nesouhlasila
+  // s uloženými odpověďmi hráčů.
   const episodes = await getGameplayEpisodes(locationId);
-  const sourceEpisodes = episodes ?? buildEpisodesFromMock(locations.find((item) => item.id === locationId)?.episodes ?? []);
-  return sourceEpisodes.flatMap((episode) => episode.tasks.map((task) => task.id));
+  return (episodes ?? []).flatMap((episode) => episode.tasks.map((task) => task.id));
 }

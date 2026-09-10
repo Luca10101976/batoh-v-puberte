@@ -107,9 +107,12 @@ test("A5 – o správnosti rozhoduje server, klient nikdy neposílá výsledek",
 });
 
 test("A6 – obsah v kódu už nedodává odpovědi; autoritou je databáze", () => {
+  // R38: kód s odpověďmi (lib/task-answers.ts) i celý obsah v kódu jsou pryč,
+  // takže odpovědi nemá odkud vzít nikdo jiný než databáze.
   const server = read("lib/gameplay-server.ts");
   assert.ok(!/taskAnswers/.test(server), "gameplay-server pořád čerpá odpovědi z kódu");
-  assert.match(server, /const rawAnswers: string\[\] = \[\]/);
+  assert.ok(!fs.existsSync(path.join(ROOT, "lib/task-answers.ts")), "seznam odpovědí v kódu zůstal");
+  assert.ok(!fs.existsSync(path.join(ROOT, "lib/mock-data.ts")), "obsah her v kódu zůstal");
 });
 
 // ---------------------------------------------------------------------------
@@ -555,18 +558,23 @@ test("G3 – rozehraná výprava úvod nezopakuje", () => {
 });
 
 test("G4 – závěr hry vydává databáze, konstanta je jen náhrada", () => {
+  // R38: druhá větev, která brala závěr z obsahu v kódu, zanikla i s tím obsahem.
   const server = read("lib/gameplay-server.ts");
   assert.match(server, /endingTitle: \(mission\.ending_title \?\? ""\)\.trim\(\) \|\| "Mise dokončena"/);
-  assert.match(server, /endingTitle: \(mission\?\.ending_title \?\? ""\)\.trim\(\) \|\| location\.endingTitle/);
+  assert.ok(
+    !/\|\| location\.endingTitle/.test(server),
+    "závěr se pořád dá vzít z obsahu v kódu"
+  );
   assert.match(server, /ending_player_message/);
 });
 
-test("G5 – závěr Klamovky se přesouvá z kódu do databáze doslova", () => {
+test("G5 – závěr Klamovky je v databázi, ne v kódu", () => {
+  // R38: porovnávat s kódem už není s čím – obsah v kódu zanikl. Zůstává důkaz,
+  // že migrace R25 text do databáze přenesla doslova.
   const migration = read("supabase/migrations/20260909115520_r25_hints_endings_and_answer_rules.sql");
-  const mock = read("lib/mock-data.ts");
   assert.match(migration, /ending_title = 'Klamovka zase vypráví'/);
-  assert.match(mock, /endingTitle: "Klamovka zase vypráví"/, "původní text v kódu je pryč, nelze porovnat");
   assert.match(migration, /rýžový špaček/, "osobní vzkaz hráči se do databáze nepřenáší");
+  assert.ok(!fs.existsSync(path.join(ROOT, "lib/mock-data.ts")));
 });
 
 test("G6 – závěr se dá napsat v Mozku", () => {

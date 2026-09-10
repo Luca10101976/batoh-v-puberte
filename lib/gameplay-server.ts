@@ -5,6 +5,8 @@ import type { GameplayEnding, GameplayEpisode, GameplayTask, PublicGameplayTask 
 import { toPublicTask as stripServerOnlyTaskFields } from "@/lib/gameplay-public";
 import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 import { legacyLocationIdForMission, legacyMissionIdForLocation } from "@/lib/legacy-location-ids";
+import { cityByName, loadCities } from "@/lib/cities-server";
+import { cityCoordinates, cityLocative, type City } from "@/lib/cities";
 
 type MissionStopDbRow = {
   id: string;
@@ -176,21 +178,33 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function getCityAnchor(city: string) {
-  return (
-    locations.find((item) => normalize(item.city) === normalize(city)) ??
-    locations[0] ??
-    null
-  );
+/**
+ * R37: poloha města přichází z tabulky cities, kterou spravuje Mozek. Dřív se
+ * hledala v obsahu v kódu a nové město spadlo na souřadnice Prahy.
+ */
+function resolveCityMeta(cities: Map<string, City>, city: string) {
+  const match = cities.get((city ?? "").trim().toLowerCase()) ?? null;
+  return {
+    coordinates: cityCoordinates(match),
+    locative: cityLocative(match) || city
+  };
+}
+
+async function loadCityMap() {
+  try {
+    return cityByName(await loadCities(getSupabaseServerClient()));
+  } catch {
+    return new Map<string, City>();
+  }
 }
 
 function buildDbBackedLocationSeed(
   mission: MissionDbRow,
   episodes: GameplayEpisode[],
+  cityMeta: { coordinates: { lat: number; lng: number }; locative: string },
   fallbackImage?: string,
   catalogEntry?: CatalogEntry | null
 ): DbBackedLocationSeed {
-  const anchor = getCityAnchor(mission.city);
   const introStory = (mission.intro_text ?? "").trim();
   // R20: popis karty = short_description, jinak první věta intro (katalogová vrstva)
   const teaserSource = catalogEntry?.teaser || firstSentence(introStory) || `${mission.city} městská mise`;
@@ -198,7 +212,6 @@ function buildDbBackedLocationSeed(
   const image =
     mission.hero_image_url?.trim() ||
     fallbackImage?.trim() ||
-    anchor?.image ||
     "/images/klamovka-chramek.jpeg";
 
   return {
@@ -221,9 +234,9 @@ function buildDbBackedLocationSeed(
         ? `${mission.duration_min} min`
         : "",
     vibe: [],
-    lat: anchor?.lat ?? 50.087,
-    lng: anchor?.lng ?? 14.421,
-    map: anchor?.map ?? { x: 50, y: 50 },
+    lat: cityMeta.coordinates.lat,
+    lng: cityMeta.coordinates.lng,
+    map: { x: 50, y: 50 },
     introLabel: "Mise",
     introStory,
     // R25: autorský závěr z databáze. Konstanty zůstávají jen jako neutrální náhrada,
@@ -241,16 +254,22 @@ function buildDbBackedLocationSeed(
 
 async function fetchPublishedMissionById(
   supabase: ReturnType<typeof getSupabaseServerClient>,
-  missionId: string
+  missionId: string,
+  options?: { includeUnpublished?: boolean }
 ) {
-  const queryWithHero = await supabase
+  // R37: náhled v Mozku potřebuje i nepublikovanou hru. Používá se k tomu stejná
+  // cesta k obsahu jako pro hráče, aby nevznikla druhá interpretace dat.
+  const publishedOnly = options?.includeUnpublished !== true;
+  const withPublishFilter = <T>(query: T): T => (publishedOnly ? ((query as any).eq("is_published", true) as T) : query);
+
+  const queryWithHero = await withPublishFilter(
+    supabase
     .from("missions")
     .select(
       "id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published, ending_title, ending_text, ending_player_message"
     )
-    .eq("id", missionId)
-    .eq("is_published", true)
-    .maybeSingle<MissionDbRow>();
+      .eq("id", missionId)
+  ).maybeSingle<MissionDbRow>();
 
   if (!queryWithHero.error) {
     return queryWithHero.data ?? null;
@@ -261,12 +280,12 @@ async function fetchPublishedMissionById(
   // R25: prostředí bez migrace R25 nemá sloupce autorského závěru – hra funguje dál
   // s neutrální náhradou.
   if (message.includes("ending_")) {
-    const queryWithoutEnding = await supabase
-      .from("missions")
-      .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published")
-      .eq("id", missionId)
-      .eq("is_published", true)
-      .maybeSingle<MissionDbRow>();
+    const queryWithoutEnding = await withPublishFilter(
+      supabase
+        .from("missions")
+        .select("id, title, city, intro_text, hero_image_url, difficulty, duration_min, points, is_published")
+        .eq("id", missionId)
+    ).maybeSingle<MissionDbRow>();
     if (!queryWithoutEnding.error) {
       return queryWithoutEnding.data ?? null;
     }
@@ -276,12 +295,12 @@ async function fetchPublishedMissionById(
     return null;
   }
 
-  const queryWithoutHero = await supabase
-    .from("missions")
-    .select("id, title, city, intro_text, difficulty, duration_min, points, is_published")
-    .eq("id", missionId)
-    .eq("is_published", true)
-    .maybeSingle<MissionDbRow>();
+  const queryWithoutHero = await withPublishFilter(
+    supabase
+      .from("missions")
+      .select("id, title, city, intro_text, difficulty, duration_min, points, is_published")
+      .eq("id", missionId)
+  ).maybeSingle<MissionDbRow>();
 
   return queryWithoutHero.data ?? null;
 }
@@ -403,7 +422,10 @@ function buildEpisodesFromMock(episodes: Episode[]): GameplayEpisode[] {
   }));
 }
 
-export async function getGameplayEpisodes(locationId: string): Promise<GameplayEpisode[] | null> {
+export async function getGameplayEpisodes(
+  locationId: string,
+  options?: { includeUnpublished?: boolean }
+): Promise<GameplayEpisode[] | null> {
   const canonical = getCanonicalMission(locationId);
 
   let supabase;
@@ -413,7 +435,7 @@ export async function getGameplayEpisodes(locationId: string): Promise<GameplayE
     return null;
   }
 
-  const mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId);
+  const mission = await fetchPublishedMissionById(supabase, canonical?.missionId ?? locationId, options);
 
   if (!mission) {
     return null;
@@ -587,14 +609,19 @@ async function getGameplayLocationInternal(locationId: string, catalog?: Catalog
   }
 
   const episodes = await getGameplayEpisodes(locationId);
+  const cityMap = await loadCityMap();
+
   if (!location) {
     if (!mission || !episodes) {
       return null;
     }
 
     const fallbackImage = episodes.find((episode) => episode.illustrationImage)?.illustrationImage;
+    const cityMeta = resolveCityMeta(cityMap, mission.city);
     return {
-      ...buildDbBackedLocationSeed(mission, episodes, fallbackImage, catalogEntry),
+      ...buildDbBackedLocationSeed(mission, episodes, cityMeta, fallbackImage, catalogEntry),
+      // R37: tvar města pro větu „Hry v …" přichází z Mozku, ne z mapy v kódu.
+      cityLocative: cityMeta.locative,
       // R21: název vyžadované hry pro detail („Nejdřív dokonči: …“)
       unlockRequirementName: resolveLocationDisplayName(catalogEntry?.unlockAfterLocationId, catalogEntries),
       episodes
@@ -603,6 +630,7 @@ async function getGameplayLocationInternal(locationId: string, catalog?: Catalog
 
   return {
     ...location,
+    cityLocative: resolveCityMeta(cityMap, mission?.city ?? location.city).locative,
     // R20: katalogová pole z DB (popis karty, zámek, pořadí); hero fallback = stávající obrázek
     teaser: catalogEntry?.teaser ? truncateText(catalogEntry.teaser, 96) : location.teaser,
     shortDescription: catalogEntry?.teaser || location.shortDescription,

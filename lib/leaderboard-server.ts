@@ -1,38 +1,51 @@
 /**
  * R33: napojení žebříčku na databázi.
  *
- * Seznam her, které se do žebříčku počítají, vzniká VÝHRADNĚ z DB katalogu
- * publikovaných misí. Dřív se bral z pevného seznamu v lib/mock-data.ts, takže
- * nová hra z Mozku se do globálního žebříčku nikdy nedostala a nepublikovaná
- * Budějovice se naopak počítala. Maximum bodů hry se počítá z jejích úkolů
- * v databázi, ne z obsahu v kódu.
+ * Seznam her, které se do žebříčku počítají, vzniká VÝHRADNĚ z databáze. Dřív se
+ * bral z pevného seznamu v lib/mock-data.ts, takže nová hra z Mozku se do
+ * globálního žebříčku nikdy nedostala a nepublikovaná Budějovice se naopak
+ * počítala. Maximum bodů hry se počítá z jejích úkolů v databázi, ne z kódu.
+ *
+ * R37: počítá se hra, která JE publikovaná, i hra, která KDYSI PUBLIKOVANÁ BYLA
+ * (missions.first_published_at). Jednou získané body jsou trvalé, takže pozdější
+ * odpublikování hry hráči skóre nesebere. Koncept a testovací hra, která ven
+ * nikdy nešla, nepřispívá ničím – a protože first_published_at nastavuje jedině
+ * serverová publikační cesta, je to deterministické a nejde to obejít z klienta.
  */
 
 import { legacyLocationIdForMission } from "./legacy-location-ids.ts";
 import { maxScoreForTaskCount } from "./leaderboard-model.ts";
 
-type MissionRow = { id: string };
+type MissionRow = { id: string; is_published?: boolean; first_published_at?: string | null };
 type StopRow = { id: string; mission_id: string };
 type TaskRow = { stop_id: string };
 
 export type PublishedGameScores = Map<string, number>;
+export type ScoredGameScores = PublishedGameScores;
 
 /**
  * locationId -> maximum bodů. locationId je historický slug tam, kde existuje
  * (klamovka), jinak přímo UUID mise – přesně to, co se ukládá do
  * child_location_progress.location_id.
  */
-export async function loadPublishedGameScores(admin: {
+export async function loadScoredGameScores(admin: {
   from: (table: string) => any;
 }): Promise<PublishedGameScores> {
   const scores: PublishedGameScores = new Map();
 
-  const { data: missionRows, error: missionError } = await admin
+  let { data: missionRows, error: missionError } = await admin
     .from("missions")
-    .select("id")
-    .eq("is_published", true);
+    .select("id, is_published, first_published_at")
+    .or("is_published.eq.true,first_published_at.not.is.null");
+  if (missionError?.code === "42703") {
+    // Mezistav mezi nasazením kódu a migrací: sloupec ještě neexistuje.
+    ({ data: missionRows, error: missionError } = await admin
+      .from("missions")
+      .select("id, is_published")
+      .eq("is_published", true));
+  }
   if (missionError) {
-    throw new Error(`published_missions_failed: ${missionError.message}`);
+    throw new Error(`scored_missions_failed: ${missionError.message}`);
   }
 
   const missions = ((missionRows as MissionRow[] | null) ?? []).map((row) => row.id);
@@ -84,3 +97,6 @@ export async function loadPublishedGameScores(admin: {
 
   return scores;
 }
+
+/** Dřívější název; žebříček i profil používají stejný zdroj. */
+export const loadPublishedGameScores = loadScoredGameScores;

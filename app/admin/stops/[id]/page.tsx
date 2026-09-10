@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { createTaskAction, deleteTaskAction, updateStopAction, updateTaskAction } from "@/app/admin/stops/actions";
+import { createTaskAction, deleteTaskAction, moveTaskAction, updateStopAction, updateTaskAction } from "@/app/admin/stops/actions";
+import { describeUsage } from "@/lib/mission-usage";
+import { getMissionUsage } from "@/lib/mission-usage-server";
 import type { MissionStopRow, MissionTaskRow } from "@/app/admin/types";
 import { StopForm } from "@/components/admin/stop-form";
 import { TaskForm } from "@/components/admin/task-form";
@@ -31,7 +33,7 @@ export default async function StopEditPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{ status?: string; issues?: string }>;
 }) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -93,6 +95,17 @@ export default async function StopEditPage({
 
   const status = statusText(resolvedSearchParams?.status);
   const tasks = ((tasksData ?? []) as MissionTaskRow[]) ?? [];
+  // R37: než administrátorka do úkolů zasáhne, musí vědět, jestli je hra v provozu.
+  const usage = await getMissionUsage(supabase, stop.mission_id).catch(() => ({
+    activeRuns: 0,
+    playersWithResult: 0,
+    answers: 0
+  }));
+  const isUsed = usage.activeRuns > 0 || usage.playersWithResult > 0 || usage.answers > 0;
+  const issues = (resolvedSearchParams?.issues ?? "")
+    .split(" | ")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-5 pb-10">
@@ -119,6 +132,19 @@ export default async function StopEditPage({
           }`}
         >
           {status.text}
+          {issues.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {issues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
+      {isUsed ? (
+        <section className="rounded-2xl border border-sky/30 bg-sky/10 px-4 py-3 text-sm text-sky">
+          {describeUsage(usage)} Úkoly proto nejde mazat a pořadí se dá měnit jen ve chvíli, kdy hru nikdo nehraje.
         </section>
       ) : null}
 
@@ -133,26 +159,60 @@ export default async function StopEditPage({
         ) : null}
 
         <div className="mt-4 space-y-4">
-          {tasks.map((task) => (
+          {tasks.map((task, index) => (
             <article key={task.id} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-sky">Úkol {task.order}</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-sky">Úkol {index + 1}</p>
                   <h3 className="mt-1 text-lg font-semibold">
                     {task.type === "vyber" ? "Výběr" : task.type === "ano-ne" ? "Ano / ne" : "Otevřená odpověď"}
                   </h3>
                 </div>
-                <form action={deleteTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <input type="hidden" name="stop_id" value={stop.id} />
-                  <input type="hidden" name="mission_id" value={stop.mission_id} />
-                  <button
-                    type="submit"
-                    className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
-                  >
-                    Smazat úkol
-                  </button>
-                </form>
+                <div className="flex flex-wrap gap-2">
+                  {/* R37: pořadí úkolů se mění šipkami a přečísluje se samo. */}
+                  <form action={moveTaskAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <input type="hidden" name="stop_id" value={stop.id} />
+                    <input type="hidden" name="mission_id" value={stop.mission_id} />
+                    <input type="hidden" name="direction" value="up" />
+                    <button
+                      type="submit"
+                      disabled={index === 0}
+                      aria-label="Posunout úkol nahoru"
+                      className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                    >
+                      ↑
+                    </button>
+                  </form>
+                  <form action={moveTaskAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <input type="hidden" name="stop_id" value={stop.id} />
+                    <input type="hidden" name="mission_id" value={stop.mission_id} />
+                    <input type="hidden" name="direction" value="down" />
+                    <button
+                      type="submit"
+                      disabled={index === tasks.length - 1}
+                      aria-label="Posunout úkol dolů"
+                      className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                    >
+                      ↓
+                    </button>
+                  </form>
+                  {isUsed ? null : (
+                    <form action={deleteTaskAction}>
+                      <input type="hidden" name="task_id" value={task.id} />
+                      <input type="hidden" name="stop_id" value={stop.id} />
+                      <input type="hidden" name="mission_id" value={stop.mission_id} />
+                      <input type="hidden" name="confirm" value="smazat" />
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
+                      >
+                        Smazat úkol
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
 
               <TaskForm stopId={stop.id} missionId={stop.mission_id} task={task} action={updateTaskAction} />

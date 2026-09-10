@@ -6,6 +6,8 @@ import { EMPTY_FORM_STATE, FormState, MissionTaskType } from "@/app/admin/types"
 import { validateAndCanonicalizeCorrectAnswer } from "@/lib/mission-task-normalization";
 import { deleteMissionImageByPath, getMissionImageStoragePath, uploadMissionImage, validateMissionImageFile } from "@/lib/mission-images";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getMissionUsage, getTaskUsage } from "@/lib/mission-usage-server";
+import { guardContentDelete, guardReorder } from "@/lib/mission-usage";
 
 function normalizeText(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -378,21 +380,48 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
   return { ...EMPTY_FORM_STATE, success: "Úkol byl uložený." };
 }
 
+/**
+ * R37: úkol jde smazat, dokud na něj neexistují odpovědi hráčů. Jinak by
+ * uložené odpovědi ukazovaly do prázdna a hra by hráčům zmizela z historie.
+ * Potvrzení se kontroluje na serveru, ne jen v prohlížeči.
+ */
 export async function deleteTaskAction(formData: FormData) {
   const taskId = normalizeText(formData.get("task_id"));
   const stopId = normalizeText(formData.get("stop_id"));
   const missionId = normalizeText(formData.get("mission_id"));
+  const confirmed = normalizeText(formData.get("confirm")) === "smazat";
 
   if (!taskId || !stopId || !missionId) {
     redirect("/mozek?status=error");
   }
+  if (!confirmed) {
+    redirect(`/mozek/stops/${stopId}?status=delete_not_confirmed`);
+  }
 
   try {
     const supabase = getSupabaseServerClient();
-    const { error } = await supabase.from("mission_tasks").delete().eq("id", taskId).eq("stop_id", stopId);
+    const usage = await getTaskUsage(supabase, missionId, [taskId]);
+    const guard = guardContentDelete(usage, "task");
+    if (!guard.allowed) {
+      redirect(`/mozek/stops/${stopId}?status=delete_blocked&issues=${encodeURIComponent(guard.reason)}`);
+    }
 
+    const { error } = await supabase.from("mission_tasks").delete().eq("id", taskId).eq("stop_id", stopId);
     if (error) {
       redirect(`/mozek/stops/${stopId}?status=error`);
+    }
+
+    const { data: remaining } = await supabase
+      .from("mission_tasks")
+      .select("id, order")
+      .eq("stop_id", stopId)
+      .order("order", { ascending: true });
+    let position = 1;
+    for (const row of (remaining as Array<{ id: string; order: number }> | null) ?? []) {
+      if (row.order !== position) {
+        await supabase.from("mission_tasks").update({ order: position }).eq("id", row.id);
+      }
+      position += 1;
     }
   } catch (error) {
     rethrowIfRedirectError(error);
@@ -402,4 +431,55 @@ export async function deleteTaskAction(formData: FormData) {
   revalidatePath(`/mozek/stops/${stopId}`);
   revalidatePath(`/mozek/missions/${missionId}`);
   redirect(`/mozek/stops/${stopId}?status=task_deleted`);
+}
+
+/** R37: pořadí úkolů se mění šipkami; prohození jde přes dočasnou hodnotu. */
+export async function moveTaskAction(formData: FormData) {
+  const taskId = normalizeText(formData.get("task_id"));
+  const stopId = normalizeText(formData.get("stop_id"));
+  const missionId = normalizeText(formData.get("mission_id"));
+  const direction = normalizeText(formData.get("direction")) === "up" ? "up" : "down";
+
+  if (!taskId || !stopId || !missionId) {
+    redirect("/mozek?status=error");
+  }
+
+  try {
+    const supabase = getSupabaseServerClient();
+    const usage = await getMissionUsage(supabase, missionId);
+    const guard = guardReorder(usage);
+    if (!guard.allowed) {
+      redirect(`/mozek/stops/${stopId}?status=reorder_blocked&issues=${encodeURIComponent(guard.reason)}`);
+    }
+
+    const { data: taskRows, error } = await supabase
+      .from("mission_tasks")
+      .select("id, order")
+      .eq("stop_id", stopId)
+      .order("order", { ascending: true });
+    if (error || !taskRows) {
+      redirect(`/mozek/stops/${stopId}?status=error`);
+    }
+
+    const ordered = (taskRows as Array<{ id: string; order: number }>).slice();
+    const index = ordered.findIndex((row) => row.id === taskId);
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
+      redirect(`/mozek/stops/${stopId}?status=reorder_edge`);
+    }
+
+    const current = ordered[index];
+    const target = ordered[targetIndex];
+
+    await supabase.from("mission_tasks").update({ order: -1 }).eq("id", current.id);
+    await supabase.from("mission_tasks").update({ order: current.order }).eq("id", target.id);
+    await supabase.from("mission_tasks").update({ order: target.order }).eq("id", current.id);
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirect(`/mozek/stops/${stopId}?status=error`);
+  }
+
+  revalidatePath(`/mozek/stops/${stopId}`);
+  revalidatePath(`/mozek/missions/${missionId}`);
+  redirect(`/mozek/stops/${stopId}?status=reordered`);
 }

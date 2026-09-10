@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useRef, useState } from "react";
+import { prepareImageForUpload } from "@/lib/image-processing";
 
 type AdminImageFieldProps = {
   title: string;
@@ -27,7 +28,7 @@ export function AdminImageField({
   fileError,
   urlPlaceholder = "https://...",
   emptyLabel = "Zatím bez fotky",
-  helperText = "Nahrajte JPG, PNG nebo WEBP do 5 MB. Když vyberete soubor, použije se místo URL.",
+  helperText = "Nahrajte JPG, PNG nebo WEBP. Velkou fotku Traki sám zmenší, velikost řešit nemusíte.",
   previewVariant = "square"
 }: AdminImageFieldProps) {
   const isSquare = previewVariant === "square";
@@ -35,6 +36,7 @@ export function AdminImageField({
   const [selectedFileName, setSelectedFileName] = useState("");
   const [previewSource, setPreviewSource] = useState(initialPreview);
   const [hasUnsavedPreview, setHasUnsavedPreview] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const localObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -132,7 +134,8 @@ export function AdminImageField({
               accept="image/png,image/jpeg,image/webp"
               className="mt-4 block w-full text-sm text-white file:mr-3 file:rounded-xl file:border-0 file:bg-night/80 file:px-4 file:py-2 file:font-semibold file:text-white"
               onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
+                const input = event.currentTarget;
+                const file = input.files?.[0];
 
                 if (localObjectUrlRef.current) {
                   URL.revokeObjectURL(localObjectUrlRef.current);
@@ -146,14 +149,31 @@ export function AdminImageField({
                   return;
                 }
 
-                const nextObjectUrl = URL.createObjectURL(file);
-                localObjectUrlRef.current = nextObjectUrl;
                 setSelectedFileName(file.name);
                 setHasUnsavedPreview(true);
-                setPreviewSource(nextObjectUrl);
+                setProcessing(true);
+
+                // R37: velká fotka z telefonu se zmenší ještě před odesláním, aby
+                // administrátorka nemusela řešit limit velikosti souboru.
+                void prepareImageForUpload(file)
+                  .then((prepared) => {
+                    if (prepared !== file) {
+                      const transfer = new DataTransfer();
+                      transfer.items.add(prepared);
+                      input.files = transfer.files;
+                      setSelectedFileName(`${file.name} (zmenšeno na ${Math.round(prepared.size / 1024)} kB)`);
+                    }
+                    const nextObjectUrl = URL.createObjectURL(prepared);
+                    localObjectUrlRef.current = nextObjectUrl;
+                    setPreviewSource(nextObjectUrl);
+                  })
+                  .finally(() => setProcessing(false));
               }}
             />
-            {selectedFileName ? <p className="mt-2 text-xs text-lime">Vybraný soubor: {selectedFileName}</p> : null}
+            {processing ? <p className="mt-2 text-xs text-mist">Připravuju obrázek…</p> : null}
+            {!processing && selectedFileName ? (
+              <p className="mt-2 text-xs text-lime">Vybraný soubor: {selectedFileName}</p>
+            ) : null}
           </label>
 
           <label className="block space-y-2 rounded-[24px] border border-white/10 bg-night/25 p-5">

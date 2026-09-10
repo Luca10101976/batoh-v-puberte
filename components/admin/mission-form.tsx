@@ -1,18 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useFormState, useFormStatus } from "react-dom";
-import type { FormState, MissionDifficulty, MissionRow } from "@/app/admin/types";
-import { EMPTY_FORM_STATE } from "@/app/admin/types";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { EMPTY_FORM_STATE, type FormState, type MissionRow } from "@/app/admin/types";
 import { AdminImageField } from "@/components/admin/image-field";
+import type { City } from "@/lib/cities";
 
-type MissionFormProps = {
-  action: (prevState: FormState, formData: FormData) => Promise<FormState>;
-  mission?: MissionRow;
-  submitLabel: string;
-  cities: string[];
-};
+export type UnlockCandidate = { id: string; title: string; city: string; isPublished: boolean };
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -22,36 +16,34 @@ function SubmitButton({ label }: { label: string }) {
       disabled={pending}
       className="w-full rounded-2xl bg-lime px-4 py-3 text-base font-semibold text-night disabled:opacity-70"
     >
-      {pending ? "Ukládám..." : label}
+      {pending ? "Ukládám…" : label}
     </button>
   );
 }
 
-const DIFFICULTY_OPTIONS: Array<{ value: MissionDifficulty; label: string }> = [
-  { value: "lehka", label: "Lehká" },
-  { value: "stredni", label: "Střední" },
-  { value: "tezka", label: "Těžká" }
-];
-
-export function MissionForm({ action, mission, submitLabel, cities }: MissionFormProps) {
-  const [state, formAction] = useFormState(action, EMPTY_FORM_STATE);
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!state.success) {
-      return;
-    }
-
-    router.refresh();
-  }, [router, state.success]);
+export function MissionForm({
+  action,
+  submitLabel,
+  mission,
+  cities,
+  unlockCandidates
+}: {
+  action: (state: FormState, formData: FormData) => Promise<FormState>;
+  submitLabel: string;
+  mission?: MissionRow;
+  cities: City[];
+  unlockCandidates: UnlockCandidate[];
+}) {
+  const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  const selectedCity = cities.find((city) => city.id === mission?.city_id) ?? cities[0];
 
   return (
-    <form action={formAction} encType="multipart/form-data" className="space-y-5">
+    <form action={formAction} className="space-y-5">
       {mission ? <input type="hidden" name="mission_id" value={mission.id} /> : null}
 
       <section className="glass-card p-5">
-        <h2 className="section-title">Základ mise</h2>
-        <div className="mt-4 space-y-4">
+        <h2 className="section-title">Základ</h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="block space-y-2">
             <span className="text-sm text-mist">Název</span>
             <input
@@ -66,25 +58,44 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
 
           <label className="block space-y-2">
             <span className="text-sm text-mist">Město</span>
-            <select
-              name="city"
-              defaultValue={mission?.city ?? cities[0] ?? "Praha"}
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-              required
-            >
-              {cities.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.city ? <p className="text-xs text-coral">{state.fieldErrors.city}</p> : null}
+            {cities.length === 0 ? (
+              <p className="rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+                Zatím nemáš žádné aktivní město. Nejdřív ho založ v sekci Města.
+              </p>
+            ) : (
+              <select
+                name="city_id"
+                defaultValue={selectedCity?.id ?? ""}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
+                required
+              >
+                {cities.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {state.fieldErrors?.city_id ? <p className="text-xs text-coral">{state.fieldErrors.city_id}</p> : null}
           </label>
         </div>
       </section>
 
       <section className="glass-card p-5">
         <h2 className="section-title">Texty</h2>
+
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Krátký popis do katalogu</span>
+          <input
+            name="short_description"
+            defaultValue={mission?.short_description ?? ""}
+            maxLength={200}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Jedna věta, kterou hráč uvidí na kartě hry"
+          />
+          <span className="block text-xs text-mist">Bez vyplnění se použije první věta úvodního textu.</span>
+        </label>
+
         <label className="mt-4 block space-y-2">
           <span className="text-sm text-mist">Úvodní text</span>
           <textarea
@@ -99,66 +110,63 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
         </label>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm text-mist">Závěrečný nadpis (nepovinné)</span>
+          <span className="text-sm text-mist">Závěr – titulek</span>
           <input
             name="ending_title"
             defaultValue={mission?.ending_title ?? ""}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-            placeholder="Např. Klamovka zase vypráví"
+            placeholder="Např. Tajemství Klamovky odhaleno"
           />
         </label>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm text-mist">Závěrečný text hry (nepovinné)</span>
+          <span className="text-sm text-mist">Závěr – text</span>
           <textarea
             name="ending_text"
             defaultValue={mission?.ending_text ?? ""}
             rows={4}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-            placeholder="Co se hráč dozví, když hru dohraje..."
+            placeholder="Co se hráč dozví po dohrání..."
           />
-          <p className="text-xs text-mist">Zobrazí se po dokončení hry. Bez vyplnění se použije neutrální text.</p>
         </label>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm text-mist">Vzkaz hráči na konci (nepovinné)</span>
+          <span className="text-sm text-mist">Závěr – vzkaz hráči</span>
           <textarea
             name="ending_player_message"
             defaultValue={mission?.ending_player_message ?? ""}
             rows={3}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Osobní věta na konec, nepovinná"
           />
         </label>
       </section>
 
-      {mission ? (
-        <section className="glass-card p-5">
-          <h2 className="section-title">Hlavní fotka mise</h2>
-          {typeof mission.hero_image_url === "undefined" ? (
-            <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
-              Hlavní fotka mise je připravená v kódu, ale databáze ještě potřebuje migraci sloupce `hero_image_url`.
-            </div>
-          ) : (
-            <div className="mt-4">
-              <AdminImageField
-                title="Hlavní fotka mise"
-                imageUrl={mission.hero_image_url}
-                alt={mission.title}
-                fileInputName="hero_image_file"
-                urlInputName="hero_image_url"
-                existingUrlInputName="existing_hero_image_url"
-                fileError={state.fieldErrors?.hero_image_file}
-                emptyLabel="Tady bude hlavní fotka mise"
-                helperText="Nahrajte hlavní hero fotku mise v JPG, PNG nebo WEBP do 5 MB."
-                previewVariant="hero"
-              />
-            </div>
-          )}
-        </section>
-      ) : null}
+      <section className="glass-card p-5">
+        <h2 className="section-title">Titulní obrázek</h2>
+        {typeof mission?.hero_image_url === "undefined" && mission ? (
+          <p className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+            Hlavní fotka mise je připravená v kódu, ale databáze ještě potřebuje migraci sloupce `hero_image_url`.
+          </p>
+        ) : (
+          <div className="mt-4">
+            <AdminImageField
+              title="Titulní obrázek hry"
+              alt="Titulní obrázek hry"
+              imageUrl={mission?.hero_image_url}
+              emptyLabel="Tady bude titulní obrázek"
+              fileInputName="hero_image_file"
+              urlInputName="hero_image_url"
+              existingUrlInputName="existing_hero_image_url"
+              fileError={state.fieldErrors?.hero_image_file}
+              previewVariant="hero"
+            />
+          </div>
+        )}
+      </section>
 
       <section className="glass-card p-5">
-        <h2 className="section-title">Parametry</h2>
+        <h2 className="section-title">Katalog</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <label className="block space-y-2">
             <span className="text-sm text-mist">Obtížnost</span>
@@ -167,11 +175,9 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
               defaultValue={mission?.difficulty ?? "lehka"}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
             >
-              {DIFFICULTY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              <option value="lehka">Lehká</option>
+              <option value="stredni">Střední</option>
+              <option value="tezka">Vyšší</option>
             </select>
             {state.fieldErrors?.difficulty ? <p className="text-xs text-coral">{state.fieldErrors.difficulty}</p> : null}
           </label>
@@ -182,9 +188,8 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
               name="duration_min"
               type="number"
               min={0}
-              defaultValue={mission?.duration_min ?? 30}
+              defaultValue={mission?.duration_min ?? 60}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-              required
             />
             {state.fieldErrors?.duration_min ? (
               <p className="text-xs text-coral">{state.fieldErrors.duration_min}</p>
@@ -192,34 +197,43 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm text-mist">Max bodů (informativně)</span>
+            <span className="text-sm text-mist">Pořadí v katalogu</span>
             <input
-              name="points"
+              name="catalog_order"
               type="number"
               min={0}
-              defaultValue={mission?.points ?? 0}
+              defaultValue={mission?.catalog_order ?? 0}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-              required
             />
-            <p className="text-xs text-mist">Ve veřejné hře se maximum počítá podle počtu úkolů krát 10. Tohle pole je jen doprovodná informace v Mozku.</p>
-            {state.fieldErrors?.points ? <p className="text-xs text-coral">{state.fieldErrors.points}</p> : null}
+            {state.fieldErrors?.catalog_order ? (
+              <p className="text-xs text-coral">{state.fieldErrors.catalog_order}</p>
+            ) : null}
           </label>
         </div>
-      </section>
 
-      <section className="glass-card p-5">
-        <label className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 px-4 py-3">
-          <div>
-            <p className="font-medium">Publikovat misi</p>
-            <p className="text-xs text-mist">Zobrazit misi hráčům</p>
-          </div>
-          <input
-            name="is_published"
-            type="checkbox"
-            defaultChecked={mission?.is_published ?? false}
-            className="h-5 w-5 rounded border-white/20 bg-night"
-          />
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Odemkne se až po dohrání</span>
+          <select
+            name="unlock_after_mission_id"
+            defaultValue={mission?.unlock_after_mission_id ?? ""}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
+          >
+            <option value="">Hra je dostupná rovnou</option>
+            {unlockCandidates.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.title} ({candidate.city}){candidate.isPublished ? "" : " – zatím koncept"}
+              </option>
+            ))}
+          </select>
+          <span className="block text-xs text-mist">
+            Vybraná hra musí být ze stejného města a publikovaná, jinak by tahle hra zůstala trvale zamčená.
+          </span>
+          {state.fieldErrors?.unlock_after_mission_id ? (
+            <p className="text-xs text-coral">{state.fieldErrors.unlock_after_mission_id}</p>
+          ) : null}
         </label>
+
+        <input type="hidden" name="points" value={mission?.points ?? 0} />
       </section>
 
       {state.success ? (
@@ -238,10 +252,16 @@ export function MissionForm({ action, mission, submitLabel, cities }: MissionFor
             value="delete_hero_image"
             className="w-full rounded-2xl border border-coral/30 bg-coral/10 px-4 py-3 text-base font-semibold text-coral"
           >
-            Smazat hlavní fotku
+            Smazat titulní obrázek
           </button>
         ) : null}
       </div>
+
+      {/* R37: publikace se dělá výhradně tlačítkem „Publikovat", které vždy spustí
+          kontrolu hratelnosti. Zaškrtávátko ve formuláři tuhle kontrolu obcházelo. */}
+      <p className="text-xs text-mist">
+        Publikace se řídí tlačítkem nahoře. Uložení konceptu hru hráčům nezveřejní.
+      </p>
     </form>
   );
 }

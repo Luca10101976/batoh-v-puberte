@@ -503,7 +503,9 @@ test("F9 – kontrola běží na serveru před zápisem a autor dostane konkrét
   assert.match(actions, /collectPublishBlockers\(/);
   const toggle = actions.slice(actions.indexOf("export async function toggleMissionPublishAction"));
   const check = toggle.indexOf("collectPublishBlockers(");
-  const update = toggle.indexOf("update({ is_published");
+  // R37: zápis publikace se skládá do objektu (kvůli first_published_at),
+  // ale pořadí „nejdřív kontrola, pak zápis" musí platit dál.
+  const update = toggle.indexOf("is_published: nextPublished");
   assert.ok(check > 0 && update > 0, "akce nekontroluje nebo nepublikuje");
   assert.ok(check < update, "publikace se zapisuje dřív, než se zkontroluje");
   assert.match(toggle, /if \(blockers\.length === 0\)/, "zápis není podmíněný výsledkem kontroly");
@@ -511,7 +513,9 @@ test("F9 – kontrola běží na serveru před zápisem a autor dostane konkrét
 
   const page = read("app/admin/missions/[id]/page.tsx");
   assert.match(page, /publish_blocked/);
-  assert.match(page, /publishIssues\.map/, "seznam problémů se autorovi nezobrazí");
+  // R37: seznam se jmenuje issues, protože stejným kanálem chodí i důvody,
+  // proč nejde smazat nebo přeuspořádat obsah.
+  assert.match(page, /issues\.map/, "seznam problémů se autorovi nezobrazí");
 });
 
 test("F10 – stažení z publikace se nikdy neblokuje", () => {

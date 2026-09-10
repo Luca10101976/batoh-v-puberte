@@ -15,6 +15,13 @@ export type MissionRow = {
   ending_title?: string | null;
   ending_text?: string | null;
   ending_player_message?: string | null;
+  /** R37: katalogová pole, která se nově spravují v Mozku. */
+  short_description?: string | null;
+  catalog_order?: number | null;
+  unlock_after_mission_id?: string | null;
+  city_id?: string | null;
+  /** R37: kdy hra poprvé vyšla ven. Nenulové = body z ní jsou trvalé. */
+  first_published_at?: string | null;
   created_at: string;
 };
 

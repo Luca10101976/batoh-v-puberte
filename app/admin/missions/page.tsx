@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { deleteMissionAction, deleteStopAction, enableMozekEditingAction, toggleMissionPublishAction } from "@/app/admin/missions/actions";
+import { enableMozekEditingAction, toggleMissionPublishAction } from "@/app/admin/missions/actions";
 import type { MissionRow, MissionStopRow } from "@/app/admin/types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { locations, nearbyMissions } from "@/lib/mock-data";
@@ -136,9 +136,14 @@ export default async function AdminMissionsPage({
               Přehled toho, co se opravdu zobrazuje ve hře. Tady můžete přidávat, ubírat a upravovat mise i jejich zastavení.
             </p>
           </div>
-          <Link href="/mozek/missions/new" className="rounded-2xl bg-lime px-4 py-3 text-sm font-semibold text-night">
-            ➕ Nová mise
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/mozek/cities" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold">
+              Města
+            </Link>
+            <Link href="/mozek/missions/new" className="rounded-2xl bg-lime px-4 py-3 text-sm font-semibold text-night">
+              ➕ Nová hra
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -251,7 +256,7 @@ export default async function AdminMissionsPage({
                               : "bg-lime/20 text-lime"
                           }`}
                         >
-                          {mission.is_published ? "Stáhnout z publikace" : "Publikovat"}
+                          {mission.is_published ? "Vypnout publikaci" : "Publikovat"}
                         </button>
                       </form>
                       <Link
@@ -266,15 +271,12 @@ export default async function AdminMissionsPage({
                       >
                         Přidat zastavení
                       </Link>
-                      <form action={deleteMissionAction}>
-                        <input type="hidden" name="mission_id" value={mission.id} />
-                        <button
-                          type="submit"
-                          className="w-full rounded-xl border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral"
-                        >
-                          Smazat misi
-                        </button>
-                      </form>
+                      <Link
+                        href={`/mozek/missions/${mission.id}/preview`}
+                        className="rounded-xl border border-sky/30 bg-sky/10 px-4 py-3 text-center text-sm font-semibold text-sky"
+                      >
+                        Náhled hry
+                      </Link>
                     </>
                   )}
                 </div>
@@ -322,16 +324,12 @@ export default async function AdminMissionsPage({
                               >
                                 Upravit
                               </Link>
-                              <form action={deleteStopAction}>
-                                <input type="hidden" name="mission_id" value={mission.id} />
-                                <input type="hidden" name="stop_id" value={stop.id} />
-                                <button
-                                  type="submit"
-                                  className="w-full rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
-                                >
-                                  Smazat
-                                </button>
-                              </form>
+                              <Link
+                                href={`/mozek/missions/${mission.id}`}
+                                className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-center text-sm font-semibold text-mist"
+                              >
+                                Pořadí a mazání
+                              </Link>
                             </div>
                           )}
                         </div>

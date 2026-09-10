@@ -16,6 +16,8 @@ import { illustrationSrc } from "@/lib/illustrations";
 type HomeLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory" | "playerMessage"> & {
   episodes: PublicGameplayEpisode[];
   catalogOrder?: number;
+  /** R37: tvar města pro větu „Hry v …“; spravuje se v Mozku. */
+  cityLocative?: string;
 };
 
 function isExternalImage(src: string) {
@@ -58,8 +60,12 @@ const CITY_LOCATIVE: Record<string, string> = {
   Zlín: "Zlíně"
 };
 
-function cityLocative(city: string) {
-  return CITY_LOCATIVE[city] ?? city;
+/**
+ * R37: skloňování města přichází z databáze (spravuje se v Mozku). Mapa v kódu
+ * zůstala jen jako záloha pro data, která tvar ještě nemají vyplněný.
+ */
+function cityLocative(city: string, locatives: Record<string, string>) {
+  return locatives[city] || CITY_LOCATIVE[city] || city;
 }
 
 export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLocation[] }) {
@@ -93,6 +99,16 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
       setCity(publishedCities[0]);
     }
   }, [publishedCities, setCity, state.city]);
+
+  const cityLocatives = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const location of publishedLocations) {
+      if (location.cityLocative) {
+        map[location.city] = location.cityLocative;
+      }
+    }
+    return map;
+  }, [publishedLocations]);
 
   // R24: rozehrané hry se berou z BĚŽÍCÍCH VÝPRAV. Hráč jich může mít víc,
   // proto se zobrazují všechny, ne jen naposledy hraná.
@@ -224,12 +240,12 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
           <p className="text-xs uppercase tracking-[0.24em] text-coral">Přehled všech her</p>
           <h2 className="mt-2 text-xl font-semibold">
             {cityLocations.length === 0
-              ? `Hry v ${cityLocative(state.city)}`
+              ? `Hry v ${cityLocative(state.city, cityLocatives)}`
               : cityLocations.length === 1
-                ? `1 hra v ${cityLocative(state.city)}`
+                ? `1 hra v ${cityLocative(state.city, cityLocatives)}`
                 : cityLocations.length >= 2 && cityLocations.length <= 4
-                  ? `${cityLocations.length} hry v ${cityLocative(state.city)}`
-                  : `${cityLocations.length} her v ${cityLocative(state.city)}`}
+                  ? `${cityLocations.length} hry v ${cityLocative(state.city, cityLocatives)}`
+                  : `${cityLocations.length} her v ${cityLocative(state.city, cityLocatives)}`}
           </h2>
           <p className="mt-2 text-sm leading-6 text-mist">
             Tady je celý katalog her v tomhle městě. Nic dalšího není schované mimo tenhle výběr.

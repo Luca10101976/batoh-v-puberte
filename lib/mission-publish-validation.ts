@@ -35,7 +35,14 @@ export type PublishIssue = {
     | "missing_question"
     | "choice_without_options"
     | "choice_answer_not_in_options"
-    | "invalid_min_matches";
+    | "invalid_min_matches"
+    // R37: kontroly na úrovni celé hry, ne jednotlivého úkolu.
+    | "missing_hero_image"
+    | "missing_ending"
+    | "duplicate_stop_order"
+    | "duplicate_task_order"
+    | "invalid_unlock"
+    | "missing_city";
   /** Věta pro autora, konkrétní a bez technického žargonu. */
   message: string;
   stopTitle?: string;
@@ -163,6 +170,119 @@ export function findPublishBlockers(stops: PublishStopInput[]): PublishIssue[] {
       }
     });
   });
+
+  return issues;
+}
+
+
+// ---------------------------------------------------------------------------
+// R37: kontroly celé hry
+// ---------------------------------------------------------------------------
+//
+// Koncept smí být jakkoli nehotový. Publikovaná hra musí být dohratelná a
+// zobrazitelná, proto se kromě úkolů kontroluje i to, co uvidí hráč kolem nich:
+// titulní obrázek v katalogu, závěrečná obrazovka, jednoznačné pořadí a platná
+// návaznost „nejdřív dohraj".
+
+export type PublishMissionInput = {
+  id: string;
+  title: string;
+  city: string;
+  heroImageUrl: string | null | undefined;
+  endingTitle: string | null | undefined;
+  endingText: string | null | undefined;
+  unlockAfterMissionId: string | null | undefined;
+};
+
+export type PublishCatalogMission = {
+  id: string;
+  title: string;
+  city: string;
+  isPublished: boolean;
+};
+
+function duplicates(values: number[]) {
+  const seen = new Set<number>();
+  const repeated = new Set<number>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      repeated.add(value);
+    }
+    seen.add(value);
+  }
+  return [...repeated];
+}
+
+export function findMissionPublishBlockers(args: {
+  mission: PublishMissionInput;
+  stops: PublishStopInput[];
+  /** Ostatní hry v katalogu – kvůli kontrole návaznosti. */
+  catalog?: PublishCatalogMission[];
+}): PublishIssue[] {
+  const { mission, stops, catalog = [] } = args;
+  const issues: PublishIssue[] = [...findPublishBlockers(stops)];
+
+  if (!(mission.city ?? "").trim()) {
+    issues.push({ code: "missing_city", message: "Hra nemá město, takže by se v katalogu neobjevila." });
+  }
+
+  if (!(mission.heroImageUrl ?? "").trim()) {
+    issues.push({
+      code: "missing_hero_image",
+      message: "Hra nemá titulní obrázek, se kterým se ukazuje v katalogu."
+    });
+  }
+
+  const hasEnding = Boolean((mission.endingTitle ?? "").trim()) && Boolean((mission.endingText ?? "").trim());
+  if (!hasEnding) {
+    issues.push({
+      code: "missing_ending",
+      message: "Hra nemá závěr (titulek a text), který hráč uvidí po dohrání."
+    });
+  }
+
+  for (const order of duplicates(stops.map((stop) => stop.order))) {
+    issues.push({
+      code: "duplicate_stop_order",
+      message: `Dvě zastávky mají stejné pořadí (${order}), takže by se hra nedala projít v daném sledu.`
+    });
+  }
+
+  stops.forEach((stop) => {
+    for (const order of duplicates(stop.tasks.map((task) => task.taskOrder))) {
+      issues.push({
+        code: "duplicate_task_order",
+        message: `Zastávka „${stop.title}": dva úkoly mají stejné pořadí (${order}).`,
+        stopTitle: stop.title
+      });
+    }
+  });
+
+  const unlockId = (mission.unlockAfterMissionId ?? "").trim();
+  if (unlockId) {
+    const target = catalog.find((entry) => entry.id === unlockId);
+    if (!target) {
+      issues.push({
+        code: "invalid_unlock",
+        message: "Hra se má odemykat po jiné hře, ale ta v katalogu není."
+      });
+    } else if (target.id === mission.id) {
+      issues.push({
+        code: "invalid_unlock",
+        message: "Hra se nemůže odemykat sama po sobě."
+      });
+    } else if (!target.isPublished) {
+      issues.push({
+        code: "invalid_unlock",
+        message: `Hra se má odemykat po hře „${target.title}", ta ale zatím není publikovaná, takže by zůstala trvale zamčená.`
+      });
+    } else if (target.city.trim() !== mission.city.trim()) {
+      issues.push({
+        code: "invalid_unlock",
+        message: `Hra se má odemykat po hře „${target.title}" z jiného města, což hráč nemá jak splnit.`
+      });
+    }
+  }
 
   return issues;
 }

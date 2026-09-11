@@ -403,10 +403,10 @@ test("E1 – vynulování postupu už neexistuje", () => {
 });
 
 test("E2 – opakované hraní a mazání odpovědí zůstává beze změny", () => {
-  const replay = read("app/api/game/reset-location-replay/route.ts");
-  assert.match(replay, /Odpovědi z předchozího průchodu se/);
-  assert.ok(!/\.delete\(\)/.test(replay), "opakování hry nesmí mazat historii");
-  assert.match(replay, /status: "in_progress"/);
+  // R42: reset-location-replay zanikl; od R24 vede opakované hraní přes start-run.
+  const start = read("app/api/game/start-run/route.ts");
+  assert.ok(!/\.delete\(\)/.test(start), "opakování hry nesmí mazat historii");
+  assert.match(read("app/api/game/submit-task-answer/route.ts"), /status: "in_progress"/);
 });
 
 test("E3 – rekord se nikdy nezhorší", () => {
@@ -428,10 +428,10 @@ test("F1 – R23–R27 zůstávají beze změny", () => {
   assert.match(read("app/api/export/game-content/route.ts"), /"Content-Type": "application\/pdf"/);
 });
 
-test("F2 – skupinová výprava pořád počítá každému jeho vlastní výsledek", () => {
+test("F2 – dokončení pořád počítá každému jeho vlastní výsledek", () => {
   const completion = read("lib/game-completion.ts");
   assert.match(completion, /Skóre vedoucího se[\s\S]{0,40}nikdy nekopíruje ostatním/);
-  assert.match(read("app/api/expeditions/finish/route.ts"), /completeRunForParticipants\(/);
+  assert.match(read("app/api/game/complete-location/route.ts"), /completeRunForParticipants\(/);
 });
 
 test("F3 – přátelé a kód kamaráda fungují dál podle kódu, ne podle přezdívky", () => {

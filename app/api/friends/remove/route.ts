@@ -143,25 +143,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "friendship_remove_failed" }, { status: 500 });
   }
 
-  const nowIso = new Date().toISOString();
-  await admin
-    .from("child_expedition_invites")
-    .update({ status: "rejected", responded_at: nowIso } as never)
-    .or(
-      `and(inviter_child_profile_id.eq.${ownProfile.id},invitee_child_profile_id.eq.${targetProfile.id},status.eq.pending),and(inviter_child_profile_id.eq.${targetProfile.id},invitee_child_profile_id.eq.${ownProfile.id},status.eq.pending)`
-    );
-
-  try {
-    await admin.from("child_security_events").insert({
-      actor_child_profile_id: ownProfile.id,
-      event_type: "friend_removed",
-      metadata: {
-        target_profile_code: targetProfile.player_code || targetProfile.profile_code
-      }
-    });
-  } catch {
-    // best effort audit write
-  }
+  // R42: dřív tu byl UPDATE nad child_expedition_invites a zápis do
+  // child_security_events. Do invites nikdy nikdo nevkládal řádek, takže ten
+  // UPDATE trvale nic neměnil, a security eventy se jen zapisovaly a nikdy
+  // nečetly. Obojí zaniklo i s tabulkami.
 
   return NextResponse.json({ ok: true });
 }

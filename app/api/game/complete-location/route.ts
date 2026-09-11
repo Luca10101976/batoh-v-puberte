@@ -197,21 +197,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const auditWrite = await admin.from("child_security_events").insert({
-    actor_child_profile_id: ownProfile.id,
-    event_type: "location_completed",
-    metadata: {
-      location_id: locationId,
-      run_id: run?.id ?? null,
-      mode: body.mode === "group" ? "group" : "solo",
-      source,
-      participants: outcome.completedCodes
-    }
-  });
-  if (auditWrite.error) {
-    // Auditní zápis je doplňkový; dokončení hry kvůli němu neruším, ale nezamlčuji ho.
-    console.warn("child_security_events insert failed", auditWrite.error.code ?? auditWrite.error.message);
-  }
+  // R42: zápis do child_security_events zanikl. Log se jen plnil a nikdy nikdo
+  // ho nečetl – ani kód, ani Mozek. Dokončení hry zůstává zaznamenané tam, kde
+  // se opravdu čte: v child_location_progress a child_task_progress.
 
   // R26/Q6: závěrečnou obrazovku musí umět vykreslit server. Klient si už nic
   // nepřepočítává – dostane hotové skóre, rekord, závěr hry i případné odemčení.

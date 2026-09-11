@@ -124,3 +124,69 @@ test("historické migrace zůstávají nezměněné", () => {
   const baseline = fs.readFileSync(path.join(ROOT, "supabase/migrations/0001_baseline.sql"), "utf8");
   assert.match(baseline, /contact_email/, "0001_baseline.sql musí zůstat historicky netknutá");
 });
+
+// ---------------------------------------------------------------------------
+// R42, druhá část: mrtvé routy a mrtvé databázové objekty.
+//
+// Odstraněno po auditu, který u každé položky doložil, že nemá produkčního
+// čtenáře ani zapisovatele. Skupinové výpravy zůstávají produktově ODLOŽENÉ
+// (R34), ne zrušené – sdílený model výprav proto zůstává.
+// ---------------------------------------------------------------------------
+
+const ODSTRANENE_ROUTY = [
+  "app/api/game/reset-location-replay",
+  "app/api/friends/list",
+  "app/api/expeditions/active",
+  "app/api/expeditions/create",
+  "app/api/expeditions/invite",
+  "app/api/expeditions/start",
+  "app/api/expeditions/finish",
+  "app/api/expeditions/cancel",
+  "app/api/expeditions/invites"
+];
+
+const ODSTRANENE_DB_OBJEKTY = [
+  /\banswer_mode\b/,
+  /\bchild_push_subscriptions\b/,
+  /\bchild_profile_blocks\b/,
+  /\bchild_expedition_invites\b/,
+  /\bchild_security_events\b/
+];
+
+test("odstraněné routy neexistují", () => {
+  for (const dead of ODSTRANENE_ROUTY) {
+    assert.ok(!fs.existsSync(path.join(ROOT, dead)), `${dead} musí být pryč`);
+  }
+});
+
+test("odstraněné databázové objekty nemá v produkčním kódu kdo číst ani zapisovat", () => {
+  const files = SCAN_DIRS.flatMap((dir) => walk(path.join(ROOT, dir)));
+  const hits: string[] = [];
+  for (const file of files) {
+    // komentáře vysvětlující, co zaniklo, nejsou použití
+    const content = fs
+      .readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/[^\n]*$/gm, "");
+    for (const pattern of ODSTRANENE_DB_OBJEKTY) {
+      if (pattern.test(content)) hits.push(`${path.relative(ROOT, file)} :: ${pattern}`);
+    }
+  }
+  assert.deepEqual(hits, []);
+});
+
+test("v UI nezůstal žádný skupinový tok", () => {
+  const profile = fs.readFileSync(path.join(ROOT, "components/profile-screen.tsx"), "utf8");
+  assert.ok(!/expeditions\//.test(profile), "profil nesmí volat žádný expeditions endpoint");
+  assert.ok(!/ActiveExpedition|selectedInviteCodes|handleInviteSelectedFriends/.test(profile), "mrtvý skupinový stav musí být pryč");
+});
+
+test("model výprav a sólo hraní zůstává nedotčený", () => {
+  assert.ok(fs.existsSync(path.join(ROOT, "app/api/game/start-run/route.ts")), "zahájení hry musí existovat");
+  assert.ok(fs.existsSync(path.join(ROOT, "app/api/game/complete-location/route.ts")), "dokončení hry musí existovat");
+  assert.ok(fs.existsSync(path.join(ROOT, "app/api/expeditions/_shared.ts")), "sdílené pomůcky musí zůstat – používá je profil i recovery");
+  assert.match(fs.readFileSync(path.join(ROOT, "lib/game-run.ts"), "utf8"), /child_game_sessions/);
+  const overview = fs.readFileSync(path.join(ROOT, "app/api/profile/overview/route.ts"), "utf8");
+  assert.match(overview, /child_game_sessions/, "přehled profilu dál čte výpravy");
+  assert.match(overview, /child_game_session_players/, "přehled profilu dál čte účastníky");
+});

@@ -11,10 +11,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const PROTECTED = [
   "app/api/game/submit-task-answer/route.ts",
   "app/api/game/complete-location/route.ts",
-  "app/api/game/location-progress/route.ts",
-  "app/api/game/reset-location-replay/route.ts",
-  "app/api/expeditions/start/route.ts",
-  "app/api/expeditions/finish/route.ts"
+  "app/api/game/location-progress/route.ts"
 ];
 
 test("všechny zapisující herní endpointy ověřují přístup na serveru", () => {
@@ -55,27 +52,7 @@ test("migrace vynucuje prerequisite pouze ve stejném městě", () => {
   assert.ok(!/drop table|delete from|truncate/i.test(sql), "migrace nesmí mazat data");
 });
 
-// Oprava před R23 (audit problém B): expedice nesmí odmítnout publikovanou DB hru
-// jen proto, že není v lib/mock-data.ts, a finish nesmí bodovat podle mocku.
-test("expeditions start/finish nepoužívají mock whitelist her", () => {
-  for (const file of ["app/api/expeditions/start/route.ts", "app/api/expeditions/finish/route.ts"]) {
-    const src = fs.readFileSync(path.join(ROOT, file), "utf8");
-    assert.ok(!src.includes("@/lib/mock-data"), `${file} importuje mock-data`);
-    assert.ok(!/locations\.(some|find|filter|map)\(/.test(src), `${file} používá mock whitelist`);
-    assert.match(src, /resolveServerGameAccess\(/, `${file}: existenci hry musí určovat katalog přes R22 přístup`);
-  }
-});
-
-test("expeditions finish boduje z DB úkolů hry, ne z mock scoringu", () => {
-  const src = fs.readFileSync(path.join(ROOT, "app/api/expeditions/finish/route.ts"), "utf8");
-  assert.ok(!src.includes("computeMissionScore"), "mock computeMissionScore musí být pryč");
-  assert.ok(!src.includes("@/lib/scoring"), "finish nesmí importovat mock scoring");
-  // R23: bodování má jedinou implementaci ve sdílené dokončovací vrstvě
-  assert.match(src, /completeRunForParticipants\(/);
-  const shared = fs.readFileSync(path.join(ROOT, "lib/game-completion.ts"), "utf8");
-  assert.match(shared, /getLocationTaskIds\(args\.locationId\)/);
-  assert.match(shared, /scoreTaskProgress\(taskIds, progressByChild\.get\(profile\.id\)/);
-  assert.ok(!shared.includes("@/lib/scoring"), "sdílená vrstva nesmí bodovat z mocku");
-  // dokončení se počítá až po ověření přístupu a výpravy, nikdy před zámkem
-  assert.ok(src.indexOf("resolveServerGameAccess(") < src.indexOf("completeRunForParticipants("));
-});
+// R42: testy „expeditions start/finish nepoužívají mock whitelist" a „expeditions
+// finish boduje z DB úkolů" tady stály do R42. Hlídaly routy skupinových výprav,
+// které R42 odstranilo (R34 zůstává produktově ODLOŽENO). Stejné pravidlo pro
+// živou cestu dokončení hlídá test níž nad app/api/game/complete-location.

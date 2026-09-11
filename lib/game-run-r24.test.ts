@@ -293,25 +293,14 @@ test("Q: zámek her z R22 platí i pro zahájení hry", () => {
   );
 });
 
-test("R: skupinová serverová větev zůstala nedotčená", () => {
-  for (const file of [
-    "app/api/expeditions/create/route.ts",
-    "app/api/expeditions/invite/route.ts",
-    "app/api/expeditions/invites/list/route.ts",
-    "app/api/expeditions/invites/respond/route.ts",
-    "app/api/expeditions/active/route.ts",
-    "app/api/expeditions/cancel/route.ts",
-    "app/api/expeditions/start/route.ts",
-    "app/api/expeditions/finish/route.ts"
-  ]) {
-    assert.ok(fs.existsSync(path.join(ROOT, file)), `${file} nesmí zmizet`);
-  }
-  const finish = read("app/api/expeditions/finish/route.ts");
-  assert.match(finish, /completeRunForParticipants\(/, "skupinové dokončení dál používá sdílenou vrstvu");
-  assert.match(finish, /leader_only/);
+// R42: tenhle test hlídal, že R24 nesáhlo na skupinovou serverovou větev.
+// Splnil svůj účel a přestal platit v R42, které celý nedokončený skupinový tok
+// odstranilo – routy neměly volajícího a pozvánku nešlo přijmout (R34 zůstává
+// produktově ODLOŽENO, ne zrušeno). Co ze skupinového modelu zůstává, hlídá test níž.
+test("R: sdílený model výprav zůstává připravený i pro skupinu", () => {
   const shared = read("lib/game-completion.ts");
-  assert.match(shared, /participantChildProfileIds/, "sdílená vrstva pro skupinu zůstává");
-  // R24 nepřidává žádné skupinové ovládání
+  assert.match(shared, /participantChildProfileIds/, "sdílená vrstva umí dokončit víc účastníků najednou");
+  assert.match(read("lib/game-run.ts"), /child_game_sessions/, "výprava zůstává jedinou tabulkou pro sólo i skupinu");
   const profile = read("components/profile-screen.tsx");
-  assert.ok(!/expeditions\/(start|finish|cancel|invites)/.test(profile), "R24 nepřidává skupinové UI");
+  assert.ok(!/expeditions\//.test(profile), "v UI nesmí zůstat žádné skupinové ovládání");
 });

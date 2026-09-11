@@ -38,14 +38,18 @@ test("B: sólo i skupina používají stejnou tabulku výprav", () => {
   assert.match(src, /child_game_sessions/);
   assert.match(src, /mode: args\.mode \?\? "solo"/);
   assert.ok(!/create table|solo_sessions/i.test(src), "sólo nesmí mít vlastní paralelní tabulku");
-  const create = read("app/api/expeditions/create/route.ts");
-  assert.match(create, /mode: "group"/);
+  // R42: dřív se tu navíc ověřovalo, že expeditions/create zakládá mode: "group".
+  // Routa zanikla s odstraněním nedokončeného skupinového toku; sdílená tabulka
+  // výprav i její sloupec mode zůstávají pro budoucí skupinové hraní (R34).
+  assert.match(src, /mode/, "sdílená vrstva musí dál rozlišovat režim výpravy");
 });
 
 test("B: opakované hraní je nová výprava, odpovědi se nemažou", () => {
-  const src = read("app/api/game/reset-location-replay/route.ts");
-  assert.ok(!/child_task_progress"\)\s*\.delete\(\)/.test(src.replace(/\n/g, " ")), "reset nesmí mazat odpovědi");
-  assert.ok(!src.includes(".delete()"), "reset nesmí nic mazat");
+  // R42: reset-location-replay zanikl – od R24 vede opakované hraní stejnou
+  // cestou jako první hraní, přes start-run. Pravidlo se proto ověřuje tam.
+  const src = read("app/api/game/start-run/route.ts");
+  assert.ok(!/child_task_progress"\)\s*\.delete\(\)/.test(src.replace(/\n/g, " ")), "zahájení nesmí mazat odpovědi");
+  assert.ok(!src.includes(".delete()"), "zahájení nesmí nic mazat");
   assert.match(src, /ensureActiveRun\(/);
 });
 
@@ -74,19 +78,20 @@ test("B: P8 – hráč smí mít rozehraných více různých her", () => {
 // C. Skupinová výprava
 // ---------------------------------------------------------------------------
 
-test("C: skóre vedoucího se nekopíruje ostatním, každý má vlastní body", () => {
-  const src = read("app/api/expeditions/finish/route.ts");
-  assert.ok(!src.includes("leaderTaskProgress"), "výsledek vedoucího se nesmí použít pro ostatní");
-  assert.ok(!src.includes("computeMissionScore"), "mock scoring musí být pryč");
-  assert.ok(!src.includes("child_expedition_invites"), "stará tabulka pozvánek se pro dokončení nepoužívá");
-  assert.match(src, /completeRunForParticipants\(/);
+// R42: tři testy nad app/api/expeditions/finish tady stály do R42. Hlídaly
+// skupinovou dokončovací routu, kterou R42 odstranilo spolu s nedotaženým
+// skupinovým tokem (R34 zůstává ODLOŽENO). Sdílená dokončovací vrstva
+// lib/game-completion.ts i živá cesta app/api/game/complete-location se hlídají
+// dál v testech níž – včetně toho, že každý hráč dostává vlastní body.
+test("C: každý účastník dostává vlastní body ze svých odpovědí", () => {
   const shared = read("lib/game-completion.ts");
   assert.match(shared, /profiles\.map\(\(profile\) => \{[\s\S]*scoreTaskProgress\(taskIds, progressByChild\.get\(profile\.id\)/);
+  assert.ok(!shared.includes("leaderTaskProgress"), "výsledek vedoucího se nesmí použít pro ostatní");
+  assert.ok(!shared.includes("@/lib/scoring"), "sdílená vrstva nesmí bodovat z mocku");
 });
 
 test("C: jedna dokončovací cesta pro sólo i skupinu", () => {
   assert.match(read("app/api/game/complete-location/route.ts"), /completeRunForParticipants\(/);
-  assert.match(read("app/api/expeditions/finish/route.ts"), /completeRunForParticipants\(/);
   assert.ok(!read("app/api/game/complete-location/route.ts").includes("child_expedition_invites"));
 });
 
@@ -94,8 +99,6 @@ test("C: rozehraný účastník se při dokončení nepřeskočí (T2)", () => {
   const shared = read("lib/game-completion.ts");
   assert.ok(!shared.includes('.gt("penalty_points"'), "filtr přes penalty_points musí být pryč");
   assert.ok(!shared.includes('.is("penalty_points"'), "mrtvá větev na NULL musí být pryč");
-  const finishSrc = read("app/api/expeditions/finish/route.ts");
-  assert.ok(!finishSrc.includes('.gt("penalty_points"'));
 });
 
 test("C: rozehraný řádek se dokončí a lepší starší výsledek se nezhorší", () => {
@@ -174,10 +177,7 @@ test("D: herní endpointy předávají identitu hráče pro vyhodnocení výjimk
   for (const file of [
     "app/api/game/submit-task-answer/route.ts",
     "app/api/game/complete-location/route.ts",
-    "app/api/game/location-progress/route.ts",
-    "app/api/game/reset-location-replay/route.ts",
-    "app/api/expeditions/finish/route.ts",
-    "app/api/expeditions/start/route.ts"
+    "app/api/game/location-progress/route.ts"
   ]) {
     assert.match(read(file), /childProfileId: ownProfile\.id/, `${file} nepředává identitu hráče`);
   }
@@ -213,7 +213,7 @@ test("E: dokončená historická hra dá dokončenou výpravu, rozehraná zůsta
 // ---------------------------------------------------------------------------
 
 test("F: čas dokončení neurčuje klient", () => {
-  for (const file of ["app/api/game/complete-location/route.ts", "app/api/expeditions/finish/route.ts"]) {
+  for (const file of ["app/api/game/complete-location/route.ts"]) {
     const src = read(file);
     assert.ok(!/new Date\(body\.completedAt\)/.test(src), `${file}: klient nesmí určovat čas dokončení`);
     assert.ok(!/completedAt: /.test(src) || !/body\.completedAt/.test(src), `${file}: completedAt z klienta se nesmí použít`);
@@ -222,7 +222,7 @@ test("F: čas dokončení neurčuje klient", () => {
 });
 
 test("F: neplatné tělo požadavku nedá 500", () => {
-  for (const file of ["app/api/game/complete-location/route.ts", "app/api/expeditions/finish/route.ts"]) {
+  for (const file of ["app/api/game/complete-location/route.ts"]) {
     assert.match(read(file), /request\.json\(\)\.catch\(\(\) => null\)/, `${file}: rozbité JSON musí skončit 400, ne 500`);
   }
 });
@@ -235,9 +235,6 @@ test("F: výpadek tabulky rate limitu nezruší ochranu endpointu", () => {
     "app/api/game/submit-task-answer/route.ts",
     "app/api/game/complete-location/route.ts",
     "app/api/game/location-progress/route.ts",
-    "app/api/game/reset-location-replay/route.ts",
-    "app/api/expeditions/finish/route.ts",
-    "app/api/expeditions/start/route.ts",
     "app/api/leaderboard/route.ts"
   ]) {
     const src = read(file);

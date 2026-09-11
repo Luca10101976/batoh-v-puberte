@@ -33,22 +33,7 @@ type FriendListItem = {
   addedAt?: string;
 };
 
-type ExpeditionPlayerStatus = "invited" | "accepted" | "declined" | "removed";
 type MessageTone = "neutral" | "success" | "error";
-
-type ActiveExpedition = {
-  id: string;
-  status: "waiting" | "active";
-  missionId: string | null;
-  isLeader: boolean;
-  players: Array<{
-    childProfileId: string;
-    name: string;
-    code: string;
-    status: ExpeditionPlayerStatus;
-    joinedAt: string | null;
-  }>;
-};
 
 
 
@@ -62,7 +47,6 @@ export function ProfileScreen() {
     removeFriendByCode,
     setFriendsFromCloud,
     setActiveMode,
-    setCurrentExpeditionId,
     getPlayerScore,
     openParentAuthGate,
     activeRuns
@@ -77,14 +61,10 @@ export function ProfileScreen() {
   // R33: body ukazuje server, ne uložený stav v prohlížeči.
   const [serverScore, setServerScore] = useState<number | null>(null);
   const [savingFriend, setSavingFriend] = useState(false);
-  const [inviteMessage, setInviteMessage] = useState("");
   const [cloudProfileError, setCloudProfileError] = useState("");
   const [removingFriendCode, setRemovingFriendCode] = useState<string | null>(null);
-  const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition | null>(null);
-  const [selectedInviteCodes, setSelectedInviteCodes] = useState<string[]>([]);
   const [cloudFriends, setCloudFriends] = useState<FriendListItem[]>([]);
   const [cloudReady, setCloudReady] = useState<boolean | null>(null);
-  const [invitingFriends, setInvitingFriends] = useState(false);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
     resolveAvatarId(state.profile.avatar)
@@ -198,21 +178,6 @@ export function ProfileScreen() {
   }, [gameSummaries, gamesFilter]);
   const visibleGames = useMemo(() => filteredGames.slice(0, visibleGamesCount), [filteredGames, visibleGamesCount]);
   const hasMoreGames = filteredGames.length > visibleGamesCount;
-  const expeditionPlayersByCode = useMemo(() => {
-    const map = new Map<string, ExpeditionPlayerStatus>();
-    (activeExpedition?.players ?? []).forEach((player) => {
-      map.set(player.code.trim().toUpperCase(), player.status);
-    });
-    return map;
-  }, [activeExpedition]);
-  const canManageExpeditionInvites = Boolean(
-    !activeExpedition || (activeExpedition.isLeader && activeExpedition.status === "waiting")
-  );
-  const expeditionRoleLabel = activeExpedition
-    ? activeExpedition.isLeader
-      ? "Jsi vedoucí výpravy"
-      : "Jsi člen výpravy"
-    : "Nemáš aktivní výpravu";
 
   useEffect(() => {
     setVisibleGamesCount(6);
@@ -602,7 +567,6 @@ export function ProfileScreen() {
     if (!supabase) {
       setCloudFriends([]);
       setFriendsFromCloud([]);
-      setActiveExpedition(null);
       return;
     }
 
@@ -610,7 +574,6 @@ export function ProfileScreen() {
     if (!accessToken) {
       setCloudFriends([]);
       setFriendsFromCloud([]);
-      setActiveExpedition(null);
       return;
     }
 
@@ -626,7 +589,6 @@ export function ProfileScreen() {
     if (!response?.ok) {
       setCloudFriends([]);
       setFriendsFromCloud([]);
-      setActiveExpedition(null);
       return;
     }
 
@@ -640,7 +602,6 @@ export function ProfileScreen() {
       } | null;
       profile_id?: string | null;
       friends?: Array<{ code: string; name: string; addedAt?: string }>;
-      session?: ActiveExpedition | null;
       totalScore?: number;
       publishedGames?: number;
     };
@@ -673,7 +634,6 @@ export function ProfileScreen() {
 
     setCloudFriends(normalized);
     setFriendsFromCloud(normalized.map((item) => ({ code: item.code, name: item.name })));
-    setActiveExpedition(payload.session ?? null);
   }, [setFriendsFromCloud, supabase, syncCloudProfile]);
 
   useEffect(() => {
@@ -963,91 +923,6 @@ export function ProfileScreen() {
     return normalizePublicCode("code" in friend ? friend.code : friend.id);
   }
 
-  async function handleInviteSelectedFriends() {
-    setInviteMessage("");
-
-    if (!supabase || !state.playerCode) {
-      setInviteMessage("Pozvánky fungují jen při připojení k cloudu.");
-      return;
-    }
-
-    if (selectedInviteCodes.length === 0) {
-      setInviteMessage("Vyber aspoň jednoho kamaráda.");
-      return;
-    }
-
-    if (activeExpedition && (!activeExpedition.isLeader || activeExpedition.status !== "waiting")) {
-      setInviteMessage("Teď nemůžeš posílat nové pozvánky.");
-      return;
-    }
-
-    const ownProfile = await ensureOwnCloudProfile();
-    if (!ownProfile) {
-      setInviteMessage("Pozvánku teď nejde odeslat. Zkus to znovu za pár vteřin.");
-      return;
-    }
-
-    setInvitingFriends(true);
-    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-
-    const targetCodes = selectedInviteCodes.map((code) => normalizePublicCode(code)).filter((code) => code.length >= 4);
-    const endpoint =
-      activeExpedition && activeExpedition.isLeader && activeExpedition.status === "waiting"
-        ? "/api/expeditions/invite"
-        : "/api/expeditions/create";
-
-    const body: Record<string, unknown> = {
-      playerCode: ownProfile.player_code || ownProfile.profile_code,
-      friendCodes: targetCodes
-    };
-
-    if (endpoint === "/api/expeditions/invite") {
-      body.sessionId = activeExpedition?.id;
-    }
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-      },
-      body: JSON.stringify(body)
-    }).catch(() => null);
-
-    if (!response?.ok) {
-      setInvitingFriends(false);
-      const payload = (await response?.json().catch(() => ({}))) as { error?: string };
-      if (payload.error === "rate_limited") {
-        setInviteMessage("Moc pozvánek najednou. Zkus to za chvíli.");
-      } else if (payload.error === "missing_friend_codes") {
-        setInviteMessage("Vyber aspoň jednoho kamaráda.");
-      } else if (payload.error === "leader_only") {
-        setInviteMessage("Pozvánky může posílat jen vedoucí výpravy.");
-      } else {
-        setInviteMessage("Pozvánku se nepodařilo odeslat.");
-      }
-      return;
-    }
-
-    const payload = (await response.json()) as {
-      session?: { id?: string };
-      invited?: Array<{ code: string; name: string }>;
-    };
-    const expeditionId = payload.session?.id ?? activeExpedition?.id ?? null;
-
-    setActiveMode("group");
-    setCurrentExpeditionId(expeditionId);
-    setInvitingFriends(false);
-    setSelectedInviteCodes([]);
-
-    if ((payload.invited?.length ?? 0) > 0) {
-      setInviteMessage(`Pozváno: ${payload.invited?.map((item) => item.name).join(", ")}.`);
-    } else {
-      setInviteMessage("Nikdo nový nešel právě teď pozvat.");
-    }
-
-    await fetchProfileOverview();
-  }
 
   async function handleRemoveFriend(friendCode: string, friendName: string) {
     if (!supabase || !state.playerCode) {
@@ -1076,10 +951,11 @@ export function ProfileScreen() {
     if (!response?.ok) {
       setRemovingFriendCode(null);
       const payload = (await response?.json().catch(() => ({}))) as { error?: string };
+      setFriendMessageTone("error");
       if (payload.error === "rate_limited") {
-        setInviteMessage("Moc pokusů o úpravu kamarádů. Zkus to za chvíli.");
+        setFriendMessage("Moc pokusů o úpravu kamarádů. Zkus to za chvíli.");
       } else {
-        setInviteMessage("Odebrání kamaráda se nepodařilo.");
+        setFriendMessage("Odebrání kamaráda se nepodařilo.");
       }
       return;
     }
@@ -1087,7 +963,8 @@ export function ProfileScreen() {
     removeFriendByCode(friendCode);
     await fetchProfileOverview();
     setRemovingFriendCode(null);
-    setInviteMessage(`${friendName} byl odebrán/a z kamarádů.`);
+    setFriendMessageTone("success");
+    setFriendMessage(`${friendName} byl odebrán/a z kamarádů.`);
   }
 
   const [localRecoveryKey, setLocalRecoveryKey] = useState<string | null>(null);

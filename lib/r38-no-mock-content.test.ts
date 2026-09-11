@@ -131,8 +131,10 @@ test("C1 – sitemap se skládá z katalogu v databázi", () => {
 test("D1 – profil bere název, město i maximum hry ze serveru", () => {
   const profile = code("components/profile-screen.tsx");
   assert.ok(!/mock-data|getLocationTaskCount/.test(profile));
-  assert.match(profile, /state\.playedGames\[locationId\]/);
-  assert.match(profile, /publishedGamesCount/);
+  assert.match(profile, /playedGames: state\.playedGames/, "profil předává modelu názvy her z DB");
+  const model = code("lib/profile-games-model.ts");
+  assert.ok(!/mock-data|getLocationTaskCount/.test(model));
+  assert.match(model, /input\.playedGames\[locationId\]/, "název a město hry pocházejí z databáze");
 
   const provider = code("components/app-state-provider.tsx");
   assert.ok(!/mock-data|getLocationTaskCount/.test(provider));

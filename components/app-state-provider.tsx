@@ -30,7 +30,6 @@ export type AvatarConfig = {
 
 type PlayerProfile = {
   name: string;
-  title: string;
   avatar: string;
   avatarConfig: AvatarConfig;
 };
@@ -162,7 +161,6 @@ const initialState: AppState = {
   city: "Praha",
   profile: {
     name: "Hráč",
-    title: "Lovec městských tajemství",
     avatar: DEFAULT_AVATAR_ID,
     avatarConfig: {
       head: "round",
@@ -509,6 +507,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             locationPenaltyPoints: {},
             locationBestScores: {},
             locationMaxScores: {},
+            playedGames: {},
             groupCompletionMembers: {},
             currentExpeditionId: null,
             activeMode: "solo",
@@ -611,7 +610,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           lastCompletedAt,
           locationPenaltyPoints,
           locationBestScores,
-          locationMaxScores
+          locationMaxScores,
+          // R44: názvy her z databáze (Mozek) musí doputovat až do profilu.
+          // Dřív se playedGames spočítalo, ale do stavu se nevrátilo, takže
+          // profil zobrazoval interní slug hry místo jejího jména.
+          playedGames
         };
       });
 
@@ -683,6 +686,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         locationPenaltyPoints: {},
         locationBestScores: {},
         locationMaxScores: {},
+        playedGames: {},
         groupCompletionMembers: {},
         currentExpeditionId: null,
         activeMode: "solo",

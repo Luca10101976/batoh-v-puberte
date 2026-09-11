@@ -277,7 +277,11 @@ test("P: rozehranost nevychází z tabulky nejlepších výsledků", () => {
   assert.match(home, /activeRuns/);
   assert.ok(!/pickLatestActiveMission/.test(home), "hlavní obrazovka už nevybírá podle postupu hry");
   const profile = read("components/profile-screen.tsx");
-  assert.match(profile, /activeRuns\.map\(\(run\) => \[run\.locationId, run\]\)/);
+  // R44: seznam her v profilu staví lib/profile-games-model.ts, profil mu jen předá výpravy
+  assert.match(profile, /buildProfileGameSummaries\(\{/);
+  assert.match(profile, /activeRuns,/);
+  const model = read("lib/profile-games-model.ts");
+  assert.match(model, /input\.activeRuns\.map\(\(run\) => \[run\.locationId, run\]\)/);
   assert.ok(!/state\.activeMission\?\.locationId/.test(profile), "profil už nevychází z activeMission");
   const runs = read("app/api/game/active-runs/route.ts");
   assert.ok(!/from\("child_location_progress"\)/.test(runs), "výpis rozehraných her se neptá tabulky nejlepších výsledků");

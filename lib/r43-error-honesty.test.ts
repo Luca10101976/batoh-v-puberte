@@ -100,7 +100,8 @@ test("klient: prázdný seznam se synchronizuje, nezjištěný ne", () => {
 test("klient: profil i stav aplikace používají stejné pravidlo", () => {
   const profile = read("components/profile-screen.tsx");
   assert.match(profile, /shouldApplyServerNumber\(payload\.totalScore\)/, "skóre se smí přepsat jen známou hodnotou");
-  assert.match(profile, /shouldApplyServerNumber\(payload\.publishedGames\)/);
+  // R44: katalogové počitadlo „Hry" je z profilu pryč, proto se ani nesynchronizuje
+  assert.ok(!/publishedGames/.test(profile), "profil už katalogové číslo nezobrazuje");
   assert.match(profile, /shouldApplyServerList\(payload\.friends\)/, "kamarádi se smí přepsat jen známým seznamem");
   assert.ok(
     !/typeof payload\.totalScore === "number"/.test(profile),

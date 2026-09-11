@@ -52,23 +52,33 @@ export function MobileAppCard() {
 
   return (
     <section className="glass-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-lime">Aplikace do telefonu</p>
-          <h2 className="mt-2 text-xl font-semibold">Mít hru na ploše</h2>
+      {/* R44: instalace je jednorázová věc, na profilu proto zůstává sbalená. */}
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-3">
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-semibold text-white">Traki v telefonu</span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-lime group-open:hidden">Zobrazit</span>
+          <span className="hidden shrink-0 text-sm font-semibold text-mist group-open:block">Skrýt</span>
+        </summary>
+
+        <div className="mt-4">
+          <button
+            onClick={handleInstallClick}
+            className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+          >
+            Stáhnout
+          </button>
+          <p className="mt-3 text-sm leading-6 text-mist">
+            Android: instalace se spustí hned. iPhone: otevři Safari a dej Sdílet → Přidat na plochu.
+          </p>
+          {installHintOpen ? (
+            <div className="mt-3 rounded-2xl bg-white/5 p-3 text-sm text-mist">
+              Postup pro iPhone: otevři stránku v Safari, klepni na Sdílet a vyber Přidat na plochu.
+            </div>
+          ) : null}
         </div>
-        <button onClick={handleInstallClick} className="rounded-full bg-lime px-4 py-2 text-sm font-semibold text-night">
-          Stáhnout
-        </button>
-      </div>
-      <p className="mt-3 text-sm text-mist">
-        Android: instalace se spustí hned. iPhone: otevři Safari a dej Sdílet → Přidat na plochu.
-      </p>
-      {installHintOpen ? (
-        <div className="mt-3 rounded-2xl bg-white/5 p-3 text-sm text-mist">
-          Postup pro iPhone: otevři stránku v Safari, klepni na Sdílet a vyber Přidat na plochu.
-        </div>
-      ) : null}
+      </details>
     </section>
   );
 }

@@ -9,6 +9,7 @@ import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib
 import { AvatarPreview } from "@/components/avatar-preview";
 import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
 import { shouldApplyServerList, shouldApplyServerNumber } from "@/lib/overview-sync";
+import { buildProfileGameSummaries, shouldShowGameFilters } from "@/lib/profile-games-model";
 import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
@@ -70,7 +71,8 @@ export function ProfileScreen() {
   const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
     resolveAvatarId(state.profile.avatar)
   );
-  const [avatarStudioOpen, setAvatarStudioOpen] = useState(false);
+  // R44: profil se otevírá jako hotová identita, editace je až za CTA.
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState("");
   const [avatarMessageTone, setAvatarMessageTone] = useState<MessageTone>("neutral");
@@ -85,81 +87,29 @@ export function ProfileScreen() {
       return null;
     }
   }, []);
-  // R38: kolik her Traki nabízí, ví katalog v databázi. Dřív se počítal seznam
-  // z obsahu v kódu, který o hrách vytvořených v Mozku nevěděl.
-  const [publishedGamesCount, setPublishedGamesCount] = useState(0);
   const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
   // Dokud server neodpoví, ukáže se poslední známý lokální součet; jakmile
   // dorazí autoritativní číslo, přebije ho.
   const score = serverScore ?? getPlayerScore();
-  // R24: pozici v rozehrané hře spočítal server z uzavřených úkolů výpravy
-  // (stejnou funkcí jako herní obrazovka). Profil proto nepotřebuje obsah hry
-  // ani data v kódu, jen běžící výpravy.
-  const resumeByLocation = useMemo(
+  // R44: jak vypadá hra v profilu, řeší čistý model v lib/profile-games-model.ts,
+  // takže se to dá ověřit chováním a ne jen pohledem do zdrojáku.
+  const gameSummaries = useMemo(
     () =>
-      new Map(
-        activeRuns.map((run) => {
-          const { episodeIndex, taskIndex, episodeCount, taskCountInEpisode, stopName } = run.position;
-          const progressText =
-            episodeCount > 0
-              ? `Zastavení ${episodeIndex + 1}/${episodeCount} • Úkol ${taskIndex + 1}/${Math.max(1, taskCountInEpisode)}`
-              : `Uzavřeno ${run.closedTasks} z ${run.totalTasks} úkolů`;
-          return [
-            run.locationId,
-            {
-              progressText,
-              stopName,
-              href: `/play/${run.locationId}?episode=${episodeIndex + 1}&task=${taskIndex + 1}`
-            }
-          ] as const;
-        })
-      ),
-    [activeRuns]
+      buildProfileGameSummaries({
+        completedLocationIds: state.completedLocationIds,
+        activeRuns,
+        playedGames: state.playedGames,
+        locationBestScores: state.locationBestScores,
+        lastCompletedAt: state.lastCompletedAt
+      }),
+    [
+      activeRuns,
+      state.completedLocationIds,
+      state.lastCompletedAt,
+      state.locationBestScores,
+      state.playedGames
+    ]
   );
-
-  const gameSummaries = useMemo(() => {
-    const completedIds = new Set(state.completedLocationIds);
-    // R24: rozehranost určují BĚŽÍCÍ VÝPRAVY, stejně jako na hlavní obrazovce.
-    // Hráč jich může mít víc, takže se v profilu objeví všechny.
-    const runByLocation = new Map(activeRuns.map((run) => [run.locationId, run]));
-
-    const knownIds = Array.from(new Set([...completedIds, ...runByLocation.keys()]));
-    const rows = knownIds
-      .map((locationId) => {
-        const run = runByLocation.get(locationId) ?? null;
-        // R38: název, město a maximum hry pocházejí z databáze (přes profilové API).
-        const game = state.playedGames[locationId] ?? null;
-        const name = game?.name ?? run?.title ?? locationId;
-        const city = game?.city ?? run?.city ?? "";
-        const maxPoints = Math.max(state.locationMaxScores[locationId] ?? 0, game?.maxScore ?? 0);
-        const earnedPoints = Math.max(0, state.locationBestScores[locationId] ?? 0);
-        const isActive = Boolean(run);
-        const isCompleted = completedIds.has(locationId);
-        const resume = resumeByLocation.get(locationId) ?? null;
-        const resumeHref = isActive ? (resume?.href ?? `/play/${locationId}`) : `/locations/${locationId}`;
-        const resumeProgress = resume?.progressText;
-
-        return {
-          id: locationId,
-          name,
-          city,
-          status: isActive ? ("active" as const) : ("completed" as const),
-          statusLabel: isActive ? "Rozehráno" : "Dokončeno",
-          scoreLabel: isActive ? (resumeProgress ?? "Rozehráno") : `${earnedPoints}/${maxPoints} bodů`,
-          actionLabel: isActive ? "Pokračovat" : "Zahrát znovu",
-          href: resumeHref,
-          updatedAt: isActive ? (run?.updatedAt ?? "") : (state.lastCompletedAt[locationId] ?? ""),
-          isCompleted
-        };
-      })
-      .sort((a, b) => {
-        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-        return bTime - aTime;
-      });
-
-    return rows;
-  }, [activeRuns, resumeByLocation, state.completedLocationIds, state.lastCompletedAt, state.locationBestScores, state.locationMaxScores]);
   const completedGamesCount = useMemo(
     () => gameSummaries.filter((game) => game.status === "completed").length,
     [gameSummaries]
@@ -180,9 +130,18 @@ export function ProfileScreen() {
   const visibleGames = useMemo(() => filteredGames.slice(0, visibleGamesCount), [filteredGames, visibleGamesCount]);
   const hasMoreGames = filteredGames.length > visibleGamesCount;
 
+  // R44: u nula nebo jedné hry nemá filtrování smysl, takže se nezobrazuje.
+  const showGameFilters = shouldShowGameFilters(gameSummaries.length);
+
   useEffect(() => {
     setVisibleGamesCount(6);
   }, [gamesFilter]);
+
+  useEffect(() => {
+    if (!showGameFilters && gamesFilter !== "all") {
+      setGamesFilter("all");
+    }
+  }, [gamesFilter, showGameFilters]);
 
   const ensureOwnCloudProfile = useCallback(async (providedAccessToken?: string) => {
     if (!supabase) {
@@ -448,7 +407,7 @@ export function ProfileScreen() {
     await reloadCanonicalProfile(effectiveAccessToken);
     setSavingProfile(false);
     setProfileMessageTone("success");
-    setProfileMessage("Jméno je uložené do cloudu.");
+    setProfileMessage("Přezdívka uložena.");
   }, [nameDraft, state.profileCode, supabase, reloadCanonicalProfile]);
 
   const persistAvatar = useCallback(
@@ -602,7 +561,6 @@ export function ProfileScreen() {
       // R43: null znamená „server to nezjistil", ne „je to prázdné".
       friends?: Array<{ code: string; name: string; addedAt?: string }> | null;
       totalScore?: number | null;
-      publishedGames?: number | null;
       unavailable?: string[];
     };
 
@@ -611,9 +569,6 @@ export function ProfileScreen() {
     // kvůli výpadku databáze, je taky číslo, takže přepsala hráčovo skóre nulou.
     if (shouldApplyServerNumber(payload.totalScore)) {
       setServerScore(Math.max(0, Math.floor(payload.totalScore)));
-    }
-    if (shouldApplyServerNumber(payload.publishedGames)) {
-      setPublishedGamesCount(Math.max(0, Math.floor(payload.publishedGames)));
     }
 
     const effectiveProfile = payload.profile;
@@ -1104,140 +1059,118 @@ export function ProfileScreen() {
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
+      {/* 1. Hráč */}
       <section className="glass-card overflow-hidden p-5">
         <div className="flex items-center gap-4">
           <AvatarPreview avatar={state.profile.avatar} size={80} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.24em] text-mist">Přezdívka</p>
-            <input
-              value={nameDraft}
-              maxLength={24}
-              aria-label="Přezdívka hráče"
-              onChange={(event) => {
-                setNameDraft(event.target.value);
-                setProfileMessageTone("neutral");
-                setProfileMessage("Neuložené změny.");
-              }}
-              onBlur={() => void persistProfileName()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  (event.currentTarget as HTMLInputElement).blur();
-                }
-              }}
-              className="mt-1 w-full bg-transparent text-2xl font-bold outline-none"
-            />
-            <button
-              onClick={() => void persistProfileName()}
-              disabled={savingProfile}
-              className="mt-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-mist disabled:opacity-70"
-            >
-              {savingProfile ? "Ukládám…" : "Uložit přezdívku"}
-            </button>
-            <p className="mt-1 text-xs text-mist">{NICKNAME_HINT}</p>
-            <p className="mt-1 text-sm text-mist">
-              {state.profile.title}
-            </p>
-            {savingProfile ? <p className="mt-1 text-xs text-mist">Ukládám profil…</p> : null}
-            {!savingProfile && profileMessage ? (
-              <p
-                className={`mt-1 text-xs ${
-                  profileMessageTone === "error"
-                    ? "text-coral"
-                    : profileMessageTone === "success"
-                      ? "text-lime"
-                      : "text-mist"
-                }`}
-              >
-                {profileMessage}
-              </p>
-            ) : null}
+            <p className="mt-1 break-words text-2xl font-bold text-white">{state.profile.name}</p>
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-xl font-semibold">{publishedGamesCount}</div>
-            <div className="text-xs text-mist">Hry</div>
-          </div>
-          <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-xl font-semibold">{score}</div>
-            <div className="text-xs text-mist">Body</div>
-          </div>
-          <div className="rounded-2xl bg-white/5 p-3">
-            <div className="text-xl font-semibold">{friends.length}</div>
-            <div className="text-xs text-mist">Parta</div>
-          </div>
-        </div>
         <button
-          onClick={() => void handleLogout()}
-          className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-mist"
+          type="button"
+          onClick={() => setProfileEditorOpen((current) => !current)}
+          aria-expanded={profileEditorOpen}
+          className="mt-4 w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
         >
-          Odhlásit
+          {profileEditorOpen ? "Zavřít úpravy" : "Upravit profil"}
         </button>
-      </section>
 
-      <section className="glass-card p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Profil</p>
-            <h2 className="mt-2 text-xl font-semibold">Můj avatar</h2>
-          </div>
-          <button
-            onClick={() => setAvatarStudioOpen((current) => !current)}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold"
-          >
-            {avatarStudioOpen ? "Zavřít" : "Upravit avatara"}
-          </button>
-        </div>
-        {avatarStudioOpen ? (
-          <>
-            <p className="mt-2 text-sm text-mist">Vyber si Trakiho, který ti sedí. Změna se uloží sama.</p>
-
-            <div className="mt-4 flex justify-center">
-              <AvatarPreview avatar={avatarEmojiDraft} size={148} />
+        {profileEditorOpen ? (
+          <div className="mt-4 space-y-5 rounded-[24px] border border-white/10 bg-white/5 p-4">
+            <div>
+              <label htmlFor="profile-nickname" className="text-sm font-medium text-white">
+                Přezdívka
+              </label>
+              <input
+                id="profile-nickname"
+                value={nameDraft}
+                maxLength={24}
+                aria-label="Přezdívka hráče"
+                onChange={(event) => {
+                  setNameDraft(event.target.value);
+                  setProfileMessageTone("neutral");
+                  setProfileMessage("Neuložené změny.");
+                }}
+                onBlur={() => void persistProfileName()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    (event.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-night/60 px-4 py-3 text-lg font-semibold text-white outline-none"
+              />
+              <p className="mt-2 text-xs text-mist">{NICKNAME_HINT}</p>
+              <button
+                onClick={() => void persistProfileName()}
+                disabled={savingProfile}
+                className="mt-3 w-full rounded-[18px] bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {savingProfile ? "Ukládám…" : "Uložit přezdívku"}
+              </button>
+              {!savingProfile && profileMessage ? (
+                <p
+                  className={`mt-2 text-sm ${
+                    profileMessageTone === "error"
+                      ? "text-coral"
+                      : profileMessageTone === "success"
+                        ? "text-lime"
+                        : "text-mist"
+                  }`}
+                >
+                  {profileMessage}
+                </p>
+              ) : null}
             </div>
 
-            <div className="mt-5 space-y-4">
-              <div>
-                <p className="mb-3 text-sm font-medium">Vyber si avatara</p>
-                <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
-                  {AVATAR_IDS.map((option, index) => (
-                    <button
-                      key={option}
-                      onClick={() => {
-                        setAvatarEmojiDraft(option);
-                        saveAvatarDebounced({
-                          avatar: option,
-                          avatarConfig: avatarDraft
-                        });
-                      }}
-                      className={`group relative aspect-square overflow-hidden rounded-[22px] border transition ${
-                        avatarEmojiDraft === option
-                          ? "border-lime bg-lime/12 shadow-[0_0_0_1px_rgba(192,255,96,0.18)]"
-                          : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
-                      }`}
-                      aria-label={`Vybrat avatara ${index + 1}`}
-                    >
-                      <div className="absolute inset-[8px] rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,rgba(235,255,251,0.95),rgba(97,204,198,0.78)_72%,rgba(38,117,126,0.46))]" />
-                      <div className="relative z-10 mx-auto h-[76px] w-[76px] sm:h-[88px] sm:w-[88px]">
-                        <Image
-                          src={avatarSrc(option)}
-                          alt={`Avatar ${index + 1}`}
-                          fill
-                          sizes="88px"
-                          className="object-contain"
-                        />
-                      </div>
-                    </button>
-                  ))}
-                </div>
+            <div className="border-t border-white/10 pt-5">
+              <p className="text-sm font-medium text-white">Avatar</p>
+              <p className="mt-1 text-sm text-mist">Vyber si Trakiho, který ti sedí. Změna se uloží sama.</p>
+
+              <div className="mt-4 flex justify-center">
+                <AvatarPreview avatar={avatarEmojiDraft} size={120} />
               </div>
 
-              {savingAvatar ? <p className="text-center text-xs text-mist">Ukládám avatar…</p> : null}
+              <div className="mt-4 grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+                {AVATAR_IDS.map((option, index) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setAvatarEmojiDraft(option);
+                      saveAvatarDebounced({
+                        avatar: option,
+                        avatarConfig: avatarDraft
+                      });
+                    }}
+                    aria-pressed={avatarEmojiDraft === option}
+                    className={`group relative aspect-square overflow-hidden rounded-[22px] border transition ${
+                      avatarEmojiDraft === option
+                        ? "border-lime bg-lime/12 shadow-[0_0_0_1px_rgba(192,255,96,0.18)]"
+                        : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                    }`}
+                    aria-label={`Vybrat avatara ${index + 1}`}
+                  >
+                    <div className="absolute inset-[8px] rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,rgba(235,255,251,0.95),rgba(97,204,198,0.78)_72%,rgba(38,117,126,0.46))]" />
+                    <div className="relative z-10 mx-auto h-[62px] w-[62px] sm:h-[88px] sm:w-[88px]">
+                      <Image
+                        src={avatarSrc(option)}
+                        alt={`Avatar ${index + 1}`}
+                        fill
+                        sizes="88px"
+                        className="object-contain"
+                      />
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {savingAvatar ? <p className="mt-3 text-center text-xs text-mist">Ukládám avatar…</p> : null}
               {avatarMessage ? (
                 <p
-                  className={`text-center text-xs ${
+                  className={`mt-3 text-center text-sm ${
                     avatarMessageTone === "error"
                       ? "text-coral"
                       : avatarMessageTone === "success"
@@ -1249,10 +1182,68 @@ export function ProfileScreen() {
                 </p>
               ) : null}
             </div>
-          </>
+
+            <button
+              type="button"
+              onClick={() => setProfileEditorOpen(false)}
+              className="w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night"
+            >
+              Hotovo
+            </button>
+          </div>
         ) : null}
       </section>
 
+      {/* 2. Můj Traki klíč */}
+      <section id="traki-key" className="glass-card p-5">
+        <h2 className="section-title">Můj Traki klíč</h2>
+        <p className="mt-2 text-sm leading-6 text-mist">
+          Čtyři tajná slova, kterými si otevřeš svůj profil na jiném telefonu nebo tabletu. Nikomu je neukazuj –
+          není to kód pro kamarády.
+        </p>
+
+        {localRecoveryKey ? (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-center">
+              <p className="select-all text-lg font-bold tracking-[0.12em] text-white">
+                {recoveryKeyVisible ? localRecoveryKey : "••••-••••-••••-••••"}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRecoveryKeyVisible((value) => !value)}
+                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
+              >
+                {recoveryKeyVisible ? "Skrýt" : "Ukázat"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyRecoveryKey()}
+                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
+              >
+                {recoveryKeyCopied ? "Zkopírováno ✓" : "Zkopírovat"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-mist">
+            Na tomto zařízení klíč uložený není. Když si ho nepamatuješ, vytvoř si nový – starý pak přestane platit.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleCreateRecoveryKey()}
+          disabled={recoveryKeyBusy}
+          className="mt-3 w-full rounded-[20px] bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {recoveryKeyBusy ? "Vytvářím…" : localRecoveryKey ? "Vytvořit nový klíč" : "Vytvořit Traki klíč"}
+        </button>
+        {recoveryKeyMessage ? <p className="mt-3 text-sm text-mist">{recoveryKeyMessage}</p> : null}
+      </section>
+
+      {/* 3. Moje hry */}
       <section className="glass-card p-5">
         <h2 className="section-title">Moje hry</h2>
         {gameSummaries.length === 0 ? (
@@ -1283,23 +1274,25 @@ export function ProfileScreen() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "all" as const, label: "Všechny", count: gameSummaries.length },
-                { value: "active" as const, label: "Rozehrané", count: activeGamesCount },
-                { value: "completed" as const, label: "Dokončené", count: completedGamesCount }
-              ].map((tab) => (
-                <button
-                  key={tab.value}
-                  onClick={() => setGamesFilter(tab.value)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                    gamesFilter === tab.value ? "bg-lime text-night" : "bg-white/5 text-mist"
-                  }`}
-                >
-                  {tab.label} <span className="ml-1 text-xs opacity-80">{tab.count}</span>
-                </button>
-              ))}
-            </div>
+            {showGameFilters ? (
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "all" as const, label: "Všechny", count: gameSummaries.length },
+                  { value: "active" as const, label: "Rozehrané", count: activeGamesCount },
+                  { value: "completed" as const, label: "Dokončené", count: completedGamesCount }
+                ].map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setGamesFilter(tab.value)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                      gamesFilter === tab.value ? "bg-lime text-night" : "bg-white/5 text-mist"
+                    }`}
+                  >
+                    {tab.label} <span className="ml-1 text-xs opacity-80">{tab.count}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             {filteredGames.length === 0 ? (
               <div className="rounded-2xl bg-white/5 p-4 text-sm text-mist">
@@ -1321,7 +1314,7 @@ export function ProfileScreen() {
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="truncate text-base font-semibold text-white">{game.name}</div>
+                          <div className="min-w-0 break-words text-base font-semibold text-white">{game.name}</div>
                           <span
                             className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] ${
                               game.status === "active" ? "bg-sky/15 text-sky" : "bg-lime/15 text-lime"
@@ -1331,19 +1324,18 @@ export function ProfileScreen() {
                           </span>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-mist">
-                          <span>{game.city}</span>
-                          <span>{game.scoreLabel}</span>
-                          {game.status === "completed" ? <span>Nejlepší uložený výsledek</span> : null}
+                          {game.city ? <span>{game.city}</span> : null}
+                          {game.scoreLabel ? <span>{game.scoreLabel}</span> : null}
                         </div>
                         {game.status === "active" ? (
                           <div className="mt-2 text-xs text-mist">
-                            {resumeByLocation.get(game.id)?.stopName ?? "Rozehraná hra"}
+                            {game.stopName || "Rozehraná hra"}
                           </div>
                         ) : null}
                       </div>
                       <button
                         onClick={() => router.push(game.href)}
-                        className={`rounded-[18px] px-4 py-3 text-sm font-semibold ${
+                        className={`shrink-0 rounded-[18px] px-4 py-3 text-sm font-semibold ${
                           game.status === "active" ? "bg-lime text-night" : "bg-white/10 text-white"
                         }`}
                       >
@@ -1367,16 +1359,10 @@ export function ProfileScreen() {
         )}
       </section>
 
-      <MobileAppCard />
-
+      {/* 4. Sociální část – definitivní UX přijde v dalším kroku R44 */}
       <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
-            <h2 className="mt-2 text-xl font-semibold">Můj kód</h2>
-          </div>
-          <div className="rounded-full bg-lime/12 px-3 py-2 text-xs text-lime">Solo tah</div>
-        </div>
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
+        <h2 className="mt-2 text-xl font-semibold">Můj kód</h2>
         <div className="mt-4 flex flex-col items-center gap-4 rounded-[24px] bg-white/5 p-4">
           <div className="rounded-xl border border-white/10 bg-night/70 px-3 py-2 text-sm font-semibold tracking-wide text-lime">
             {state.playerCode}
@@ -1386,97 +1372,6 @@ export function ProfileScreen() {
           </p>
         </div>
       </section>
-
-      <section id="traki-key" className="glass-card p-5">
-
-        <h2 className="section-title">Můj Traki klíč</h2>
-
-        <p className="mt-2 text-sm leading-6 text-mist">
-
-          Čtyři tajná slova, kterými si otevřeš svůj profil na jiném telefonu nebo tabletu. Nikomu je neukazuj –
-
-          není to kód pro kamarády.
-
-        </p>
-
-        {localRecoveryKey ? (
-
-          <div className="mt-4 space-y-3">
-
-            <div className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-center">
-
-              <p className="select-all text-lg font-bold tracking-[0.12em] text-white">
-
-                {recoveryKeyVisible ? localRecoveryKey : "••••-••••-••••-••••"}
-
-              </p>
-
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-
-              <button
-
-                type="button"
-
-                onClick={() => setRecoveryKeyVisible((value) => !value)}
-
-                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
-
-              >
-
-                {recoveryKeyVisible ? "Skrýt" : "Ukázat"}
-
-              </button>
-
-              <button
-
-                type="button"
-
-                onClick={() => void handleCopyRecoveryKey()}
-
-                className="rounded-[18px] border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white"
-
-              >
-
-                {recoveryKeyCopied ? "Zkopírováno ✓" : "Zkopírovat"}
-
-              </button>
-
-            </div>
-
-          </div>
-
-        ) : (
-
-          <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-mist">
-
-            Na tomto zařízení klíč uložený není. Když si ho nepamatuješ, vytvoř si nový – starý pak přestane platit.
-
-          </p>
-
-        )}
-
-        <button
-
-          type="button"
-
-          onClick={() => void handleCreateRecoveryKey()}
-
-          disabled={recoveryKeyBusy}
-
-          className="mt-3 w-full rounded-[20px] bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-
-        >
-
-          {recoveryKeyBusy ? "Vytvářím…" : localRecoveryKey ? "Vytvořit nový klíč" : "Vytvořit Traki klíč"}
-
-        </button>
-
-        {recoveryKeyMessage ? <p className="mt-3 text-sm text-mist">{recoveryKeyMessage}</p> : null}
-
-      </section>
-
 
       <section id="add-friend" className="glass-card p-5">
         <h2 className="section-title">Přidat kamaráda</h2>
@@ -1542,6 +1437,17 @@ export function ProfileScreen() {
           </div>
         ) : null}
       </section>
+
+      {/* 5. Traki v telefonu */}
+      <MobileAppCard />
+
+      {/* 6. Odhlásit */}
+      <button
+        onClick={() => void handleLogout()}
+        className="w-full rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-mist"
+      >
+        Odhlásit
+      </button>
 
     </main>
   );

@@ -9,7 +9,7 @@ import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib
 import { AvatarPreview } from "@/components/avatar-preview";
 import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
 import { shouldApplyServerList, shouldApplyServerNumber } from "@/lib/overview-sync";
-import { buildProfileGameSummaries, shouldShowGameFilters } from "@/lib/profile-games-model";
+import { buildProfileGameSummaries, resolveGamesView, shouldShowGameFilters } from "@/lib/profile-games-model";
 import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
@@ -51,7 +51,8 @@ export function ProfileScreen() {
     setActiveMode,
     getPlayerScore,
     openParentAuthGate,
-    activeRuns
+    activeRuns,
+    gamesLoadState
   } = useAppState();
   const [friendCode, setFriendCode] = useState("");
   const [friendMessage, setFriendMessage] = useState("");
@@ -132,6 +133,7 @@ export function ProfileScreen() {
 
   // R44: u nula nebo jedné hry nemá filtrování smysl, takže se nezobrazuje.
   const showGameFilters = shouldShowGameFilters(gameSummaries.length);
+  const gamesView = resolveGamesView(gamesLoadState, gameSummaries.length);
 
   useEffect(() => {
     setVisibleGamesCount(6);
@@ -1246,7 +1248,22 @@ export function ProfileScreen() {
       {/* 3. Moje hry */}
       <section className="glass-card p-5">
         <h2 className="section-title">Moje hry</h2>
-        {gameSummaries.length === 0 ? (
+        {gamesView === "loading" || gamesView === "error" ? (
+          // R43/R44: nezjištěný stav se nesmí tvářit jako „hráč nic neodehrál".
+          // Prázdný stav patří jen k dokončenému načtení.
+          <div className="mt-3 rounded-2xl bg-white/5 p-4">
+            {gamesView === "error" ? (
+              <p className="text-sm text-coral">
+                {cloudProfileError || "Načtení tvých her se nepodařilo. Zkusíme to znovu."}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-mist">Načítám tvoje hry…</p>
+                <div className="mt-2 h-2 w-40 animate-pulse rounded-full bg-white/10" />
+              </>
+            )}
+          </div>
+        ) : gamesView === "empty" ? (
           <div className="mt-3 flex items-center gap-4">
             <Image
               src={illustrationSrc("batoh")}

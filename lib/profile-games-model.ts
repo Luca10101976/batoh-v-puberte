@@ -92,3 +92,49 @@ export function buildProfileGameSummaries(input: ProfileGamesInput): ProfileGame
 export function shouldShowGameFilters(gameCount: number): boolean {
   return gameCount > 1;
 }
+
+/**
+ * R44: v jakém stavu je načítání hráčových her.
+ *
+ * Hry stojí na dvou nezávislých načteních – dokončené hry a skóre z profilového
+ * API, běžící výpravy z herního. Dokud nemáme obojí, nevíme, jestli hráč hry
+ * nemá, nebo je jen zatím neznáme; a to jsou dvě různé věci, které se nesmí
+ * ukazovat stejně.
+ */
+export type GamesLoadState = "idle" | "loading" | "ready" | "error";
+
+export function combineGamesLoadState(progress: GamesLoadState, activeRuns: GamesLoadState): GamesLoadState {
+  // Chyba má přednost před nedokončeným načítáním. Selhání je zjištěná
+  // skutečnost, zatímco „ještě se načítá" je jen její nepřítomnost – a kdyby
+  // vyhrálo, stačilo by, aby se druhá půlka nikdy nerozběhla, a hráč by zůstal
+  // navždy u „Načítám tvoje hry…".
+  if (progress === "error" || activeRuns === "error") {
+    return "error";
+  }
+  if (progress === "idle" || activeRuns === "idle") {
+    return "idle";
+  }
+  if (progress === "loading" || activeRuns === "loading") {
+    return "loading";
+  }
+  return "ready";
+}
+
+/** Co má profil ukázat v sekci Moje hry. */
+export function resolveGamesView(
+  loadState: GamesLoadState,
+  gameCount: number
+): "loading" | "error" | "empty" | "games" {
+  // Když už nějaké hry víme, ukazují se i během načítání na pozadí – jsou to
+  // platná data, ne domněnka.
+  if (gameCount > 0) {
+    return "games";
+  }
+  if (loadState === "ready") {
+    return "empty";
+  }
+  if (loadState === "error") {
+    return "error";
+  }
+  return "loading";
+}

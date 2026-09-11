@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { buildProfileGameSummaries, shouldShowGameFilters, type ProfileRunInput } from "./profile-games-model.ts";
+import {
+  buildProfileGameSummaries,
+  combineGamesLoadState,
+  resolveGamesView,
+  shouldShowGameFilters,
+  type ProfileRunInput
+} from "./profile-games-model.ts";
 
 // R44 krok 4: profil je identita hráče, ne dashboard.
 // Chování seznamu her se ověřuje spuštěním modelu; u obrazovky, kterou kvůli
@@ -317,4 +323,116 @@ test("27 – výpadek načtení se neprezentuje jako nula ani prázdný profil",
   assert.match(src, /setCloudProfileError\("Načtení cloud profilu selhalo\."\)/);
   assert.match(src, /setCloudProfileError\("Účet už není přihlášený\. Přihlas se znovu\."\)/);
   assert.match(src, /serverScore \?\? getPlayerScore\(\)/, "dokud server nemluví, platí poslední známá hodnota");
+});
+
+// --- 28–34: R44 doplněk – loading vs. skutečně prázdný stav ------------------
+// Falešný prázdný stav vznikal tím, že sekce Moje hry měla jen dvě větve:
+// „nula her" a „hry". Nezjištěný stav spadl do té první.
+
+test("28 – dokud nevíme, nesmí profil tvrdit, že hráč nic neodehrál", () => {
+  assert.equal(resolveGamesView("idle", 0), "loading");
+  assert.equal(resolveGamesView("loading", 0), "loading");
+});
+
+test("29 – prázdný stav patří jen k dokončenému načtení", () => {
+  assert.equal(resolveGamesView("ready", 0), "empty");
+});
+
+test("30 – načtené hry se ukážou, i když na pozadí běží další načítání", () => {
+  assert.equal(resolveGamesView("ready", 1), "games");
+  assert.equal(resolveGamesView("loading", 1), "games", "platná data se kvůli refreshi neschovávají");
+  assert.equal(resolveGamesView("error", 2), "games", "chyba refreshe nesmí smazat, co hráč vidí");
+});
+
+test("31 – selhané načtení dá chybu, ne prázdný profil ani věčné načítání", () => {
+  assert.equal(resolveGamesView("error", 0), "error");
+  assert.notEqual(resolveGamesView("error", 0), "empty");
+  assert.notEqual(resolveGamesView("error", 0), "loading");
+});
+
+test("32 – hry čekají na obě nezávislá načtení", () => {
+  // dokončené hry a skóre (profilové API) × běžící výpravy (herní API)
+  assert.equal(combineGamesLoadState("ready", "loading"), "loading", "bez výprav nevíme, co je rozehrané");
+  assert.equal(combineGamesLoadState("loading", "ready"), "loading", "bez postupu nevíme, co je dokončené");
+  assert.equal(combineGamesLoadState("ready", "idle"), "idle");
+  assert.equal(combineGamesLoadState("ready", "ready"), "ready");
+});
+
+test("33 – chyba kteréhokoli z obou načtení je chyba, i když druhé ještě běží", () => {
+  assert.equal(combineGamesLoadState("error", "ready"), "error");
+  assert.equal(combineGamesLoadState("ready", "error"), "error");
+  // Kdyby nedokončené načítání přebilo chybu, stačilo by, aby se druhá půlka
+  // nikdy nerozběhla, a hráč by zůstal navždy u „Načítám tvoje hry…".
+  assert.equal(combineGamesLoadState("loading", "error"), "error");
+  assert.equal(combineGamesLoadState("idle", "error"), "error");
+});
+
+test("33b – žádná kombinace nevede k věčnému načítání po selhání", () => {
+  const stavy = ["idle", "loading", "ready", "error"] as const;
+  for (const a of stavy) {
+    for (const b of stavy) {
+      if (a === "error" || b === "error") {
+        assert.equal(combineGamesLoadState(a, b), "error", `${a} + ${b} musí skončit chybou`);
+        assert.equal(resolveGamesView(combineGamesLoadState(a, b), 0), "error");
+      }
+    }
+  }
+});
+
+test("34 – stav vychází z průběhu načítání, ne z čekání", () => {
+  const provider = PROVIDER();
+  assert.match(provider, /setActiveRunsLoadState\("ready"\)/, "úspěch výprav se zaznamená");
+  assert.match(provider, /setProgressLoadState\("ready"\)/, "úspěch postupu se zaznamená");
+  // po jednou načtených datech se stav nevrací na loading ani na error
+  assert.match(provider, /setActiveRunsLoadState\(\(current\) => \(current === "ready" \? current : "loading"\)\)/);
+  assert.match(provider, /setProgressLoadState\(\(current\) => \(current === "ready" \? current : "error"\)\)/);
+  // R43: když server postup nezjistil, není to prázdno
+  const r43 = provider.slice(provider.indexOf("if (progressUnavailable) {"));
+  assert.match(r43.slice(0, 600), /setProgressLoadState/, "nezjištěný postup musí stav načítání ovlivnit");
+  // žádné umělé čekání kvůli zobrazení: stav her se odvozuje výhradně
+  // ze skutečného stavu načítání a z počtu známých her
+  const profil = PROFIL();
+  assert.match(profil, /const gamesView = resolveGamesView\(gamesLoadState, gameSummaries\.length\);/);
+  const pouziteTimery = profil.match(/[a-zA-Z.]*setTimeout\(/g) ?? [];
+  assert.equal(pouziteTimery.length, 2, "v profilu zůstávají jen starší časovače avatara a hlášky o zkopírování");
+  assert.doesNotMatch(profil, /gamesLoadState[\s\S]{0,200}setTimeout/, "stav her nevisí na časovači");
+});
+
+test("35 – odhlášení vrátí načítání na začátek", () => {
+  const provider = PROVIDER();
+  const odhlaseni = provider.slice(provider.indexOf("cloudHydratedForUserRef.current = null;\n    setProgressLoadState"));
+  assert.match(odhlaseni.slice(0, 240), /setProgressLoadState\("idle"\)/);
+  assert.match(odhlaseni.slice(0, 240), /setActiveRunsLoadState\("idle"\)/);
+  assert.match(odhlaseni.slice(0, 240), /setActiveRuns\(\[\]\)/, "výpravy předchozího hráče nesmí zůstat");
+});
+
+test("36 – profil zobrazuje přesně schválené texty pro každý stav", () => {
+  const src = PROFIL();
+  assert.match(src, /gamesView === "loading" \|\| gamesView === "error"/, "loading a error mají vlastní větev");
+  assert.match(src, /Načítám tvoje hry…/);
+  assert.match(src, /gamesView === "empty"/, "prázdný stav je samostatná větev");
+  assert.match(src, /Zatím tady nemáš žádnou rozehranou ani dokončenou hru\. Vyber si hru a vyraž\./);
+  // chybový stav používá konkrétní hlášku z R43, když ji máme
+  assert.match(src, /\{cloudProfileError \|\| "Načtení tvých her se nepodařilo/);
+});
+
+test("37 – neúspěšné načtení se opakuje, takže slib o dalším pokusu platí", () => {
+  const provider = PROVIDER();
+  // postup: existující opakování přes cloudRetryTick
+  assert.match(provider, /setCloudRetryTick\(\(value\) => value \+ 1\)/);
+  // výpravy: nově taky, včetně počitadla, aby se nezkusilo jen jednou
+  const blok = provider.slice(provider.indexOf('if (activeRunsLoadState !== "error") {'));
+  assert.match(blok.slice(0, 600), /setActiveRunsRetryTick\(\(value\) => value \+ 1\)/);
+  assert.match(blok.slice(0, 600), /void refreshActiveRuns\(\);/);
+  assert.match(blok.slice(0, 700), /\[activeRunsLoadState, activeRunsRetryTick, refreshActiveRuns\]/);
+});
+
+test("38 – hydratace naběhne i po obnovení klíčem bez znovunačtení stránky", () => {
+  const provider = PROVIDER();
+  assert.match(
+    provider,
+    /\}, \[cloudRetryTick, hydrated, supabase, state\.registrationCompleted, state\.profileCode\]\);/,
+    "efekt musí reagovat na to, že hráč vznikl nebo se obnovil"
+  );
+  assert.match(provider, /cloudHydratedForUserRef\.current === session\.user\.id/, "opakovaný běh pro stejného hráče je pořád ošetřený");
 });

@@ -14,6 +14,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { shouldApplyServerList } from "@/lib/overview-sync";
 import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { DEFAULT_AVATAR_ID } from "@/lib/avatars";
+import { combineGamesLoadState } from "@/lib/profile-games-model";
 
 type SquadMember = {
   id: string;
@@ -95,6 +96,12 @@ export type ActiveRunSummary = {
 type AppStateContextValue = {
   state: AppState;
   hydrated: boolean;
+  /** Dokončené hry a skóre z cloudu. */
+  progressLoadState: LoadState;
+  /** Běžící výpravy. */
+  activeRunsLoadState: LoadState;
+  /** Obojí dohromady – co má profil ukázat v sekci Moje hry. */
+  gamesLoadState: LoadState;
   openParentAuthGate: () => void;
   completeRegistration: (payload: {
     name: string;
@@ -188,12 +195,22 @@ const initialState: AppState = {
   trustedContacts: []
 };
 
+/**
+ * R44: v jakém stavu je načítání hráčových her. Bez toho se nedalo odlišit
+ * „ještě nevím" od „opravdu nic nemá" a profil po obnovení klíčem chvíli tvrdil,
+ * že hráč žádnou hru nemá. Vychází ze skutečného průběhu načítání, ne z čekání.
+ */
+export type LoadState = "idle" | "loading" | "ready" | "error";
+
 const AppStateContext = createContext<AppStateContextValue | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [cloudRetryTick, setCloudRetryTick] = useState(0);
+  const [progressLoadState, setProgressLoadState] = useState<LoadState>("idle");
+  const [activeRunsLoadState, setActiveRunsLoadState] = useState<LoadState>("idle");
+  const [activeRunsRetryTick, setActiveRunsRetryTick] = useState(0);
   const stateRef = useRef<AppState>(initialState);
   const cloudHydratedForUserRef = useRef<string | null>(null);
   const profileMutationVersionRef = useRef(0);
@@ -240,8 +257,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshActiveRuns = useCallback(async () => {
+    // Jakmile jsme jednou načetli, drží se „ready": hráč se dívá na platná data
+    // a opakované načtení na pozadí mu je nemá schovat ani přebarvit na chybu.
+    setActiveRunsLoadState((current) => (current === "ready" ? current : "loading"));
     const payload = await callGameApi("/api/game/active-runs", {});
     if (!payload?.ok) {
+      setActiveRunsLoadState((current) => (current === "ready" ? current : "error"));
       return;
     }
     const runs = Array.isArray(payload.runs) ? (payload.runs as ActiveRunSummary[]) : [];
@@ -251,6 +272,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         .slice()
         .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")))
     );
+    setActiveRunsLoadState("ready");
   }, [callGameApi]);
 
   const startRun = useCallback(
@@ -273,6 +295,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
     void refreshActiveRuns();
   }, [hydrated, refreshActiveRuns, state.profileCode, state.registrationCompleted]);
+
+  useEffect(() => {
+    // R44: neúspěšné načtení běžících výprav se dřív už nikdy neopakovalo, takže
+    // profil zůstal na chybě i po tom, co se síť vrátila. Stejný rytmus jako má
+    // opakované načítání profilu.
+    if (activeRunsLoadState !== "error") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      // Počitadlo pokusů je tu proto, aby se efekt spustil znovu i tehdy, když
+      // další pokus zase selže a stav zůstane stejný. Bez něj by se zkusilo
+      // jednou a dost.
+      setActiveRunsRetryTick((value) => value + 1);
+      void refreshActiveRuns();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [activeRunsLoadState, activeRunsRetryTick, refreshActiveRuns]);
 
   useEffect(() => {
     if (!hydrated || !supabase) {
@@ -382,6 +421,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
 
       if (!currentState.registrationCompleted) {
+        setProgressLoadState("idle");
         return;
       }
 
@@ -390,12 +430,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       } = await supabase.auth.getSession();
 
       if (!session?.user) {
+        setProgressLoadState((current) => (current === "ready" ? current : "error"));
         return;
       }
 
       if (cloudHydratedForUserRef.current === session.user.id) {
         return;
       }
+
+      setProgressLoadState((current) => (current === "ready" ? current : "loading"));
 
       const hydrationStartMutationVersion = profileMutationVersionRef.current;
 
@@ -520,6 +563,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             ]
           };
         });
+        setProgressLoadState((current) => (current === "ready" ? current : "error"));
         retryTimer = window.setTimeout(() => {
           setCloudRetryTick((value) => value + 1);
         }, 1200);
@@ -539,6 +583,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           profileRowId: childProfile.profile_id || current.profileRowId
         }));
         cloudHydratedForUserRef.current = null;
+        setProgressLoadState((current) => (current === "ready" ? current : "error"));
         retryTimer = window.setTimeout(() => {
           setCloudRetryTick((value) => value + 1);
         }, 1200);
@@ -619,6 +664,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       });
 
       cloudHydratedForUserRef.current = session.user.id;
+      setProgressLoadState("ready");
     }
 
     hydrationTimer = window.setTimeout(() => {
@@ -633,7 +679,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(retryTimer);
       }
     };
-  }, [cloudRetryTick, hydrated, supabase]);
+    // R44: hydratace musí naběhnout i ve chvíli, kdy hráč teprve vznikne nebo se
+    // obnoví Traki klíčem bez znovunačtení stránky. Dřív efekt na registraci
+    // nezávisel, takže se po obnovení klíčem hry nenačetly vůbec a profil
+    // ukazoval prázdný stav, dokud hráč stránku sám neobnovil. Opakovanému
+    // běhu pro stejného uživatele brání cloudHydratedForUserRef.
+  }, [cloudRetryTick, hydrated, supabase, state.registrationCompleted, state.profileCode]);
 
   const setCity = useCallback((city: string) => {
     setState((current) => (current.city === city ? current : { ...current, city }));
@@ -917,6 +968,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       city: current.city
     }));
     cloudHydratedForUserRef.current = null;
+    setProgressLoadState("idle");
+    setActiveRunsLoadState("idle");
+    setActiveRuns([]);
   }, []);
 
   const isLocationUnlocked = useCallback(
@@ -933,10 +987,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [state.completedGameplayLocationIds]
   );
 
+  // Hry v profilu stojí na dvou nezávislých načteních: dokončené hry a skóre
+  // přicházejí z profilového API, běžící výpravy z herního. Dokud nemáme obojí,
+  // nevíme, jestli hráč hry nemá, nebo je jen zatím neznáme.
+  const gamesLoadState = useMemo<LoadState>(
+    () => combineGamesLoadState(progressLoadState, activeRunsLoadState),
+    [activeRunsLoadState, progressLoadState]
+  );
+
   const value = useMemo<AppStateContextValue>(
     () => ({
       state,
       hydrated,
+      progressLoadState,
+      activeRunsLoadState,
+      gamesLoadState,
       openParentAuthGate,
       completeRegistration,
       addFriendByCode,
@@ -967,6 +1032,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setFriendsFromCloud,
       setTrustedContacts,
       hydrated,
+      progressLoadState,
+      activeRunsLoadState,
+      gamesLoadState,
       openParentAuthGate,
       isLocationUnlocked,
       getPlayerScore,

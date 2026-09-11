@@ -204,8 +204,12 @@ test("B9 – zastávka bez autorského textu dostane obecný", () => {
   assert.ok(transition);
   assert.equal(transition.transitionText, "", "Cassel autorský text nemá");
   assert.equal(fallbackTransitionText("Cassel", "Altán"), "Zastávku „Cassel“ máš hotovou. Teď se přesuň na Altán.");
+  // R44: přechodová obrazovka už chybějící autorský text ničím nenahrazuje.
+  // Hráč vidí „Pokračuješ na <zastávka>“ a text z Mozku jen tehdy, když existuje –
+  // prázdný text tak zůstane poznat a nezamaskuje ho obecná věta.
   const play = read("components/play-screen.tsx");
-  assert.match(play, /fallbackTransitionText\(/);
+  assert.ok(!/fallbackTransitionText\(/.test(play), "náhradní věta se v průchodu hrou nepoužívá");
+  assert.match(play, /transitionText \? \(/, "autorský text se zobrazí, jen když je vyplněný");
 });
 
 test("B10 – potvrdit jde jen přechod ze skutečně dokončené zastávky", () => {

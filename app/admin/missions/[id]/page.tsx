@@ -107,7 +107,7 @@ export default async function MissionDetailPage({
 
   const { data: stops, error: stopsError } = await supabase
     .from("mission_stops")
-    .select("id, mission_id, title, description, image_url, order")
+    .select("id, mission_id, title, description, image_url, order, transition_text")
     .eq("mission_id", mission.id)
     .order("order", { ascending: true });
 
@@ -229,6 +229,15 @@ export default async function MissionDetailPage({
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-sky">Zastavení {index + 1}</p>
                   <p className="mt-1 font-semibold">{stop.title}</p>
+                  {/* R44: hráč se po dokončení zastávky potřebuje dozvědět, kudy dál.
+                      Když text chybí, uvidí jen název další zastávky – proto je to
+                      tady vidět na první pohled. U poslední zastávky se nic nečeká,
+                      po ní následuje závěr hry. */}
+                  {index < orderedStops.length - 1 && !(stop.transition_text ?? "").trim() ? (
+                    <p className="mt-2 inline-flex rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">
+                      Chybí text „kudy dál“ na další zastavení
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {/* R37: pořadí se mění šipkami a přečísluje se samo. */}

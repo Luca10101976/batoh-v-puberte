@@ -8,7 +8,6 @@ import { useAppState } from "@/components/app-state-provider";
 import type { MapLocation } from "@/lib/gameplay-types";
 import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
 import {
-  fallbackTransitionText,
   flattenTasks,
   resolveCurrentTask,
   resolvePendingStopTransition,
@@ -149,6 +148,9 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   const activeEpisode = location.episodes[episodeIndex];
   const activeTask = activeEpisode.tasks[taskIndex];
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
+  // R44: kontext zastávky (uvedení, historie, fotka) patří k příchodu na místo,
+  // tedy k jejímu prvnímu úkolu. U dalších úkolů téže zastávky se neopakuje.
+  const isFirstTaskOfEpisode = taskIndex === 0;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
   const totalTasks = location.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
   // R44: procentuální postup se hráči nikde neukazuje, takže se ani nepočítá.
@@ -574,6 +576,19 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       return;
     }
 
+    // R44: prázdný vstup je věc formuláře, ne serveru. Dřív se odeslal a hráč
+    // dostal obecnou technickou hlášku, ze které nepoznal, co má udělat.
+    if (activeTask.type !== "choice" && !input.trim()) {
+      setStatus("wrong");
+      setMessage("Napiš nejdřív odpověď.");
+      return;
+    }
+    if (activeTask.type === "choice" && !input.trim()) {
+      setStatus("wrong");
+      setMessage("Vyber nejdřív odpověď.");
+      return;
+    }
+
     setSubmittingAnswer(true);
     const result = await submitTaskAnswer("answer", input);
     setSubmittingAnswer(false);
@@ -902,9 +917,11 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           <p className="text-xs uppercase tracking-[0.24em] text-lime">Výsledek</p>
           {endingView.score !== null ? (
             <>
+              {/* R44: konec hry není vyhodnocení testu. Žádný zlomek, žádné
+                  maximum, žádná bilance správně/Nevím. Uložené skóre se nemění. */}
               <p className="mt-3 text-4xl font-bold">
                 {endingView.score}
-                <span className="text-xl text-mist">/{endingView.maxScore}</span>
+                <span className="ml-2 text-xl text-mist">bodů</span>
               </p>
               <p className="mt-1 text-sm text-mist">{completionLabel}</p>
               {endingView.isNewBest ? (
@@ -913,21 +930,15 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 </p>
               ) : (
                 <p className="mt-3 text-sm text-mist">
-                  Tvůj nejlepší výsledek téhle hry zůstává {endingView.bestScore}/{endingView.maxScore}.
+                  Tvůj nejlepší výsledek téhle hry zůstává {endingView.bestScore} bodů.
                 </p>
               )}
-              {endingView.correctTasks !== null ? (
-                <p className="mt-3 text-sm text-mist">
-                  Správně: <span className="font-semibold text-white">{endingView.correctTasks}</span> • Nevím:{" "}
-                  <span className="font-semibold text-white">{endingView.unknownTasks}</span>
-                </p>
-              ) : null}
             </>
           ) : (
             <>
               <p className="mt-3 text-4xl font-bold">
                 {endingView.bestScore}
-                <span className="text-xl text-mist">/{endingView.maxScore}</span>
+                <span className="ml-2 text-xl text-mist">bodů</span>
               </p>
               <p className="mt-1 text-sm text-mist">Tvůj nejlepší výsledek téhle hry.</p>
             </>
@@ -980,33 +991,31 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   // posledního úkolu zastávky (status je zpět na „idle"). Jinak by hlášku
   // o získaných bodech okamžitě překryla.
   if (pendingTransition && status === "idle") {
-    // R26/Q5: autorský text zastávky, jinak obecná věta. Nic se za autora nevymýšlí.
-    const transitionText =
-      pendingTransition.transitionText ||
-      fallbackTransitionText(pendingTransition.fromStopName, pendingTransition.toStopName);
+    // R44: přechod říká jen to podstatné – zastávka je hotová a kam se jde dál.
+    // Autorský text z Mozku se zobrazí, když existuje; nic se za autora nevymýšlí
+    // a chybějící text se ničím nenahrazuje, aby bylo poznat, že chybí.
+    const transitionText = pendingTransition.transitionText?.trim() || "";
 
     return (
       <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
         <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
           <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Zastávka hotová</p>
-          <div className="mt-5 rounded-2xl bg-night/45 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
-            <p className="mt-1 text-xl font-bold text-white">{pendingTransition.fromStopName}</p>
-          </div>
-          <div className="mt-4 flex items-start gap-3">
-            <Image
-              src={illustrationSrc("rozcestnik")}
-              alt=""
-              width={72}
-              height={72}
-              className="h-[72px] w-[72px] shrink-0 object-contain"
-            />
-            <p className="text-base leading-7 text-white/90">{transitionText}</p>
-          </div>
-          <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
+          <div className="mt-5 rounded-2xl border border-lime/40 bg-night/35 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-lime">Pokračuješ na</p>
             <p className="mt-1 text-3xl font-bold text-white">{pendingTransition.toStopName}</p>
           </div>
+          {transitionText ? (
+            <div className="mt-4 flex items-start gap-3">
+              <Image
+                src={illustrationSrc("rozcestnik")}
+                alt=""
+                width={72}
+                height={72}
+                className="h-[72px] w-[72px] shrink-0 object-contain"
+              />
+              <p className="text-base leading-7 text-white/90">{transitionText}</p>
+            </div>
+          ) : null}
           <button
             onClick={() => void continueToNextEpisode()}
             disabled={confirmingTransition}
@@ -1027,26 +1036,20 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             i úkolů a štítek režimu – hráč si žádný režim nevybíral a skupinové
             hraní je odložené (R34). Evidence postupu na serveru se nemění,
             mění se jen to, co vidí hráč. */}
+        {/* R44: název zastávky je na obrazovce jednou. Uvedení místa, historie
+            a fotka patří k PŘÍCHODU na zastávku – u dalších úkolů téhož místa už
+            se neopakují, protože hráč se nikam nepřesunul a četl je. Kdo se vrací
+            do rozehrané hry doprostřed zastávky, úvodem znovu procházet nemusí. */}
         <div>
           <h1 className="text-2xl font-bold">{location.name}</h1>
-          <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
-        </div>
-        <div className="mt-3 rounded-2xl border border-sky/20 bg-sky/10 px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.18em] text-sky">Aktuální zastavení</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            {activeEpisode.name}
-          </p>
-          <p className="mt-1 text-xs text-mist">
-            {isLastTask && !isLastEpisode ? "Po tomhle úkolu se přesuneš na další zastavení." : "Jsi na správném místě ve hře."}
-          </p>
+          <p className="mt-2 text-base font-semibold text-white">{activeEpisode.name}</p>
         </div>
 
+        {isFirstTaskOfEpisode ? (
         <div className="mt-3 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <div className="min-w-0 flex-1">
-              <p className="text-xs uppercase tracking-[0.24em] text-sky">O tomhle zastavení</p>
-              <h2 className="mt-2 text-lg font-semibold text-white sm:text-xl">{activeEpisode.name}</h2>
-              <p className="mt-2 text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
+              <p className="text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
 
               {activeEpisode.background ? (
                 <div className="mt-3 rounded-[24px] border border-white/10 bg-night/35 p-4">
@@ -1057,7 +1060,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             </div>
 
             {activeEpisode.illustrationImage ? (
-              <figure className="mx-auto w-full max-w-[168px] overflow-hidden rounded-[24px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:max-w-[220px] lg:mx-0 lg:w-[220px] lg:flex-none">
+              <figure className="mx-auto w-full max-w-[120px] overflow-hidden rounded-[24px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:max-w-[160px] lg:mx-0 lg:w-[180px] lg:flex-none">
                 {isExternalImage(activeEpisode.illustrationImage) ? (
                   <img
                     src={activeEpisode.illustrationImage}
@@ -1077,13 +1080,13 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             ) : null}
           </div>
         </div>
+        ) : null}
       </section>
 
       <section className="glass-card p-5">
-        <div className="flex items-center justify-between">
-          <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-mist">{activeTask.typeLabel}</span>
-        </div>
-        <h2 className="mt-4 text-2xl font-semibold">{activeTask.title}</h2>
+        {/* R44: štítek typu úkolu („Výběr“, „Otázka“) hráči nic neříká. Typ zůstává
+            interně, jen se nevypisuje. */}
+        <h2 className="text-2xl font-semibold">{activeTask.title}</h2>
         <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>
         {activeTask.illustrationImage ? (
           <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
@@ -1108,18 +1111,27 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
         <div className="mt-5 rounded-[24px] border border-dashed border-white/15 bg-night/70 p-4">
           {activeTask.type === "choice" ? (
+            /* R44: po definitivním vyřešení se volby nesmí tvářit, že jdou měnit.
+               Zvolená odpověď zůstane zvýrazněná, ostatní zešednou. aria-pressed
+               dává stav výběru i čtečkám obrazovky. */
             <div className="space-y-2">
-              {activeTask.options?.map((option) => (
-                <button
-                  key={option}
-                  onClick={() => setInput(option)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${
-                    input === option ? "border-lime bg-lime/10 text-white" : "border-white/10 bg-white/5"
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
+              {activeTask.options?.map((option) => {
+                const zvoleno = input === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setInput(option)}
+                    disabled={verificationFinished}
+                    aria-pressed={zvoleno}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${
+                      zvoleno ? "border-lime bg-lime/10 text-white" : "border-white/10 bg-white/5"
+                    } ${verificationFinished && !zvoleno ? "opacity-40" : ""} disabled:cursor-default`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
             </div>
           ) : activeTask.type === "photo" ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-mist">
@@ -1227,10 +1239,6 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           </div>
         ) : null}
 
-        <p className="mt-3 text-xs text-mist/80">
-          Pravidlo: Správná odpověď = {POINTS_PER_TASK} bodů, po otevření nápovědy {POINTS_PER_TASK_WITH_HINT} bodů. Na odpověď máš 2 opravné pokusy. Po 3. špatné odpovědi se úkol označí jako Nevím a je za 0 bodů.
-        </p>
-
         {activeTask.type === "photo" ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button
@@ -1253,34 +1261,15 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             </button>
           </div>
         ) : (
+          /* R44: dokud úkol není definitivně vyřešený, hráč odpovídá a může to
+             zkusit znovu. Jakmile je vyřešený, zůstane jedna cesta dál – nezobrazují
+             se akce, které už nejdou použít. */
           <div className="mt-5 space-y-3">
-            <button
-              onClick={() => void handleValidate()}
-              disabled={verificationFinished || taskOutcomes[activeTask.id] === "unknown" || submittingAnswer}
-              className={`w-full rounded-[24px] px-4 py-4 text-sm font-bold transition-colors ${
-                verificationFinished
-                  ? "border border-white/10 bg-white/5 text-mist"
-                  : "bg-lime text-night"
-              } disabled:cursor-not-allowed`}
-            >
-              {submittingAnswer ? "Ověřuji..." : "Ověřit úkol"}
-            </button>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => void handleUnknown()}
-                disabled={submittingAnswer || verificationFinished}
-                className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist"
-              >
-                Nevím
-              </button>
+            {verificationFinished ? (
               <button
                 onClick={() => advance()}
                 disabled={!canAdvance}
-                className={`rounded-[24px] px-4 py-4 text-sm font-semibold transition-colors ${
-                  canAdvance
-                    ? "bg-lime text-night"
-                    : "border border-white/10 bg-white/5 text-mist"
-                } disabled:cursor-not-allowed`}
+                className="w-full rounded-[24px] bg-lime px-4 py-4 text-sm font-bold text-night disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLastTask && isLastEpisode
                   ? "Dokončit hru"
@@ -1288,16 +1277,30 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                     ? "Další zastavení"
                     : "Další stopa"}
               </button>
-            </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => void handleValidate()}
+                  disabled={submittingAnswer}
+                  className="w-full rounded-[24px] bg-lime px-4 py-4 text-sm font-bold text-night transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submittingAnswer ? "Ověřuji..." : "Ověřit odpověď"}
+                </button>
+                <button
+                  onClick={() => void handleUnknown()}
+                  disabled={submittingAnswer}
+                  className="w-full rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-sm font-semibold text-mist disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Nevím
+                </button>
+              </>
+            )}
           </div>
         )}
       </section>
 
-      {historicallyCompleted ? (
-        <div className="rounded-[24px] border border-lime/20 bg-lime/10 p-4 text-sm text-mist">
-          Tuhle hru už máš jednou dokončenou. Klidně si ji projdi znovu, ale nejlepší výsledek už si tím nezhoršíš.
-        </div>
-      ) : null}
+      {/* R44: během dobrodružství hráči nepřipomínáme systémovou historii
+          předchozího průchodu. Uložené nejlepší skóre se nemění. */}
 
     </main>
   );

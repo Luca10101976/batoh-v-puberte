@@ -313,8 +313,13 @@ export async function POST(request: NextRequest) {
   }
   if (!locationProgressReadError || locationProgressReadError.code === "PGRST116") {
     if (!locationProgressRow) {
+      // Rozehraná hra musí nést UUID hráče, jinak se na ni při smazání profilu
+      // neuplatní ON DELETE CASCADE (kaskáda jde jen přes child_profile_id,
+      // primární klíč je textový kód bez FK). Dokončení tohle už zapisovalo,
+      // rozehrání ne – zápis je starší než sloupec.
       const { error: insertInProgressError } = await admin.from("child_location_progress").insert({
         profile_code: ownProfile.profile_code,
+        child_profile_id: ownProfile.id,
         location_id: locationId,
         completed_at: nowIso,
         status: "in_progress",
@@ -342,7 +347,10 @@ export async function POST(request: NextRequest) {
         .update({
           status: "in_progress",
           completion_source: "gameplay",
-          updated_at: nowIso
+          updated_at: nowIso,
+          // Samoopravný zápis: starší rozehraný řádek bez UUID se doplní
+          // při další odpovědi.
+          child_profile_id: ownProfile.id
         })
         .eq("profile_code", ownProfile.profile_code)
         .eq("location_id", locationId);

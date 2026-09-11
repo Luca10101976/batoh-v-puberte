@@ -110,6 +110,20 @@ export function MissionForm({
         </label>
 
         <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Text na detailu hry</span>
+          <textarea
+            name="detail_text"
+            defaultValue={mission?.detail_text ?? ""}
+            rows={4}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Čím hra láká – o něco víc než krátký popis, ale ne celý úvod."
+          />
+          <span className="block text-xs text-mist">
+            Zobrazí se na detailu hry. Bez vyplnění se použije krátký popis z katalogu.
+          </span>
+        </label>
+
+        <label className="mt-4 block space-y-2">
           <span className="text-sm text-mist">Závěr – titulek</span>
           <input
             name="ending_title"
@@ -140,6 +154,55 @@ export function MissionForm({
             placeholder="Osobní věta na konec, nepovinná"
           />
         </label>
+      </section>
+
+      {/* R44: kam má hráč fyzicky přijít. Je to vlastnost hry – sraz nemusí být
+          totožný s první zastávkou. Souřadnice slouží jen k odkazu do běžné
+          mapové služby, vlastní mapu Traki nemá. */}
+      <section className="glass-card p-5">
+        <h2 className="section-title">Kde hra začíná</h2>
+        <p className="mt-2 text-sm text-mist">
+          Místo srazu, kam má hráč dorazit. Nemusí to být první zastávka hry.
+        </p>
+
+        <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Název místa</span>
+          <input
+            name="start_place_name"
+            defaultValue={mission?.start_place_name ?? ""}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="Např. Park Klamovka, Praha 5"
+          />
+        </label>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-2">
+            <span className="text-sm text-mist">Zeměpisná šířka</span>
+            <input
+              name="start_lat"
+              inputMode="decimal"
+              defaultValue={mission?.start_lat ?? ""}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+              placeholder="50.0717634"
+            />
+            {state.fieldErrors?.start_lat ? <p className="text-xs text-coral">{state.fieldErrors.start_lat}</p> : null}
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm text-mist">Zeměpisná délka</span>
+            <input
+              name="start_lng"
+              inputMode="decimal"
+              defaultValue={mission?.start_lng ?? ""}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+              placeholder="14.3762351"
+            />
+            {state.fieldErrors?.start_lng ? <p className="text-xs text-coral">{state.fieldErrors.start_lng}</p> : null}
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-mist">
+          Souřadnice se použijí pro tlačítko „Ukázat na mapě“. Buď vyplň obě, nebo žádnou.
+        </p>
       </section>
 
       <section className="glass-card p-5">

@@ -39,6 +39,10 @@ type MissionDbRow = {
   duration_min?: number;
   is_published?: boolean;
   short_description?: string | null;
+  start_place_name?: string | null;
+  start_lat?: number | null;
+  start_lng?: number | null;
+  detail_text?: string | null;
   catalog_order?: number | null;
   unlock_after_mission_id?: string | null;
   ending_title?: string | null;
@@ -52,6 +56,11 @@ type DbBackedLocationSeed = {
   name: string;
   teaser: string;
   shortDescription?: string;
+  /** R44: vlastní text detailu a místo startu hry. */
+  detailText?: string | null;
+  startPlaceName?: string | null;
+  startLat?: number | null;
+  startLng?: number | null;
   unlockedByPlaceId?: string | null;
   subtitle: string;
   story: string;
@@ -221,6 +230,14 @@ function buildDbBackedLocationSeed(
     name: mission.title,
     teaser,
     shortDescription: teaser,
+    // R44: detail hry má vlastní lákací vrstvu. Dokud ji autor nevyplní, chová se
+    // detail přesně jako dosud a ukáže krátký popis z katalogu.
+    detailText: (mission.detail_text ?? "").trim() || null,
+    // R44: místo srazu je vlastnost hry. Souřadnice města zůstávají jen pro
+    // zpětnou kompatibilitu pole lat/lng níž.
+    startPlaceName: (mission.start_place_name ?? "").trim() || null,
+    startLat: typeof mission.start_lat === "number" && Number.isFinite(mission.start_lat) ? mission.start_lat : null,
+    startLng: typeof mission.start_lng === "number" && Number.isFinite(mission.start_lng) ? mission.start_lng : null,
     // R20/R22: katalogový zámek z DB; neplatná vazba = trvale zamčeno
     unlockedByPlaceId: catalogUnlockedByPlaceId(catalogEntry ?? null),
     subtitle: "Městská mise",
@@ -451,7 +468,7 @@ export async function getGameplayEpisodes(
 // ---------------------------------------------------------------------------
 
 const CATALOG_COLUMNS =
-  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, catalog_order, is_published, unlock_after_mission_id";
+  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, catalog_order, is_published, unlock_after_mission_id, start_place_name, start_lat, start_lng, detail_text";
 const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published";
 
 /** Historický slug hry podle UUID mise (stabilní mapa); jinak UUID mise. */
@@ -501,7 +518,7 @@ export async function getCatalog(): Promise<CatalogEntry[]> {
     return [];
   }
   let { data, error } = await supabase.from("missions").select(CATALOG_COLUMNS);
-  if (error && /short_description|catalog_order|unlock_after_mission_id/i.test(error.message ?? "")) {
+  if (error && /short_description|catalog_order|unlock_after_mission_id|start_place_name|start_lat|start_lng|detail_text/i.test(error.message ?? "")) {
     ({ data, error } = await supabase.from("missions").select(CATALOG_COLUMNS_LEGACY));
   }
   if (error || !data) {

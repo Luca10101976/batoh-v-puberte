@@ -32,6 +32,23 @@ function parsePositiveInt(value: string) {
   return Math.max(0, Math.floor(parsed));
 }
 
+/**
+ * R44: souřadnice místa startu. Prázdné pole je v pořádku (hra místo startu mít
+ * nemusí), ale nesmyslná hodnota se nesmí tiše uložit jako null – to by vypadalo,
+ * že se údaj uložil. Vrací "invalid", aby formulář mohl chybu ukázat.
+ */
+function parseCoordinate(value: string, max = 180): number | null | "invalid" {
+  const trimmed = value.trim().replace(",", ".");
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || Math.abs(parsed) > max) {
+    return "invalid";
+  }
+  return parsed;
+}
+
 function rethrowIfRedirectError(error: unknown) {
   if (
     typeof error === "object" &&
@@ -65,6 +82,12 @@ async function parseMission(formData: FormData) {
   const endingTitle = normalizeText(formData.get("ending_title"));
   const endingText = normalizeText(formData.get("ending_text"));
   const endingPlayerMessage = normalizeText(formData.get("ending_player_message"));
+  // R44: místo srazu a vlastní text detailu. Obojí je nepovinné – hra bez nich
+  // se chová přesně jako dosud.
+  const detailText = normalizeText(formData.get("detail_text"));
+  const startPlaceName = normalizeText(formData.get("start_place_name"));
+  const startLat = parseCoordinate(normalizeText(formData.get("start_lat")), 90);
+  const startLng = parseCoordinate(normalizeText(formData.get("start_lng")));
 
   const fieldErrors: Record<string, string> = {};
   if (!title) fieldErrors.title = "Název hry je povinný.";
@@ -73,6 +96,13 @@ async function parseMission(formData: FormData) {
   if (!DIFFICULTIES.has(difficultyRaw)) fieldErrors.difficulty = "Vyber platnou obtížnost.";
   if (duration === null) fieldErrors.duration_min = "Délka musí být číslo.";
   if (catalogOrder === null) fieldErrors.catalog_order = "Pořadí musí být číslo.";
+  if (startLat === "invalid") fieldErrors.start_lat = "Zeměpisná šířka musí být číslo mezi −90 a 90.";
+  if (startLng === "invalid") fieldErrors.start_lng = "Zeměpisná délka musí být číslo mezi −180 a 180.";
+  // Odkaz do mapy potřebuje obě souřadnice; jedna sama by vedla nikam.
+  if (startLat !== "invalid" && startLng !== "invalid") {
+    if (startLat !== null && startLng === null) fieldErrors.start_lng = "Doplň i zeměpisnou délku.";
+    if (startLng !== null && startLat === null) fieldErrors.start_lat = "Doplň i zeměpisnou šířku.";
+  }
 
   let cityName = "";
   if (cityId) {
@@ -106,7 +136,11 @@ async function parseMission(formData: FormData) {
       unlock_after_mission_id: unlockAfter || null,
       ending_title: endingTitle,
       ending_text: endingText,
-      ending_player_message: endingPlayerMessage
+      ending_player_message: endingPlayerMessage,
+      detail_text: detailText,
+      start_place_name: startPlaceName,
+      start_lat: startLat === "invalid" ? null : startLat,
+      start_lng: startLng === "invalid" ? null : startLng
     }
   };
 }

@@ -80,4 +80,10 @@ export type MapLocation = {
   cityLocative?: string;
   /** Název hry, kterou je potřeba dohrát dřív (R21/R22). */
   unlockRequirementName?: string | null;
+  /** R44: kam má hráč fyzicky přijít. Vlastnost hry, ne města ani první zastávky. */
+  startPlaceName?: string | null;
+  startLat?: number | null;
+  startLng?: number | null;
+  /** R44: vlastní lákací text detailu. Prázdný = použije se krátký popis z katalogu. */
+  detailText?: string | null;
 };

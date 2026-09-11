@@ -107,6 +107,31 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     // pravidlo pořadí nad uzavřenými úkoly výpravy, stejné jako na serveru.
   }, [searchParams, setActiveMode]);
 
+  // R44: jediná autoritativní cesta do nové hry.
+  //
+  // Hráč se sem může dostat i tak, že mezitím prošel registrací nebo obnovením
+  // Traki klíčem – v tu chvíli výprava ještě neexistuje. Dřív se hra přesto
+  // vykreslila a tvářila se jako rozehraná. Teď se výprava založí tady, stejnou
+  // operací jako u existujícího hráče, a teprve pak se ukáže úvod.
+  const pendingStart = searchParams.get("start") === "1";
+  const startRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!pendingStart || startRequestedRef.current) {
+      return;
+    }
+    if (!state.registrationCompleted || !state.profileCode) {
+      return;
+    }
+    startRequestedRef.current = true;
+    void (async () => {
+      const started = await startRun(location.id);
+      if (started.created) {
+        setIntroOpen(true);
+      }
+      router.replace(`/play/${location.id}?mode=solo`);
+    })();
+  }, [location.id, pendingStart, router, startRun, state.profileCode, state.registrationCompleted]);
+
   const locationUnlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   // R38: název vyžadované hry spočítal server z katalogu v databázi (R21).
   // Dřív se dohledával v obsahu v kódu, takže hru z Mozku neuměl pojmenovat.
@@ -126,10 +151,8 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   const isLastTask = taskIndex === activeEpisode.tasks.length - 1;
   const isLastEpisode = episodeIndex === location.episodes.length - 1;
   const totalTasks = location.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
-  const completedTasksBeforeCurrent = location.episodes
-    .slice(0, episodeIndex)
-    .reduce((sum, episode) => sum + episode.tasks.length, 0);
-  const progress = Math.round(((completedTasksBeforeCurrent + taskIndex + 1) / totalTasks) * 100);
+  // R44: procentuální postup se hráči nikde neukazuje, takže se ani nepočítá.
+  // totalTasks zůstává – rozhoduje jen o tom, jestli hra vůbec má nějaké úkoly.
   // R26: postup výpravy v podobě, které rozumí autoritativní pravidlo pořadí.
   const taskProgressRows: OrderedTaskRow[] = useMemo(
     () =>
@@ -966,9 +989,6 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
         <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
           <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Zastávka hotová</p>
-          <div className="mt-2 inline-flex rounded-full border border-lime/40 bg-night/35 px-3 py-1 text-xs font-semibold text-lime">
-            Zastavení {pendingTransition.fromStopNumber}/{pendingTransition.stopCount} dokončeno
-          </div>
           <div className="mt-5 rounded-2xl bg-night/45 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-mist">Dokončeno</p>
             <p className="mt-1 text-xl font-bold text-white">{pendingTransition.fromStopName}</p>
@@ -986,9 +1006,6 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
           <div className="mt-3 rounded-2xl border border-lime/40 bg-night/35 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-lime">Pokračuješ na</p>
             <p className="mt-1 text-3xl font-bold text-white">{pendingTransition.toStopName}</p>
-            <p className="mt-1 text-xs text-mist">
-              Zastavení {pendingTransition.toStopNumber}/{pendingTransition.stopCount}
-            </p>
           </div>
           <button
             onClick={() => void continueToNextEpisode()}
@@ -1005,24 +1022,14 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
       <section className="glass-card p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Rozehraná hra</p>
-            <h1 className="mt-2 text-2xl font-bold">{location.name}</h1>
-            <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
-          </div>
-          <div className="rounded-full bg-lime/15 px-3 py-2 text-xs font-semibold text-lime">
-            Sólový režim
-          </div>
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-sm text-mist">
-            Zastavení {episodeIndex + 1}/{location.episodes.length} • Úkol {taskIndex + 1}/{activeEpisode.tasks.length}
-          </div>
-          <div className="rounded-full bg-white/5 px-3 py-2 text-xs text-mist">{progress}% hotovo</div>
-        </div>
-        <div className="mt-2 h-2 rounded-full bg-white/10">
-          <div className="h-2 rounded-full bg-lime" style={{ width: `${progress}%` }} />
+        {/* R44: hra je dobrodružství, které se odkrývá, ne ukazatel postupu.
+            Pryč je „Rozehraná hra“, procenta, pruh postupu, počty zastavení
+            i úkolů a štítek režimu – hráč si žádný režim nevybíral a skupinové
+            hraní je odložené (R34). Evidence postupu na serveru se nemění,
+            mění se jen to, co vidí hráč. */}
+        <div>
+          <h1 className="text-2xl font-bold">{location.name}</h1>
+          <p className="mt-2 text-sm text-mist">{activeEpisode.name}</p>
         </div>
         <div className="mt-3 rounded-2xl border border-sky/20 bg-sky/10 px-4 py-3">
           <p className="text-xs uppercase tracking-[0.18em] text-sky">Aktuální zastavení</p>
@@ -1075,9 +1082,6 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
       <section className="glass-card p-5">
         <div className="flex items-center justify-between">
           <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-mist">{activeTask.typeLabel}</span>
-          <span className="text-xs text-mist">
-            Úkol {taskIndex + 1} z {activeEpisode.tasks.length}
-          </span>
         </div>
         <h2 className="mt-4 text-2xl font-semibold">{activeTask.title}</h2>
         <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>

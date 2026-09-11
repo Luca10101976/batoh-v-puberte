@@ -13,7 +13,7 @@ const ParentAuthGate = dynamic(() => import("@/components/player-auth-gate").the
   loading: () => (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 text-center">
       <section className="glass-card w-full p-6">
-        <p className="text-sm text-mist">Připravuji přihlášení...</p>
+        <p className="text-sm text-mist">Připravuji hru…</p>
       </section>
     </main>
   )

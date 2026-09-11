@@ -52,7 +52,7 @@ function statusText(status?: string) {
 }
 
 const MISSION_COLUMNS =
-  "id, title, city, city_id, intro_text, short_description, hero_image_url, difficulty, duration_min, catalog_order, unlock_after_mission_id, is_published, first_published_at, created_at, ending_title, ending_text, ending_player_message";
+  "id, title, city, city_id, intro_text, short_description, detail_text, start_place_name, start_lat, start_lng, hero_image_url, difficulty, duration_min, catalog_order, unlock_after_mission_id, is_published, first_published_at, created_at, ending_title, ending_text, ending_player_message";
 
 export default async function MissionDetailPage({
   params,

@@ -36,6 +36,10 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
     image: location.image,
     shortDescription: location.shortDescription,
     teaser: location.teaser,
+    detailText: location.detailText ?? null,
+    startPlaceName: location.startPlaceName ?? null,
+    startLat: location.startLat ?? null,
+    startLng: location.startLng ?? null,
     episodes: location.episodes,
     unlockedByPlaceId: location.unlockedByPlaceId ?? null,
     unlockRequirementName: location.unlockRequirementName ?? null,
@@ -54,10 +58,12 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
     }
     setActiveMode("solo");
     if (!state.registrationCompleted) {
-      // R44: návštěvník bez hráče míří na hru. Brána se otevře až tady a podle
-      // cílové adresy ví, kam ho po vytvoření nebo obnovení hráče vrátit –
-      // nekončí na domovské stránce a nemusí hru hledat znovu.
-      router.push(`/play/${location.id}?mode=solo`);
+      // R44: hra se spouští vždycky stejně. Bez hráče se jen vloží krok navíc –
+      // brána se otevře nad herní adresou, po registraci se sem hráč vrátí
+      // a parametr start=1 znamená „výpravu je pořád potřeba teprve založit“.
+      // Dřív se místo toho otevřela rovnou /play/…, čímž se obešlo jak založení
+      // výpravy, tak úvodní obrazovka ZAČÍNÁME.
+      router.push(`/play/${location.id}?mode=solo&start=1`);
       return;
     }
     setStarting(true);
@@ -84,8 +90,7 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
           />
         )}
         <div className="absolute inset-0 flex h-full flex-col justify-end bg-gradient-to-t from-night via-night/40 to-transparent p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky">Hra</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{model.title}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{model.title}</h1>
           {model.subtitle ? <p className="mt-2 text-sm font-medium text-lime">{model.subtitle}</p> : null}
         </div>
       </div>
@@ -93,7 +98,27 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
       <section className="glass-card p-5">
         {model.description ? <p className="text-base leading-7 text-white/88">{model.description}</p> : null}
 
-        {model.startStopName ? (
+        {/* R44: hráč potřebuje vědět, kam má fyzicky přijít. Místo srazu je vlastnost
+            hry a nemusí být totožné s první zastávkou. Mapu Traki nekreslí, odkazuje
+            do běžné mapové služby. */}
+        {model.startPlaceName || model.startMapUrl ? (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-sky">Kde začínáme</p>
+            {model.startPlaceName ? (
+              <p className="mt-2 text-base font-semibold text-white">{model.startPlaceName}</p>
+            ) : null}
+            {model.startMapUrl ? (
+              <a
+                href={model.startMapUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex rounded-[18px] border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Ukázat na mapě
+              </a>
+            ) : null}
+          </div>
+        ) : model.startStopName ? (
           <p className="mt-4 text-sm text-mist">
             Začínáme: <span className="font-semibold text-white">{model.startStopName}</span>
           </p>
@@ -126,54 +151,51 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
         )}
       </section>
 
+      {/* R44: tisk je alternativa, ne hlavní cesta. Dřív zabíral na detailu dvakrát
+          víc místa než samotná hra, takže je teď sbalený a rozbalí se na vyžádání.
+          Druhé CTA „Otevřít hru v aplikaci“ zmizelo – do digitální hry vede jedna
+          cesta, hlavní tlačítko nahoře. Číslování kroků nese seznam, ne text. */}
       <section className="glass-card p-5">
-        <div className="flex items-start gap-4">
-          <Image
-            src={illustrationSrc("blok")}
-            alt=""
-            width={72}
-            height={72}
-            className="h-14 w-14 shrink-0 object-contain sm:h-[72px] sm:w-[72px]"
-          />
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-coral">Tisková verze do terénu</p>
-            <h2 className="mt-2 text-xl font-semibold">Hraj podle papíru, vyhodnoť v aplikaci</h2>
-          </div>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-mist">
-          Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon.
-        </p>
-        {/* R27: papírová cesta je tři kroky a končí v normální hře. Žádná zvláštní
-            papírová obrazovka ani ruční počítání bodů. */}
-        <ol className="mt-4 space-y-2 text-sm leading-6 text-white/90">
-          <li>
-            <span className="font-semibold text-white">1. Vytiskni si sešit</span> a vezmi ho ven.
-          </li>
-          <li>
-            <span className="font-semibold text-white">2. Venku piš odpovědi rovnou do papíru.</span> Co nevíš, nech
-            prázdné.
-          </li>
-          <li>
-            <span className="font-semibold text-white">3. Doma je přepiš do téhle hry.</span> Body, nápovědy i konec
-            příběhu pak fungují úplně stejně jako při hraní v aplikaci.
-          </li>
-        </ol>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-4">
+            <Image
+              src={illustrationSrc("blok")}
+              alt=""
+              width={56}
+              height={56}
+              className="h-12 w-12 shrink-0 object-contain"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-semibold text-white">Chceš hrát s papírem?</span>
+              <span className="mt-1 block text-sm leading-6 text-mist">Stáhni si tiskovou verzi hry.</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-lime group-open:hidden">Tisková verze</span>
+            <span className="hidden shrink-0 text-sm font-semibold text-mist group-open:block">Skrýt</span>
+          </summary>
+
+          <p className="mt-4 text-sm leading-6 text-mist">
+            Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon.
+          </p>
+          <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-white/90 marker:font-semibold marker:text-white">
+            <li>
+              <span className="font-semibold text-white">Vytiskni si sešit</span> a vezmi ho ven.
+            </li>
+            <li>
+              <span className="font-semibold text-white">Venku piš odpovědi rovnou do papíru.</span> Co nevíš, nech
+              prázdné.
+            </li>
+            <li>
+              <span className="font-semibold text-white">Doma je přepiš do téhle hry.</span> Body, nápovědy i konec
+              příběhu pak fungují úplně stejně jako při hraní v aplikaci.
+            </li>
+          </ol>
           <a
             href={`/api/export/game-content?format=pdf&locationId=${location.id}`}
-            className="rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
+            className="mt-4 inline-flex rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
           >
             Stáhnout tiskové PDF
           </a>
-          {model.primaryAction === "play" ? (
-            <Link
-              href={`/play/${location.id}?mode=solo`}
-              className="rounded-[20px] border border-lime/30 bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime"
-            >
-              Otevřít hru v aplikaci
-            </Link>
-          ) : null}
-        </div>
+        </details>
       </section>
     </main>
   );

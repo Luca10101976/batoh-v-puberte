@@ -15,6 +15,16 @@ export type LocationDetailInput = {
   shortDescription?: string | null;
   /** Oříznutý teaser karty – fallback, když shortDescription chybí */
   teaser?: string | null;
+  /**
+   * R44: vlastní lákací text detailu. Karta v katalogu, detail a úvod hry mají
+   * každý svou úlohu; dokud autor detailový text nevyplní, použije se jako dosud
+   * krátký popis z katalogu.
+   */
+  detailText?: string | null;
+  /** R44: kam má hráč fyzicky přijít (vlastnost hry, ne první zastávky). */
+  startPlaceName?: string | null;
+  startLat?: number | null;
+  startLng?: number | null;
   /** Zastávky hry v pořadí; první = místo startu */
   episodes: Array<{ name: string }>;
   /** locationId vyžadované hry (unlock_after_mission_id), null = bez podmínky */
@@ -45,6 +55,9 @@ export type LocationDetailModel = {
   image: string;
   /** „Začínáme: …“ – název první zastávky; null, když hra zastávky nemá */
   startStopName: string | null;
+  /** R44: místo srazu a odkaz do externí mapy; null, když je autor nevyplnil */
+  startPlaceName: string | null;
+  startMapUrl: string | null;
   locked: boolean;
   /** Text pro zamčenou hru, např. „Nejdřív dokonči: Park Klamovka“ */
   lockMessage: string | null;
@@ -59,8 +72,22 @@ export function buildLocationDetailModel(input: LocationDetailInput): LocationDe
   const title = (input.name ?? "").trim();
   const subtitleRaw = (input.subtitle ?? "").trim();
   const subtitle = subtitleRaw && subtitleRaw !== title && subtitleRaw !== GENERIC_SUBTITLE ? subtitleRaw : null;
-  const description = (input.shortDescription ?? "").trim() || (input.teaser ?? "").trim();
+  // R44: detail má vlastní text, teprve pak sahá po katalogovém popisu.
+  const description =
+    (input.detailText ?? "").trim() || (input.shortDescription ?? "").trim() || (input.teaser ?? "").trim();
   const startStopName = (input.episodes[0]?.name ?? "").trim() || null;
+
+  // R44: mapu si Traki nekreslí, jen odkáže do běžné mapové služby. Odkaz vznikne
+  // jen tehdy, když hra má opravdu obě souřadnice – nikdy se nedopočítává z města.
+  const startPlaceName = (input.startPlaceName ?? "").trim() || null;
+  const hasCoordinates =
+    typeof input.startLat === "number" &&
+    Number.isFinite(input.startLat) &&
+    typeof input.startLng === "number" &&
+    Number.isFinite(input.startLng);
+  const startMapUrl = hasCoordinates
+    ? `https://www.openstreetmap.org/?mlat=${input.startLat}&mlon=${input.startLng}#map=17/${input.startLat}/${input.startLng}`
+    : null;
   const locked = !input.unlocked;
   const requirement = (input.unlockRequirementName ?? "").trim();
   const lockMessage = locked ? `Nejdřív dokonči: ${requirement || "předchozí hru"}` : null;
@@ -96,6 +123,8 @@ export function buildLocationDetailModel(input: LocationDetailInput): LocationDe
     description,
     image: input.image,
     startStopName,
+    startPlaceName,
+    startMapUrl,
     locked,
     lockMessage,
     primaryAction,

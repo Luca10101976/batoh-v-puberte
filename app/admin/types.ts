@@ -16,6 +16,12 @@ export type MissionRow = {
   ending_player_message?: string | null;
   /** R37: katalogová pole, která se nově spravují v Mozku. */
   short_description?: string | null;
+  /** R44: vlastní lákací text detailu hry; prázdný = použije se krátký popis. */
+  detail_text?: string | null;
+  /** R44: kam má hráč fyzicky přijít, a souřadnice pro odkaz do mapy. */
+  start_place_name?: string | null;
+  start_lat?: number | null;
+  start_lng?: number | null;
   catalog_order?: number | null;
   unlock_after_mission_id?: string | null;
   city_id?: string | null;

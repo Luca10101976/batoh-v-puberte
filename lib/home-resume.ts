@@ -38,7 +38,6 @@ export type ResumeMissionCard = {
   missionName: string;
   stopName: string;
   taskLabel: string;
-  progressText: string;
   href: string;
 };
 
@@ -104,10 +103,6 @@ export function buildResumeMissionCard(
     taskLabel:
       firstOpenTask?.task.title?.trim() ||
       (payload?.location?.status === "in_progress" && taskRows.length > 0 ? "Připraveno k dalšímu kroku" : "Pokračování ve hře"),
-    progressText: `Zastavení ${currentPosition.episodeIndex + 1}/${location.episodes.length} • Úkol ${Math.min(
-      currentPosition.taskIndex + 1,
-      currentPosition.episode.tasks.length
-    )}/${currentPosition.episode.tasks.length}`,
     href: `/play/${location.id}?episode=${currentPosition.episodeIndex + 1}&task=${currentPosition.taskIndex + 1}`
   };
 }

@@ -94,5 +94,8 @@ test("sdílené resume načtení vrací stejný přesný href i pro další vstu
 
   assert.ok(card);
   assert.equal(card.href, "/play/klamovka?episode=1&task=2");
-  assert.equal(card.progressText, "Zastavení 1/2 • Úkol 2/2");
+  // R44: karta pokračování už hráči nevypisuje „Zastavení X/Y • Úkol X/Y“.
+  // Pozici dál nese odkaz, aby ho hra otevřela na správném místě.
+  assert.ok(!("progressText" in card), "počty zastavení a úkolů se hráči neukazují");
+  assert.equal(card.stopName, "Chrámek noci a poznání");
 });

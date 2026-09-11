@@ -190,3 +190,32 @@ test("model výprav a sólo hraní zůstává nedotčený", () => {
   assert.match(overview, /child_game_sessions/, "přehled profilu dál čte výpravy");
   assert.match(overview, /child_game_session_players/, "přehled profilu dál čte účastníky");
 });
+
+test("R42 druhá migrace ruší jen schválené objekty", () => {
+  const dir = path.join(ROOT, "supabase/migrations");
+  const file = fs.readdirSync(dir).find((name) => /r42_drop_dead_objects\.sql$/.test(name));
+  assert.ok(file, "migrace *_r42_drop_dead_objects.sql musí existovat");
+  const sql = fs.readFileSync(path.join(dir, file!), "utf8");
+  const statements = sql
+    .replace(/--[^\n]*/g, "")
+    .split(";")
+    .map((statement) => statement.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+
+  assert.deepEqual(statements, [
+    "alter table public.mission_tasks drop column if exists answer_mode",
+    "drop table if exists public.child_push_subscriptions",
+    "drop table if exists public.child_profile_blocks",
+    "drop table if exists public.child_expedition_invites",
+    "drop table if exists public.child_security_events"
+  ]);
+
+  assert.ok(!/cascade/i.test(sql), "migrace nesmí použít CASCADE");
+  assert.deepEqual(
+    statements.filter((statement) =>
+      /child_game_sessions|child_game_session_players|child_profiles\b|child_location_progress|child_task_progress|child_friendships|rate_limits|panbatoh_content|\bcities\b|\bmissions\b|mission_stops/.test(statement)
+    ),
+    [],
+    "migrace se nesmí dotknout hráčského modelu, výprav ani herního obsahu"
+  );
+});

@@ -183,6 +183,13 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     status === "unknown" ||
     status === "manual";
   const verificationFinished = status === "correct" || status === "unknown" || status === "manual";
+  // R44: úkol může být uzavřený i bez čerstvé odpovědi – třeba když se hráč vrátí
+  // do rozehrané hry na úkol, který už vyřešil. Stav `status` je po načtení „idle“,
+  // ale výsledek úkolu známe z uzavřených odpovědí výpravy. Pro nabídku akcí
+  // rozhoduje tohle, aby hráči nikdy nechyběla cesta dál.
+  const taskAlreadyClosed =
+    taskOutcomes[activeTask.id] === "known" || taskOutcomes[activeTask.id] === "unknown";
+  const taskResolved = verificationFinished || taskAlreadyClosed;
   // Ilustrace stavu odpovědi (schválené mapování samolepek Traki)
   const statusIllustration: IllustrationName | null =
     status === "correct" || status === "manual"
@@ -1265,10 +1272,10 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
              zkusit znovu. Jakmile je vyřešený, zůstane jedna cesta dál – nezobrazují
              se akce, které už nejdou použít. */
           <div className="mt-5 space-y-3">
-            {verificationFinished ? (
+            {taskResolved ? (
               <button
                 onClick={() => advance()}
-                disabled={!canAdvance}
+                disabled={!canAdvance && !taskAlreadyClosed}
                 className="w-full rounded-[24px] bg-lime px-4 py-4 text-sm font-bold text-night disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLastTask && isLastEpisode

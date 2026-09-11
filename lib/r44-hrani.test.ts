@@ -118,8 +118,9 @@ test("hlavní akce se jmenuje Ověřit odpověď", () => {
 
 test("po vyřešení úkolu zůstane jen cesta dál, předtím se dá odpovídat opakovaně", () => {
   const src = PLAY();
-  assert.match(src, /\{verificationFinished \? \(/, "po vyřešení se nabídka akcí mění");
-  const zacatek = src.indexOf("{verificationFinished ? (");
+  assert.match(src, /\{taskResolved \? \(/, "po vyřešení se nabídka akcí mění");
+  assert.match(src, /const taskAlreadyClosed =/, "vyřešený úkol se pozná i po návratu do hry");
+  const zacatek = src.indexOf("{taskResolved ? (");
   const konec = src.indexOf("</div>", src.indexOf("</>", zacatek));
   const blok = src.slice(zacatek, konec);
   const vyresenaVetev = blok.slice(0, blok.indexOf(") : ("));

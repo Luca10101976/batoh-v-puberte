@@ -18,7 +18,6 @@ type ChildProfileDto = {
   // New public player code used for friend sharing. Kept alongside profile_code for compatibility.
   player_code: string;
   profile_code: string;
-  contact_email: string | null;
   avatar: string;
   avatar_config: {
     head: "round" | "oval" | "square";
@@ -84,7 +83,6 @@ type GenericProfileRow = Record<string, unknown> & {
   parent_user_id?: string | null;
   profile_code?: string | null;
   player_code?: string | null;
-  contact_email?: string | null;
   child_name?: string | null;
   avatar?: string | null;
   avatar_config?: unknown;
@@ -105,7 +103,7 @@ function toInt(value: unknown, fallback: number) {
   return Number.isInteger(parsed) ? parsed : fallback;
 }
 
-function normalizeProfileRow(row: GenericProfileRow, userEmail: string | null): ChildProfileDto {
+function normalizeProfileRow(row: GenericProfileRow): ChildProfileDto {
   const legacyProfileCode = toCode(row.profile_code) || generateProfileCode();
   const publicPlayerCode = toCode(row.player_code) || legacyProfileCode;
   const avatarConfig = normalizeAvatarConfig(row.avatar_config) || DEFAULT_AVATAR_CONFIG;
@@ -115,7 +113,6 @@ function normalizeProfileRow(row: GenericProfileRow, userEmail: string | null): 
     child_name: toStr(row.child_name).trim() || "Hráč",
     player_code: publicPlayerCode,
     profile_code: legacyProfileCode,
-    contact_email: toStr(row.contact_email).trim() || userEmail || null,
     avatar,
     avatar_config: avatarConfig
   };
@@ -245,7 +242,7 @@ export async function GET(request: Request) {
     return jsonNoStore({ ok: true, profile: null, progress: [] });
   }
 
-  const profile = normalizeProfileRow(rawProfile, user.email ?? null);
+  const profile = normalizeProfileRow(rawProfile);
 
   let progressRows: Array<{
     location_id: string;
@@ -438,8 +435,7 @@ export async function PATCH(request: Request) {
         await adminClient
           .from("child_profiles")
           .update({
-            player_code: profileCodeSeed,
-            contact_email: user.email ?? null
+            player_code: profileCodeSeed
           })
           .eq("parent_user_id", user.id)
           .eq("profile_code", profileCodeSeed);
@@ -572,7 +568,7 @@ export async function PATCH(request: Request) {
   if (reloadedTarget) {
     return jsonNoStore({
       ok: true,
-      profile: normalizeProfileRow(reloadedTarget, user.email ?? null),
+      profile: normalizeProfileRow(reloadedTarget),
       profile_id: toStr(reloadedTarget.id) || toStr(targetRow.id) || null
     });
   }
@@ -583,7 +579,6 @@ export async function PATCH(request: Request) {
         child_name: childName || "Hráč",
         player_code: toCode(targetRow.player_code) || toCode(targetRow.profile_code),
         profile_code: toCode(targetRow.profile_code),
-        contact_email: user.email ?? null,
         avatar: hasAvatarUpdate ? avatar : DEFAULT_AVATAR,
         avatar_config: hasAvatarConfigUpdate && avatarConfig ? avatarConfig : DEFAULT_AVATAR_CONFIG
       },

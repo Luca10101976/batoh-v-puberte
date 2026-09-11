@@ -7,7 +7,6 @@ type ChildProfileRow = {
   child_name: string;
   profile_code: string;
   player_code?: string | null;
-  contact_email?: string | null;
 };
 
 function normalizeCode(value: string) {
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
 
   const { data: ownProfileByPlayerCode, error: ownProfileError } = await admin
     .from("child_profiles")
-    .select("id, child_name, profile_code, player_code, contact_email")
+    .select("id, child_name, profile_code, player_code")
     .eq("player_code", sourcePublicCode)
     .eq("parent_user_id", user.id)
     .limit(1)
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
     : (
         await admin
           .from("child_profiles")
-          .select("id, child_name, profile_code, player_code, contact_email")
+          .select("id, child_name, profile_code, player_code")
           .eq("profile_code", sourcePublicCode)
           .eq("parent_user_id", user.id)
           .limit(1)
@@ -111,7 +110,7 @@ export async function POST(request: NextRequest) {
 
   const { data: targetByPlayerCode, error: targetError } = await admin
     .from("child_profiles")
-    .select("id, child_name, profile_code, player_code, contact_email")
+    .select("id, child_name, profile_code, player_code")
     .eq("player_code", targetPublicCode)
     .limit(1)
     .maybeSingle<ChildProfileRow>();
@@ -126,7 +125,7 @@ export async function POST(request: NextRequest) {
     : (
         await admin
           .from("child_profiles")
-          .select("id, child_name, profile_code, player_code, contact_email")
+          .select("id, child_name, profile_code, player_code")
           .eq("profile_code", targetPublicCode)
           .limit(1)
           .maybeSingle<ChildProfileRow>()

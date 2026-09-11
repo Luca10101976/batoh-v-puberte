@@ -60,13 +60,13 @@ test("neexistuje žádný PIN endpoint", () => {
   assert.deepEqual(pinRoutes, []);
 });
 
-// R41 NESMÍ sáhnout na současný auth model. Tyhle testy proto hlídají i opačný
-// směr: co po úklidu PINu musí zůstat.
-test("přihlášení starším e-mailovým účtem zůstává funkční", () => {
-  const login = fs.readFileSync(path.join(ROOT, "app/api/auth/login/route.ts"), "utf8");
-  assert.match(login, /signInWithPassword/, "login route musí dál umět e-mail + heslo");
-  assert.match(login, /contact_email/, "login route musí dál pracovat s contact_email");
-});
+// R41 NESMĚL sáhnout na tehdejší auth model. Tyhle testy proto hlídají i opačný
+// směr: co po úklidu PINu muselo zůstat.
+//
+// Původní test "přihlášení starším e-mailovým účtem zůstává funkční" tady stál do
+// R42. Tehdy měl smysl: e-mailové přihlášení používali tři reálné účty. Po R43,
+// kdy v databázi nezůstal žádný hráč, ho R42 odstranilo celé. Hlídá to teď
+// lib/r42-no-email-auth.test.ts, který požaduje pravý opak.
 
 test("parent_user_id zůstává vlastnickým sloupcem profilu", () => {
   const files = SCAN_DIRS.flatMap((dir) => walk(path.join(ROOT, dir)));

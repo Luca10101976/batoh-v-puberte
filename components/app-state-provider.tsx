@@ -425,7 +425,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         profile_code: string;
         player_code?: string;
         profile_id?: string | null;
-        contact_email?: string | null;
         avatar?: string | null;
         avatar_config?: AvatarConfig | null;
       } | null = null;
@@ -459,7 +458,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   child_name: string;
                   profile_code: string;
                   player_code?: string;
-                  contact_email?: string | null;
                   avatar?: string | null;
                   avatar_config?: AvatarConfig | null;
                 } | null;

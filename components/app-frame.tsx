@@ -40,11 +40,8 @@ export function AppFrame({ children, appVersion }: { children: ReactNode; appVer
   const isPublicBrowseRoute =
     pathname === "/" ||
     pathname?.startsWith("/locations") ||
-    pathname?.startsWith("/auth/callback") ||
-    pathname?.startsWith("/auth/reset") ||
     pathname === "/offline";
-  const isNavSuppressedRoute =
-    pathname?.startsWith("/auth/callback") || pathname?.startsWith("/auth/reset") || pathname === "/offline";
+  const isNavSuppressedRoute = pathname === "/offline";
   const requiresPlayerAuth = !isAdminRoute && !isPublicBrowseRoute;
   const showPlayerNav = !isAdminRoute && !isNavSuppressedRoute;
   const needsManualRefresh =

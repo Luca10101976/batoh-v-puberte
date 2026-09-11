@@ -12,14 +12,16 @@ import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc } from "@/lib/avatars";
 // Přihlášení hráče (R17):
 //   NOVÝ HRÁČ    -> přezdívka + avatar -> Supabase anonymní účet -> profil -> Traki klíč
 //   UŽ MÁM TRAKI -> Traki klíč -> /api/recovery-key/redeem -> verifyOtp -> stejný účet
-//   STARŠÍ ÚČET  -> e-mail + heslo (jen pro hráče vytvořené před R17)
+//
+// R42: e-mail ani heslo v Traki neexistují. Hráčský účet je anonymní účet Supabase
+// a jediná obnova je Traki klíč. Žádné "starší účty" už nejsou.
 //
 // Traki klíč = 4 česká slova (LAMA-MOST-KUFR-MRAK). Není to friend code.
 // Plaintext klíče drží jen toto zařízení (localStorage), server má pouze hash.
 
 export const RECOVERY_KEY_LOCAL_STORAGE_KEY = "pan-batoh-recovery-key";
 
-type Screen = "start" | "new" | "key" | "recover" | "email";
+type Screen = "start" | "new" | "key" | "recover";
 
 type ChildProfileRow = {
   id?: string | null;
@@ -88,9 +90,6 @@ export function PlayerAuthGate() {
 
   const [recoverInput, setRecoverInput] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
   const registrationAppliedRef = useRef(false);
 
   const fetchProfile = useCallback(async (accessToken: string): Promise<ChildProfileRow | null> => {
@@ -113,7 +112,7 @@ export function PlayerAuthGate() {
   }, []);
 
   const finishWithProfile = useCallback(
-    (profile: ChildProfileRow, accountEmail?: string | null) => {
+    (profile: ChildProfileRow) => {
       if (registrationAppliedRef.current) {
         return;
       }
@@ -123,7 +122,6 @@ export function PlayerAuthGate() {
         playerCode: profile.player_code || profile.profile_code,
         profileCode: profile.profile_code,
         profileRowId: profile.id ?? null,
-        parentEmail: accountEmail ?? "",
         avatar: profile.avatar ?? undefined,
         avatarConfig: profile.avatar_config ?? undefined
       });
@@ -206,7 +204,7 @@ export function PlayerAuthGate() {
       setError("Profil se nepodařilo načíst. Zkus obnovit stránku.");
       return;
     }
-    finishWithProfile(profile, null);
+    finishWithProfile(profile);
   }
 
   async function handleCopyKey() {
@@ -272,77 +270,7 @@ export function PlayerAuthGate() {
       return;
     }
     saveRecoveryKeyLocally(formatRecoveryKey(recoverCanonical));
-    finishWithProfile(profile, null);
-  }
-
-  // ---------------------------------------------------------------- starší účet (e-mail)
-  async function handleEmailLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setInfo("");
-    if (!supabase) {
-      setError("Traki se teď nemůže připojit. Zkus to za chvíli.");
-      return;
-    }
-    if (!email.includes("@") || password.length < 6) {
-      setError("Zadej e-mail a heslo (aspoň 6 znaků).");
-      return;
-    }
-    setBusy(true);
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), password })
-    }).catch(() => null);
-    const payload = (await response?.json().catch(() => null)) as
-      | {
-          ok?: boolean;
-          code?: string;
-          retry_after?: number;
-          user?: { id: string; email?: string | null };
-          session?: { access_token: string; refresh_token: string };
-        }
-      | null;
-    if (!response?.ok || !payload?.ok || !payload.session) {
-      setBusy(false);
-      if (payload?.code === "rate_limited") {
-        setError(`Moc pokusů za sebou. Zkus to znovu za ${payload.retry_after ?? 60} s.`);
-      } else if (payload?.code === "email_not_confirmed") {
-        setError("Nejdřív potvrď e-mail v doručené poště a pak se přihlas.");
-      } else {
-        setError("Přihlášení se nepodařilo.");
-      }
-      return;
-    }
-    const { error: sessionError } = await supabase.auth.setSession({
-      access_token: payload.session.access_token,
-      refresh_token: payload.session.refresh_token
-    });
-    if (sessionError) {
-      setBusy(false);
-      setError("Přihlášení proběhlo, ale nepodařilo se obnovit session.");
-      return;
-    }
-    const profile = await fetchProfile(payload.session.access_token);
-    if (!profile) {
-      setBusy(false);
-      setError("Účet je přihlášený, ale profil hráče se nenašel.");
-      return;
-    }
-    finishWithProfile(profile, payload.user?.email ?? email.trim());
-  }
-
-  async function handleForgotPassword() {
-    setError("");
-    setInfo("");
-    if (!supabase || !email.includes("@")) {
-      setError("Nejdřív vyplň e-mail, na který ti pošleme odkaz.");
-      return;
-    }
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback`
-    });
-    setInfo(resetError ? "Odkaz se nepodařilo poslat. Zkus to za chvíli." : "Poslali jsme ti e-mail s odkazem na nové heslo.");
+    finishWithProfile(profile);
   }
 
   // ---------------------------------------------------------------- UI
@@ -376,11 +304,6 @@ export function PlayerAuthGate() {
           </button>
           <button type="button" className={secondaryButton} onClick={() => setScreen("recover")}>
             Už mám Traki
-          </button>
-        </div>
-        <div className="mt-6 text-center">
-          <button type="button" className={linkButton} onClick={() => setScreen("email")}>
-            Mám starší účet
           </button>
         </div>
       </>
@@ -460,8 +383,7 @@ export function PlayerAuthGate() {
     );
   }
 
-  if (screen === "recover") {
-    return shell(
+  return shell(
       <form onSubmit={handleRecover}>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Už mám Traki</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
@@ -489,40 +411,5 @@ export function PlayerAuthGate() {
           </button>
         </div>
       </form>
-    );
-  }
-
-  return shell(
-    <form onSubmit={handleEmailLogin}>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight">Starší účet</h1>
-      <p className="mt-3 text-sm leading-6 text-mist">
-        Přihlášení e-mailem je jen pro hráče založené dřív. Po přihlášení si v profilu můžeš vytvořit Traki klíč.
-      </p>
-      <label className="mt-5 block space-y-2">
-        <span className="text-sm text-mist">E-mail</span>
-        <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className={inputClass} />
-      </label>
-      <label className="mt-4 block space-y-2">
-        <span className="text-sm text-mist">Heslo</span>
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoComplete="current-password"
-          className={inputClass}
-        />
-      </label>
-      <button type="submit" disabled={busy} className={`${primaryButton} mt-6`}>
-        {busy ? "Přihlašuji…" : "Přihlásit se"}
-      </button>
-      <div className="mt-4 flex justify-between">
-        <button type="button" className={linkButton} onClick={() => setScreen("start")}>
-          Zpět
-        </button>
-        <button type="button" className={linkButton} onClick={() => void handleForgotPassword()}>
-          Zapomenuté heslo
-        </button>
-      </div>
-    </form>
   );
 }

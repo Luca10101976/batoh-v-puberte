@@ -354,13 +354,13 @@ export function PlayerAuthGate() {
   if (screen === "start") {
     return shell(
       <>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Na tohle potřebuješ hráče</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Než vyrazíš</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Pátrej po městě, řeš úkoly a sbírej body. Stačí přezdívka a avatar – žádný e-mail ani heslo.
+          Aby si Traki pamatoval tvoje hry a body, nejdřív si vytvoř svůj profil.
         </p>
         <div className="mt-6 space-y-3">
           <button type="button" className={primaryButton} onClick={() => setScreen("new")}>
-            Vytvořit hráče
+            Vytvořit profil
           </button>
           <button type="button" className={secondaryButton} onClick={() => setScreen("recover")}>
             Mám Traki klíč

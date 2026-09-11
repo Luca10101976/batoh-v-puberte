@@ -280,6 +280,21 @@ async function fetchPublishedMissionById(
   const publishedOnly = options?.includeUnpublished !== true;
   const withPublishFilter = <T>(query: T): T => (publishedOnly ? ((query as any).eq("is_published", true) as T) : query);
 
+  // R44: detail hry potřebuje i místo startu a vlastní text detailu. Když je
+  // prostředí ještě nemá, spadne se o úroveň níž – hra funguje dál bez nich.
+  const queryWithStart = await withPublishFilter(
+    supabase
+      .from("missions")
+      .select(
+        "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published, ending_title, ending_text, ending_player_message, start_place_name, start_lat, start_lng, detail_text"
+      )
+      .eq("id", missionId)
+  ).maybeSingle<MissionDbRow>();
+
+  if (!queryWithStart.error) {
+    return queryWithStart.data ?? null;
+  }
+
   const queryWithHero = await withPublishFilter(
     supabase
     .from("missions")

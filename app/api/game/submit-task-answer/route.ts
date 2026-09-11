@@ -308,6 +308,9 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle<{ profile_code: string; location_id: string; status?: "in_progress" | "completed" | null }>();
 
+  if (locationProgressReadError && locationProgressReadError.code !== "PGRST116") {
+    console.error("[submit-task-answer] in_progress read", locationProgressReadError);
+  }
   if (!locationProgressReadError || locationProgressReadError.code === "PGRST116") {
     if (!locationProgressRow) {
       const { error: insertInProgressError } = await admin.from("child_location_progress").insert({
@@ -319,11 +322,19 @@ export async function POST(request: NextRequest) {
         updated_at: nowIso
       });
       if (insertInProgressError?.code === "42703") {
-        await admin.from("child_location_progress").insert({
+        const legacyInsert = await admin.from("child_location_progress").insert({
           profile_code: ownProfile.profile_code,
           location_id: locationId,
           completed_at: nowIso
         });
+        // R43: odpověď hráče je v tuhle chvíli uložená a potvrzená. Značka
+        // „rozehráno" je jen pro nabídku Pokračovat, takže požadavek kvůli ní
+        // neshazujeme – ale už o jejím selhání nemlčíme.
+        if (legacyInsert.error) {
+          console.error("[submit-task-answer] in_progress insert (legacy)", legacyInsert.error);
+        }
+      } else if (insertInProgressError) {
+        console.error("[submit-task-answer] in_progress insert", insertInProgressError);
       }
     } else if (locationProgressRow.status !== "completed") {
       const { error: updateInProgressError } = await admin
@@ -336,11 +347,16 @@ export async function POST(request: NextRequest) {
         .eq("profile_code", ownProfile.profile_code)
         .eq("location_id", locationId);
       if (updateInProgressError?.code === "42703") {
-        await admin
+        const legacyUpdate = await admin
           .from("child_location_progress")
           .update({ completed_at: nowIso })
           .eq("profile_code", ownProfile.profile_code)
           .eq("location_id", locationId);
+        if (legacyUpdate.error) {
+          console.error("[submit-task-answer] in_progress update (legacy)", legacyUpdate.error);
+        }
+      } else if (updateInProgressError) {
+        console.error("[submit-task-answer] in_progress update", updateInProgressError);
       }
     }
   }

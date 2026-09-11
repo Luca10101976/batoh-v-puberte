@@ -189,13 +189,21 @@ export async function POST(request: NextRequest) {
     }
     if (error?.code === "23505") {
       // Souběh dvou zařízení: řádek mezitím vznikl, jen doplníme čas.
-      await admin
+      //
+      // R43: výsledek se kontroluje. Kdyby se zápis nepovedl, hráč by dostal
+      // nápovědu, ale její bodový důsledek by se nezapsal – dostal by ji tedy
+      // zadarmo. Radši nápovědu neukázat, než tiše rozbít bodování.
+      const { error: hintUpdateError } = await admin
         .from("child_task_progress")
         .update({ hint_used_at: nowIso })
         .eq("child_profile_id", ownProfile.id)
         .eq("location_id", locationId)
         .eq("task_id", taskId)
         .is("hint_used_at", null);
+      if (hintUpdateError) {
+        console.error("[reveal-hint] hint_used_at", hintUpdateError);
+        return NextResponse.json({ ok: false, error: "hint_save_failed" }, { status: 500 });
+      }
     }
   }
 

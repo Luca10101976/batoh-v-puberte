@@ -140,13 +140,21 @@ export async function POST(request: NextRequest) {
   // Bez toho by dvojklik nebo druhé zařízení dostaly nepravdivou hlášku
   // o nevyřešených úkolech, protože uzavřená výprava už odpovědi nedodá.
   if (!run) {
-    const { data: existingProgress } = await admin
+    const { data: existingProgress, error: existingProgressError } = await admin
       .from("child_location_progress")
       .select("status, first_completed_at, best_score")
       .eq("profile_code", ownProfile.profile_code)
       .eq("location_id", locationId)
       .limit(1)
       .maybeSingle<{ status?: string | null; first_completed_at?: string | null; best_score?: number | null }>();
+
+    // R43: dřív se tenhle error zahazoval. Bez autoritativního stavu se nesmí
+    // pokračovat – hráč by dostal „nemáš hotové úkoly" u hry, kterou dohrál,
+    // právě v situaci, které má tahle kontrola předcházet.
+    if (existingProgressError && existingProgressError.code !== "PGRST116") {
+      console.error("[complete-location] existing progress", existingProgressError);
+      return NextResponse.json({ ok: false, error: "progress_load_failed" }, { status: 500 });
+    }
 
     if (existingProgress?.status === "completed" || existingProgress?.first_completed_at) {
       return NextResponse.json({

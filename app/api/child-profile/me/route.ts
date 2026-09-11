@@ -244,6 +244,10 @@ export async function GET(request: Request) {
 
   const profile = normalizeProfileRow(rawProfile);
 
+  // R43: nezjištěný postup se nesmí poslat jako prázdný. Klient z něj staví
+  // dokončené hry i skóre, takže prázdné pole při výpadku databáze znamenalo
+  // „nic jsi neodehrál" a smazalo hráči lokální součet.
+  let progressUnavailable = false;
   let progressRows: Array<{
     location_id: string;
     completed_at: string;
@@ -260,6 +264,10 @@ export async function GET(request: Request) {
       .from("child_location_progress")
       .select("*")
       .eq("profile_code", profile.profile_code);
+    if (progressQuery.error) {
+      console.error("[child-profile/me] progress", progressQuery.error);
+      progressUnavailable = true;
+    }
     const rawProgressRows = (progressQuery.data as Array<Record<string, unknown>> | null) ?? [];
     progressRows = rawProgressRows
       .map((row) => {
@@ -308,7 +316,7 @@ export async function GET(request: Request) {
   // R38: název, město a maximum bodů hry dodá databáze. Profil je dřív bral
   // z obsahu v kódu, takže hru z Mozku neuměl pojmenovat a u Klamovky počítal
   // maximum 180 místo 190.
-  let games: PlayedGameInfo[] = [];
+  let games: PlayedGameInfo[] | null = [];
   if (includeProgress && progressRows.length > 0) {
     try {
       games = await loadPlayedGames(
@@ -317,6 +325,7 @@ export async function GET(request: Request) {
       );
     } catch (error) {
       console.error("[child-profile/me] games", error);
+      games = null;
     }
   }
 
@@ -324,8 +333,10 @@ export async function GET(request: Request) {
     ok: true,
     profile,
     profile_id: toStr(rawProfile.id) || null,
-    progress: progressRows,
-    games
+    // null = nezjištěno. Prázdné pole dál znamená „opravdu nic".
+    progress: progressUnavailable ? null : progressRows,
+    games: progressUnavailable ? null : games,
+    ...(progressUnavailable ? { unavailable: ["progress"] } : {})
   });
 }
 

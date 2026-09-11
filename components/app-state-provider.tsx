@@ -11,6 +11,7 @@ import {
   type ReactNode
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { shouldApplyServerList } from "@/lib/overview-sync";
 import { hasHistoricalLocationCompletion } from "@/lib/location-progress-state";
 import { DEFAULT_AVATAR_ID } from "@/lib/avatars";
 
@@ -429,6 +430,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         avatar_config?: AvatarConfig | null;
       } | null = null;
       let remoteGames: Array<{ locationId: string; name: string; city: string; maxScore: number }> = [];
+      let progressUnavailable = false;
       let remoteRows: Array<{
         location_id: string;
         completed_at: string;
@@ -476,6 +478,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             | null;
 
           childProfile = payload?.profile ? { ...payload.profile, profile_id: payload.profile_id ?? null } : null;
+          // R43: null znamená „server postup nezjistil". Prázdné pole dál znamená
+          // „hráč opravdu nic neodehrál" a normálně se synchronizuje. Bez tohohle
+          // rozdílu smazal výpadek databáze hráči dokončené hry i skóre.
+          progressUnavailable = childProfile !== null && !shouldApplyServerList(payload?.progress);
           remoteRows = payload?.progress ?? [];
           remoteGames = payload?.games ?? [];
         }
@@ -523,6 +529,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       const canonicalProfileCode = childProfile.profile_code || currentState.profileCode;
       const canonicalPlayerCode = childProfile.player_code || childProfile.profile_code || currentState.playerCode;
+      if (progressUnavailable) {
+        // Profil známe, postup ne. Aktualizujeme jen identitu a postup necháme,
+        // jak byl – zkusí se znovu při dalším načtení.
+        setState((current) => ({
+          ...current,
+          registrationCompleted: true,
+          playerCode: canonicalPlayerCode,
+          profileCode: childProfile.profile_code || current.profileCode,
+          profileRowId: childProfile.profile_id || current.profileRowId
+        }));
+        cloudHydratedForUserRef.current = null;
+        retryTimer = window.setTimeout(() => {
+          setCloudRetryTick((value) => value + 1);
+        }, 1200);
+        return;
+      }
       setState((current) => {
         const shouldApplyRemoteProfile = profileMutationVersionRef.current === hydrationStartMutationVersion;
         const completedLocationIds = Array.from(new Set(remoteRows.filter((row) => hasHistoricalLocationCompletion(row)).map((row) => row.location_id)));

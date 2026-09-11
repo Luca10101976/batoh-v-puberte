@@ -8,6 +8,7 @@ import { MobileAppCard } from "@/components/mobile-app-card";
 import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc, resolveAvatarId } from "@/lib/avatars";
 import { AvatarPreview } from "@/components/avatar-preview";
 import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
+import { shouldApplyServerList, shouldApplyServerNumber } from "@/lib/overview-sync";
 import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
@@ -564,16 +565,15 @@ export function ProfileScreen() {
   );
 
   const fetchProfileOverview = useCallback(async (providedAccessToken?: string) => {
+    // R43: když se přehled nepodaří načíst, lokální seznam kamarádů zůstává.
+    // Dřív se v každé téhle větvi mazal, takže výpadek sítě nebo databáze vypadal
+    // jako „přišel jsi o kamarády" – a prázdný seznam se navíc uložil do zařízení.
     if (!supabase) {
-      setCloudFriends([]);
-      setFriendsFromCloud([]);
       return;
     }
 
     const accessToken = providedAccessToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
     if (!accessToken) {
-      setCloudFriends([]);
-      setFriendsFromCloud([]);
       return;
     }
 
@@ -587,8 +587,6 @@ export function ProfileScreen() {
     }).catch(() => null);
 
     if (!response?.ok) {
-      setCloudFriends([]);
-      setFriendsFromCloud([]);
       return;
     }
 
@@ -601,15 +599,20 @@ export function ProfileScreen() {
         avatar_config?: AvatarConfig;
       } | null;
       profile_id?: string | null;
-      friends?: Array<{ code: string; name: string; addedAt?: string }>;
-      totalScore?: number;
-      publishedGames?: number;
+      // R43: null znamená „server to nezjistil", ne „je to prázdné".
+      friends?: Array<{ code: string; name: string; addedAt?: string }> | null;
+      totalScore?: number | null;
+      publishedGames?: number | null;
+      unavailable?: string[];
     };
 
-    if (typeof payload.totalScore === "number") {
+    // R43: skutečnou nulu synchronizujeme normálně, nezjištěnou hodnotu nikdy.
+    // Dřív tady stačilo `typeof === "number"` – jenže nula, kterou server poslal
+    // kvůli výpadku databáze, je taky číslo, takže přepsala hráčovo skóre nulou.
+    if (shouldApplyServerNumber(payload.totalScore)) {
       setServerScore(Math.max(0, Math.floor(payload.totalScore)));
     }
-    if (typeof payload.publishedGames === "number") {
+    if (shouldApplyServerNumber(payload.publishedGames)) {
       setPublishedGamesCount(Math.max(0, Math.floor(payload.publishedGames)));
     }
 
@@ -626,7 +629,13 @@ export function ProfileScreen() {
       });
     }
 
-    const normalized = (payload.friends ?? []).map((friend) => ({
+    // Prázdné pole = hráč opravdu nikoho nemá a synchronizuje se.
+    // null = server seznam nezjistil; lokální seznam zůstává, jak byl.
+    if (!shouldApplyServerList(payload.friends)) {
+      return;
+    }
+
+    const normalized = payload.friends.map((friend) => ({
       code: friend.code,
       name: friend.name,
       addedAt: friend.addedAt

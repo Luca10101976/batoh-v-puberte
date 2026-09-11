@@ -93,26 +93,40 @@ export async function GET(request: NextRequest) {
     return jsonNoStore({ ok: false, error: "missing_own_profile" }, 403);
   }
 
+  // R43: technická chyba se nikdy nesmí tvářit jako skutečná hodnota.
+  //
+  // Dřív tenhle přehled při výpadku databáze odpověděl `ok: true` a v něm nulové
+  // skóre, nula her a prázdné přátele. Hráč pak v profilu četl „Body: 0" jako fakt,
+  // zatímco žebříček ve stejné chvíli poctivě vracel 500. Od R43 je rozdíl mezi
+  // „opravdu nula" a „nepodařilo se zjistit" vidět v odpovědi: nezjištěná hodnota
+  // je `null` a její jméno je v poli `unavailable`.
+  const unavailable: string[] = [];
+
   // R33: celkové body hráče počítá vždy server ze stejného modelu jako žebříček.
   // Profil je dřív bral z localStorage, takže mohl ukazovat jiné číslo než žebříček.
-  let totalScore = 0;
-  let completedGames = 0;
+  let totalScore: number | null = 0;
+  let completedGames: number | null = 0;
   // R38: počet nabízených her přichází z katalogu v databázi, ne z obsahu v kódu.
-  let publishedGames = 0;
+  let publishedGames: number | null = 0;
   try {
     publishedGames = (await getCatalog()).length;
   } catch (error) {
     console.error("[profile/overview] catalog", error);
+    publishedGames = null;
+    unavailable.push("publishedGames");
   }
   try {
     const publishedScores = await loadPublishedGameScores(auth.admin);
     const publishedLocationIds = Array.from(publishedScores.keys());
     if (publishedLocationIds.length > 0) {
-      const { data: progressRows } = await auth.admin
+      const { data: progressRows, error: progressError } = await auth.admin
         .from("child_location_progress")
         .select("profile_code, location_id, best_score, penalty_points, status, first_completed_at")
         .eq("profile_code", ownProfile.profile_code)
         .in("location_id", publishedLocationIds);
+      if (progressError) {
+        throw new Error(`progress_failed: ${progressError.message}`);
+      }
       const totals = totalsByProfile(
         ((progressRows as LeaderboardProgressRow[] | null) ?? []),
         publishedScores
@@ -122,21 +136,32 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("[profile/overview] score", error);
+    totalScore = null;
+    completedGames = null;
+    unavailable.push("score");
   }
 
   const ownProfiles = await getOwnedChildProfiles(auth.admin, auth.user.id);
+  // R43: vlastní profil jsme právě načetli, takže prázdný seznam tady nemůže být
+  // pravda – znamená, že se čtení nepovedlo. Bez něj by dotaz na přátele hledal
+  // v prázdné množině a vrátil „žádní kamarádi" jako fakt.
+  const ownProfilesUnknown = ownProfiles.length === 0;
   const ownProfileIds = ownProfiles.map((profile) => profile.id);
   const ownPublicCodes = new Set(ownProfiles.map((profile) => normalizeCode(profile.player_code || profile.profile_code)));
-  const { data: canonicalProfileData } = await auth.admin
+  const { data: canonicalProfileData, error: canonicalProfileError } = await auth.admin
     .from("child_profiles")
     .select("id, child_name, profile_code, player_code, avatar, avatar_config")
     .eq("id", ownProfile.id)
     .limit(1)
     .maybeSingle();
 
+  if (canonicalProfileError) {
+    console.error("[profile/overview] canonical profile", canonicalProfileError);
+    unavailable.push("profile");
+  }
   const canonicalProfile = (canonicalProfileData as ChildProfileBasicRow | null) ?? null;
 
-  const [{ data: outgoingRows }, { data: incomingRows }, { data: membershipsData }] = await Promise.all([
+  const [outgoingResponse, incomingResponse, membershipsResponse] = await Promise.all([
     auth.admin
       .from("child_friendships")
       .select("friend_child_profile_id, friend_profile_code, friend_display_name, created_at")
@@ -154,15 +179,27 @@ export async function GET(request: NextRequest) {
       .limit(10)
   ]);
 
-  const outgoing = (outgoingRows as OutgoingFriendshipRow[] | null) ?? [];
-  const incoming = (incomingRows as IncomingFriendshipRow[] | null) ?? [];
-  const memberships = (membershipsData as MembershipRow[] | null) ?? [];
+  // R43: dřív se z těchhle tří čtení bralo jen `data` a `error` se zahazoval.
+  // Výpadek databáze pak vypadal jako „nemáš žádné kamarády" – a klient tím
+  // přepsal i lokálně uložený seznam.
+  let friendsUnknown = ownProfilesUnknown || Boolean(outgoingResponse.error) || Boolean(incomingResponse.error);
+  let sessionUnknown = ownProfilesUnknown || Boolean(membershipsResponse.error);
+  if (outgoingResponse.error || incomingResponse.error) {
+    console.error("[profile/overview] friends", outgoingResponse.error ?? incomingResponse.error);
+  }
+  if (membershipsResponse.error) {
+    console.error("[profile/overview] memberships", membershipsResponse.error);
+  }
+
+  const outgoing = (outgoingResponse.data as OutgoingFriendshipRow[] | null) ?? [];
+  const incoming = (incomingResponse.data as IncomingFriendshipRow[] | null) ?? [];
+  const memberships = (membershipsResponse.data as MembershipRow[] | null) ?? [];
 
   const incomingIds = Array.from(new Set(incoming.map((row) => row.child_profile_id)));
   const [incomingProfilesResponse, sessionResponse] = await Promise.all([
     incomingIds.length > 0
       ? auth.admin.from("child_profiles").select("id, child_name, profile_code, player_code").in("id", incomingIds)
-      : Promise.resolve({ data: [] as ChildProfileBasicRow[] }),
+      : Promise.resolve({ data: [] as ChildProfileBasicRow[], error: null }),
     memberships.length > 0
       ? auth.admin
           .from("child_game_sessions")
@@ -174,8 +211,19 @@ export async function GET(request: NextRequest) {
           .in("status", ["waiting", "active"])
           .order("created_at", { ascending: false })
           .limit(10)
-      : Promise.resolve({ data: [] as SessionRow[] })
+      : Promise.resolve({ data: [] as SessionRow[], error: null })
   ]);
+
+  // Bez jmen protistrany by seznam přátel byl neúplný, ne prázdný – a neúplný
+  // seznam je pro hráče stejně matoucí jako žádný.
+  if (incomingProfilesResponse.error) {
+    console.error("[profile/overview] incoming profiles", incomingProfilesResponse.error);
+    friendsUnknown = true;
+  }
+  if (sessionResponse.error) {
+    console.error("[profile/overview] sessions", sessionResponse.error);
+    sessionUnknown = true;
+  }
 
   const incomingProfilesById = new Map(
     (((incomingProfilesResponse.data as ChildProfileBasicRow[] | null) ?? []).map((row) => [row.id, row]))
@@ -217,17 +265,26 @@ export async function GET(request: NextRequest) {
     }
   });
 
-  const friends = Array.from(friendsByCode.values()).sort(
-    (a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
-  );
+  const friends = friendsUnknown
+    ? null
+    : Array.from(friendsByCode.values()).sort(
+        (a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+      );
+  if (friendsUnknown) {
+    unavailable.push("friends");
+  }
+  if (sessionUnknown) {
+    unavailable.push("session");
+  }
 
-  const sessions = (sessionResponse.data as SessionRow[] | null) ?? [];
+  const sessions = sessionUnknown ? [] : ((sessionResponse.data as SessionRow[] | null) ?? []);
   if (sessions.length === 0) {
     return jsonNoStore({
       ok: true,
       totalScore,
       completedGames,
       publishedGames,
+      unavailable,
       myCode: ownProfile.player_code || ownProfile.profile_code,
       profile_id: canonicalProfile?.id ?? ownProfile.id,
       profile: canonicalProfile
@@ -245,7 +302,7 @@ export async function GET(request: NextRequest) {
   }
 
   const activeSession = sessions[0];
-  const { data: playersData } = await auth.admin
+  const { data: playersData, error: playersError } = await auth.admin
     .from("child_game_session_players")
     .select("child_profile_id, status, joined_at, created_at")
     .eq("session_id", activeSession.id)
@@ -253,10 +310,36 @@ export async function GET(request: NextRequest) {
 
   const players = (playersData as SessionPlayerRow[] | null) ?? [];
   const playerIds = Array.from(new Set(players.map((row) => row.child_profile_id)));
-  const { data: allProfilesData } = await auth.admin
+  const { data: allProfilesData, error: allProfilesError } = await auth.admin
     .from("child_profiles")
     .select("id, child_name, profile_code, player_code")
     .in("id", playerIds);
+
+  // Neúplný seznam účastníků je stejně matoucí jako žádný, takže se výprava
+  // radši oznámí jako nezjištěná, než aby se poslala oříznutá.
+  if (playersError || allProfilesError) {
+    console.error("[profile/overview] session players", playersError ?? allProfilesError);
+    return jsonNoStore({
+      ok: true,
+      totalScore,
+      completedGames,
+      publishedGames,
+      unavailable: [...unavailable, "session"],
+      myCode: ownProfile.player_code || ownProfile.profile_code,
+      profile_id: canonicalProfile?.id ?? ownProfile.id,
+      profile: canonicalProfile
+        ? {
+            child_name: canonicalProfile.child_name,
+            profile_code: canonicalProfile.profile_code,
+            player_code: canonicalProfile.player_code || canonicalProfile.profile_code,
+            avatar: canonicalProfile.avatar ?? "PB",
+            avatar_config: canonicalProfile.avatar_config ?? null
+          }
+        : null,
+      friends,
+      session: null
+    });
+  }
 
   const profileById = new Map(((allProfilesData as ChildProfileBasicRow[] | null) ?? []).map((profile) => [profile.id, profile]));
 
@@ -285,6 +368,7 @@ export async function GET(request: NextRequest) {
     totalScore,
     completedGames,
     publishedGames,
+    unavailable,
     myCode: ownProfile.player_code || ownProfile.profile_code,
     profile_id: canonicalProfile?.id ?? ownProfile.id,
     profile: canonicalProfile

@@ -3,7 +3,7 @@ import { ProfileScreen } from "@/components/profile-screen";
 
 export const metadata: Metadata = {
   title: "Profil | Traki na stopě tajemství",
-  description: "Správa profilu hráče, party a bezpečnostních nastavení.",
+  description: "Profil hráče: Traki klíč, tvoje hry a kamarádi.",
   alternates: {
     canonical: "/profile"
   },

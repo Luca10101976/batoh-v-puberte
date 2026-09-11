@@ -195,10 +195,19 @@ export async function GET(request: NextRequest) {
   const incoming = (incomingResponse.data as IncomingFriendshipRow[] | null) ?? [];
   const memberships = (membershipsResponse.data as MembershipRow[] | null) ?? [];
 
-  const incomingIds = Array.from(new Set(incoming.map((row) => row.child_profile_id)));
-  const [incomingProfilesResponse, sessionResponse] = await Promise.all([
-    incomingIds.length > 0
-      ? auth.admin.from("child_profiles").select("id, child_name, profile_code, player_code").in("id", incomingIds)
+  // R44 krok 5: jméno i avatar kamaráda se čtou živě z child_profiles přes UUID
+  // vztahu. Dřív se u „mých" přidání bralo jméno z friend_display_name – kopie
+  // z okamžiku přidání – takže přejmenovaný kamarád zůstal pod starým jménem,
+  // zatímco druhá strana ho viděla správně.
+  const friendIds = Array.from(
+    new Set([
+      ...outgoing.map((row) => row.friend_child_profile_id),
+      ...incoming.map((row) => row.child_profile_id)
+    ])
+  );
+  const [friendProfilesResponse, sessionResponse] = await Promise.all([
+    friendIds.length > 0
+      ? auth.admin.from("child_profiles").select("id, child_name, profile_code, player_code, avatar").in("id", friendIds)
       : Promise.resolve({ data: [] as ChildProfileBasicRow[], error: null }),
     memberships.length > 0
       ? auth.admin
@@ -213,63 +222,51 @@ export async function GET(request: NextRequest) {
           .limit(10)
       : Promise.resolve({ data: [] as SessionRow[], error: null })
   ]);
-
-  // Bez jmen protistrany by seznam přátel byl neúplný, ne prázdný – a neúplný
+  // Bez profilů protistrany by seznam přátel byl neúplný, ne prázdný – a neúplný
   // seznam je pro hráče stejně matoucí jako žádný.
-  if (incomingProfilesResponse.error) {
-    console.error("[profile/overview] incoming profiles", incomingProfilesResponse.error);
+  if (friendProfilesResponse.error) {
+    console.error("[profile/overview] friend profiles", friendProfilesResponse.error);
     friendsUnknown = true;
   }
   if (sessionResponse.error) {
     console.error("[profile/overview] sessions", sessionResponse.error);
     sessionUnknown = true;
   }
-
-  const incomingProfilesById = new Map(
-    (((incomingProfilesResponse.data as ChildProfileBasicRow[] | null) ?? []).map((row) => [row.id, row]))
+  const friendProfilesById = new Map(
+    (((friendProfilesResponse.data as ChildProfileBasicRow[] | null) ?? []).map((row) => [row.id, row]))
   );
-
-  const friendsByCode = new Map<string, { code: string; name: string; addedAt: string }>();
-
-  outgoing.forEach((row) => {
-    const code = normalizeCode(row.friend_profile_code);
-    if (!code || ownPublicCodes.has(code)) {
-      return;
+  const addedAtById = new Map<string, string>();
+  const noteAddedAt = (id: string, createdAt: string) => {
+    const existing = addedAtById.get(id);
+    if (!existing || new Date(createdAt).getTime() < new Date(existing).getTime()) {
+      addedAtById.set(id, createdAt);
     }
-    const existing = friendsByCode.get(code);
-    if (!existing || new Date(row.created_at).getTime() < new Date(existing.addedAt).getTime()) {
-      friendsByCode.set(code, {
-        code,
-        name: row.friend_display_name || "Kamarád",
-        addedAt: row.created_at
-      });
-    }
-  });
-
-  incoming.forEach((row) => {
-    const profile = incomingProfilesById.get(row.child_profile_id);
+  };
+  outgoing.forEach((row) => noteAddedAt(row.friend_child_profile_id, row.created_at));
+  incoming.forEach((row) => noteAddedAt(row.child_profile_id, row.created_at));
+  const friendsList: Array<{ id: string; code: string; name: string; avatar: string | null; addedAt: string }> = [];
+  addedAtById.forEach((addedAt, id) => {
+    const profile = friendProfilesById.get(id);
     if (!profile) {
+      // Vztah na profil, který už neexistuje – kaskáda by ho měla smazat, ale
+      // do seznamu nepatří ani v mezičase.
       return;
     }
     const code = normalizeCode(profile.player_code || profile.profile_code);
     if (!code || ownPublicCodes.has(code)) {
       return;
     }
-    const existing = friendsByCode.get(code);
-    if (!existing || new Date(row.created_at).getTime() < new Date(existing.addedAt).getTime()) {
-      friendsByCode.set(code, {
-        code,
-        name: profile.child_name || "Kamarád",
-        addedAt: row.created_at
-      });
-    }
+    friendsList.push({
+      id,
+      code,
+      name: profile.child_name || "Kamarád",
+      avatar: profile.avatar ?? null,
+      addedAt
+    });
   });
-
   const friends = friendsUnknown
     ? null
-    : Array.from(friendsByCode.values()).sort(
-        (a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
-      );
+    : friendsList.sort((a, b) => a.name.localeCompare(b.name, "cs", { sensitivity: "base" }) || a.code.localeCompare(b.code));
   if (friendsUnknown) {
     unavailable.push("friends");
   }

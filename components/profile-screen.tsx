@@ -10,6 +10,16 @@ import { AvatarPreview } from "@/components/avatar-preview";
 import { NICKNAME_HINT, NICKNAME_LENGTH_MESSAGE, normalizeNickname, validateNickname } from "@/lib/nickname";
 import { shouldApplyServerList, shouldApplyServerNumber } from "@/lib/overview-sync";
 import { buildProfileGameSummaries, resolveGamesView, shouldShowGameFilters } from "@/lib/profile-games-model";
+import {
+  FRIEND_CODE_MAX_LENGTH,
+  type FriendListEntry,
+  type FriendLoadState,
+  friendErrorMessage,
+  isValidFriendCode,
+  normalizeFriendCode,
+  resolveFriendsView,
+  sortFriendsByName
+} from "@/lib/friends-model";
 import { illustrationSrc } from "@/lib/illustrations";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearRecoveryKeyLocally, readRecoveryKeyLocally, saveRecoveryKeyLocally } from "@/components/player-auth-gate";
@@ -27,13 +37,10 @@ type ResolvedFriendProfile = {
   id: string;
   name: string;
   code: string;
+  avatar?: string | null;
 };
 
-type FriendListItem = {
-  code: string;
-  name: string;
-  addedAt?: string;
-};
+type FriendListItem = FriendListEntry;
 
 type MessageTone = "neutral" | "success" | "error";
 
@@ -45,9 +52,6 @@ export function ProfileScreen() {
     state,
     syncCloudProfile,
     isLocationUnlocked,
-    addFriendByCode,
-    removeFriendByCode,
-    setFriendsFromCloud,
     setActiveMode,
     getPlayerScore,
     openParentAuthGate,
@@ -67,6 +71,13 @@ export function ProfileScreen() {
   const [cloudProfileError, setCloudProfileError] = useState("");
   const [removingFriendCode, setRemovingFriendCode] = useState<string | null>(null);
   const [cloudFriends, setCloudFriends] = useState<FriendListItem[]>([]);
+  // R44 krok 5: server (child_friendships) je jediný zdroj pravdy o kamarádech.
+  // Dokud neodpověděl, seznam neznáme – a neznámý seznam není prázdný (R43).
+  const [friendsLoadState, setFriendsLoadState] = useState<FriendLoadState>("idle");
+  const [friendPreview, setFriendPreview] = useState<ResolvedFriendProfile | null>(null);
+  const [findingFriend, setFindingFriend] = useState(false);
+  const [friendToRemove, setFriendToRemove] = useState<FriendListItem | null>(null);
+  const [playerCodeCopied, setPlayerCodeCopied] = useState(false);
   const [cloudReady, setCloudReady] = useState<boolean | null>(null);
   const [avatarDraft, setAvatarDraft] = useState<AvatarConfig>(state.profile.avatarConfig);
   const [avatarEmojiDraft, setAvatarEmojiDraft] = useState(
@@ -88,7 +99,8 @@ export function ProfileScreen() {
       return null;
     }
   }, []);
-  const friends = cloudReady === true ? cloudFriends : state.squadMembers.filter((member) => member.id !== "self");
+  const friends = cloudFriends;
+  const friendsView = resolveFriendsView(cloudReady === false ? "error" : friendsLoadState, friends.length);
   // Dokud server neodpoví, ukáže se poslední známý lokální součet; jakmile
   // dorazí autoritativní číslo, přebije ho.
   const score = serverScore ?? getPlayerScore();
@@ -530,13 +542,16 @@ export function ProfileScreen() {
     // Dřív se v každé téhle větvi mazal, takže výpadek sítě nebo databáze vypadal
     // jako „přišel jsi o kamarády" – a prázdný seznam se navíc uložil do zařízení.
     if (!supabase) {
+      setFriendsLoadState((current) => (current === "ready" ? current : "error"));
       return;
     }
 
     const accessToken = providedAccessToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? "";
     if (!accessToken) {
+      setFriendsLoadState((current) => (current === "ready" ? current : "error"));
       return;
     }
+      setFriendsLoadState((current) => (current === "ready" ? current : "loading"));
 
     const response = await fetch("/api/profile/overview", {
       method: "GET",
@@ -548,6 +563,7 @@ export function ProfileScreen() {
     }).catch(() => null);
 
     if (!response?.ok) {
+      setFriendsLoadState((current) => (current === "ready" ? current : "error"));
       return;
     }
 
@@ -561,7 +577,7 @@ export function ProfileScreen() {
       } | null;
       profile_id?: string | null;
       // R43: null znamená „server to nezjistil", ne „je to prázdné".
-      friends?: Array<{ code: string; name: string; addedAt?: string }> | null;
+      friends?: Array<{ id?: string; code: string; name: string; avatar?: string | null; addedAt?: string }> | null;
       totalScore?: number | null;
       unavailable?: string[];
     };
@@ -589,18 +605,22 @@ export function ProfileScreen() {
     // Prázdné pole = hráč opravdu nikoho nemá a synchronizuje se.
     // null = server seznam nezjistil; lokální seznam zůstává, jak byl.
     if (!shouldApplyServerList(payload.friends)) {
+      setFriendsLoadState((current) => (current === "ready" ? current : "error"));
       return;
     }
-
-    const normalized = payload.friends.map((friend) => ({
-      code: friend.code,
-      name: friend.name,
-      addedAt: friend.addedAt
-    }));
-
-    setCloudFriends(normalized);
-    setFriendsFromCloud(normalized.map((item) => ({ code: item.code, name: item.name })));
-  }, [setFriendsFromCloud, supabase, syncCloudProfile]);
+    setCloudFriends(
+      sortFriendsByName(
+        payload.friends.map((friend) => ({
+          id: friend.id,
+          code: friend.code,
+          name: friend.name,
+          avatar: friend.avatar ?? null,
+          addedAt: friend.addedAt
+        }))
+      )
+    );
+    setFriendsLoadState("ready");
+  }, [supabase, syncCloudProfile]);
 
   useEffect(() => {
     setAvatarDraft(state.profile.avatarConfig);
@@ -721,114 +741,62 @@ export function ProfileScreen() {
     };
   }, [fetchProfileOverview, state.playerCode, supabase]);
 
-  async function resolveFriendProfileByCode(code: string): Promise<ResolvedFriendProfile | null> {
-    if (!supabase) {
-      return null;
-    }
-
-    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-
-    if (!accessToken) {
-      return null;
-    }
-
-    const response = await fetch("/api/friends/resolve", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({ playerCode: code })
-    }).catch(() => null);
-
-    if (!response?.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as { ok?: boolean; profile?: ResolvedFriendProfile };
-    return payload.profile ?? null;
-  }
-
-  async function handleAddFriend() {
-    setSavingFriend(true);
+  // R44 krok 5: nejdřív hráče najít a ukázat, teprve pak přidat. Existence
+  // přátelství se neřeší z lokální kopie, rozhoduje server (alreadyFriend).
+  async function handleFindFriend() {
+    const normalizedCode = normalizeFriendCode(friendCode);
     setFriendMessageTone("neutral");
     setFriendMessage("");
-    const normalizedCode = friendCode.trim().toUpperCase();
-    const nickname = "";
-
-    if (!supabase) {
-      const result = addFriendByCode({ friendCode });
-
-      if (!result.ok) {
-        setSavingFriend(false);
-        setFriendMessageTone("error");
-        setFriendMessage(result.message);
-        return;
-      }
-
-      setSavingFriend(false);
-      setFriendMessageTone("success");
-      setFriendMessage("Kamarád přidán lokálně.");
-      setFriendCode("");
-      return;
-    }
-
-    if (!normalizedCode || normalizedCode.length < 4) {
-      setSavingFriend(false);
+    setFriendPreview(null);
+    if (!isValidFriendCode(normalizedCode)) {
       setFriendMessageTone("error");
       setFriendMessage("Zadej platný kód kamaráda.");
       return;
     }
-
-    if (normalizedCode === state.playerCode.trim().toUpperCase()) {
-      setSavingFriend(false);
+    if (normalizedCode === normalizePublicCode(state.playerCode)) {
       setFriendMessageTone("error");
       setFriendMessage("Tohle je tvůj vlastní kód.");
       return;
     }
-
-    const alreadyAdded = state.squadMembers.some((member) => member.id === normalizedCode);
-
-    if (alreadyAdded) {
-      setSavingFriend(false);
+    if (!supabase) {
       setFriendMessageTone("error");
-      setFriendMessage("Tohohle kamaráda už máš přidaného.");
+      setFriendMessage("Kamaráda teď nejde vyhledat.");
       return;
     }
+    setFindingFriend(true);
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const response = await fetch("/api/friends/resolve", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
+      body: JSON.stringify({ playerCode: normalizedCode })
+    }).catch(() => null);
+    setFindingFriend(false);
+    const payload = (await response?.json().catch(() => ({}))) as { ok?: boolean; error?: string; profile?: ResolvedFriendProfile };
+    if (!response?.ok || !payload.profile?.id) {
+      setFriendMessageTone("error");
+      setFriendMessage(friendErrorMessage(payload.error, "Kamaráda teď nejde vyhledat."));
+      return;
+    }
+    setFriendPreview(payload.profile);
+  }
 
+  async function handleConfirmAddFriend() {
+    if (!supabase || !friendPreview) {
+      return;
+    }
+    setSavingFriend(true);
+    setFriendMessageTone("neutral");
+    setFriendMessage("");
     const ownProfile = await ensureOwnCloudProfile();
-
     if (!ownProfile) {
       setSavingFriend(false);
       setFriendMessageTone("error");
       setFriendMessage(cloudProfileError || "Nejdřív se nepodařilo načíst tvůj hráčský profil. Zkus to znovu za pár vteřin.");
       return;
     }
-
-    const ownCanonicalCode = normalizePublicCode(ownProfile.player_code || ownProfile.profile_code || "");
-    if (normalizedCode === ownCanonicalCode) {
-      setSavingFriend(false);
-      setFriendMessageTone("error");
-      setFriendMessage("Tohle je tvůj vlastní kód.");
-      return;
-    }
-
-    const targetProfile = await resolveFriendProfileByCode(normalizedCode);
-
-    if (!targetProfile?.id) {
-      setSavingFriend(false);
-      setFriendMessageTone("error");
-      setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
-      return;
-    }
-
-    if (targetProfile.id === ownProfile.id || normalizePublicCode(targetProfile.code) === ownCanonicalCode) {
-      setSavingFriend(false);
-      setFriendMessageTone("error");
-      setFriendMessage("Tohle je tvůj vlastní kód.");
-      return;
-    }
-
     const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
     const response = await fetch("/api/friends/add", {
       method: "POST",
@@ -838,69 +806,56 @@ export function ProfileScreen() {
       },
       body: JSON.stringify({
         sourcePlayerCode: ownProfile.player_code || ownProfile.profile_code,
-        targetPlayerCode: targetProfile.code
+        targetPlayerCode: friendPreview.code
       })
     }).catch(() => null);
-
+    const payload = (await response?.json().catch(() => ({}))) as { ok?: boolean; error?: string; alreadyFriend?: boolean };
     if (!response?.ok) {
       setSavingFriend(false);
-      const payload = (await response?.json().catch(() => ({}))) as { error?: string };
-      if (payload.error === "own_code") {
-        setFriendMessageTone("error");
-        setFriendMessage("Tohle je tvůj vlastní kód.");
-      } else if (payload.error === "rate_limited") {
-        setFriendMessageTone("error");
-        setFriendMessage("Moc pokusů. Zkus to za chvíli.");
-      } else if (payload.error === "target_not_found") {
-        setFriendMessageTone("error");
-        setFriendMessage("Kamarád s tímto kódem nebyl nalezen.");
-      } else {
-        setFriendMessageTone("error");
-        setFriendMessage("Přidání kamaráda se nepodařilo.");
-      }
+      setFriendMessageTone("error");
+      setFriendMessage(friendErrorMessage(payload.error, "Přidání kamaráda se nepodařilo."));
       return;
     }
-
-    const addPayload = (await response.json().catch(() => ({}))) as { alreadyFriend?: boolean };
-    if (addPayload.alreadyFriend) {
-      await fetchProfileOverview();
+    if (payload.alreadyFriend) {
       setSavingFriend(false);
       setFriendMessageTone("error");
       setFriendMessage("Tohohle kamaráda už máš přidaného.");
+      setFriendPreview(null);
       setFriendCode("");
+      await fetchProfileOverview();
       return;
     }
-
-    // Cloud flow is authoritative. After successful server insert we refresh
-    // overview instead of trying to add the same friend locally again, because
-    // realtime/profile refresh may already have inserted the friend into state.
-    await fetchProfileOverview();
+    // Kamarád se ukáže hned z náhledu; server pak seznam potvrdí a doplní.
+    const added: FriendListItem = {
+      id: friendPreview.id,
+      code: normalizeFriendCode(friendPreview.code),
+      name: friendPreview.name,
+      avatar: friendPreview.avatar ?? null
+    };
+    setCloudFriends((current) =>
+      sortFriendsByName([...current.filter((item) => normalizeFriendCode(item.code) !== added.code), added])
+    );
+    setFriendsLoadState("ready");
     setSavingFriend(false);
     setFriendMessageTone("success");
-    setFriendMessage("Hotovo. Teď byste se měli vidět navzájem.");
+    setFriendMessage("Hotovo.");
+    setFriendPreview(null);
     setFriendCode("");
+    await fetchProfileOverview();
   }
-
   function normalizePublicCode(value: string) {
     return value.trim().toUpperCase();
   }
 
-  function getFriendPublicCode(friend: FriendListItem | { id: string; name: string; joined: boolean }) {
-    return normalizePublicCode("code" in friend ? friend.code : friend.id);
-  }
-
-
-  async function handleRemoveFriend(friendCode: string, friendName: string) {
-    if (!supabase || !state.playerCode) {
+  async function confirmRemoveFriend() {
+    const target = friendToRemove;
+    if (!supabase || !state.playerCode || !target) {
       return;
     }
-
-    const confirmed = window.confirm(`Opravdu chceš odebrat kamaráda ${friendName}?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setRemovingFriendCode(friendCode);
+    const friendCodeToRemove = normalizeFriendCode(target.code);
+    setRemovingFriendCode(friendCodeToRemove);
+    setFriendMessageTone("neutral");
+    setFriendMessage("");
     const accessToken = (await supabase.auth.getSession()).data.session?.access_token ?? "";
     const response = await fetch("/api/friends/remove", {
       method: "POST",
@@ -910,27 +865,47 @@ export function ProfileScreen() {
       },
       body: JSON.stringify({
         sourcePlayerCode: state.playerCode,
-        targetPlayerCode: friendCode
+        targetPlayerCode: friendCodeToRemove
       })
     }).catch(() => null);
-
     if (!response?.ok) {
       setRemovingFriendCode(null);
       const payload = (await response?.json().catch(() => ({}))) as { error?: string };
       setFriendMessageTone("error");
-      if (payload.error === "rate_limited") {
-        setFriendMessage("Moc pokusů o úpravu kamarádů. Zkus to za chvíli.");
-      } else {
-        setFriendMessage("Odebrání kamaráda se nepodařilo.");
-      }
+      setFriendMessage(
+        payload.error === "rate_limited" ? "Moc pokusů o úpravu kamarádů. Zkus to za chvíli." : "Odebrání kamaráda se nepodařilo."
+      );
       return;
     }
-
-    removeFriendByCode(friendCode);
-    await fetchProfileOverview();
+    // Kamarád zmizí hned; server je zdroj pravdy a seznam se pak ještě obnoví.
+    setCloudFriends((current) => current.filter((item) => normalizeFriendCode(item.code) !== friendCodeToRemove));
+    setFriendToRemove(null);
     setRemovingFriendCode(null);
-    setFriendMessageTone("success");
-    setFriendMessage(`${friendName} byl odebrán/a z kamarádů.`);
+    await fetchProfileOverview();
+  }
+
+  useEffect(() => {
+    if (!friendToRemove) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFriendToRemove(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [friendToRemove]);
+
+  async function handleCopyPlayerCode() {
+    try {
+      await navigator.clipboard.writeText(state.playerCode);
+      setPlayerCodeCopied(true);
+      window.setTimeout(() => setPlayerCodeCopied(false), 2500);
+    } catch {
+      setFriendMessageTone("error");
+      setFriendMessage("Kopírování se nepodařilo. Kód si opiš ručně.");
+    }
   }
 
   const [localRecoveryKey, setLocalRecoveryKey] = useState<string | null>(null);
@@ -1376,30 +1351,33 @@ export function ProfileScreen() {
         )}
       </section>
 
-      {/* 4. Sociální část – definitivní UX přijde v dalším kroku R44 */}
-      <section className="glass-card p-5">
-        <p className="text-xs uppercase tracking-[0.24em] text-lime">Identita objevitele</p>
-        <h2 className="mt-2 text-xl font-semibold">Můj kód</h2>
-        <div className="mt-4 flex flex-col items-center gap-4 rounded-[24px] bg-white/5 p-4">
-          <div className="rounded-xl border border-white/10 bg-night/70 px-3 py-2 text-sm font-semibold tracking-wide text-lime">
+      {/* 4. Přátelé – tvůj kód, přidání, seznam */}
+      <section id="add-friend" className="glass-card p-5">
+        <p className="text-xs uppercase tracking-[0.24em] text-lime">Přátelé</p>
+
+        <h2 className="mt-2 text-xl font-semibold">Tvůj kód</h2>
+        <div className="mt-3 flex items-center gap-2">
+          <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-night/70 px-3 py-3 text-center text-base font-semibold tracking-wide text-lime">
             {state.playerCode}
           </div>
-          <p className="text-center text-sm leading-6 text-mist">
-            Kamarád si tě přidá podle tohoto kódu.
-          </p>
+          <button
+            type="button"
+            onClick={() => void handleCopyPlayerCode()}
+            className="shrink-0 rounded-[18px] border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+          >
+            {playerCodeCopied ? "Zkopírováno ✓" : "Zkopírovat"}
+          </button>
         </div>
-      </section>
+        <p className="mt-2 text-sm text-mist">Kamarád si tě přidá podle tohoto kódu.</p>
 
-      <section id="add-friend" className="glass-card p-5">
-        <h2 className="section-title">Přidat kamaráda</h2>
         {cloudReady === null ? (
-          <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-3">
             <p className="text-sm text-mist">Kontroluju přihlášení účtu…</p>
             <div className="mt-2 h-2 w-40 animate-pulse rounded-full bg-white/10" />
           </div>
         ) : null}
         {cloudReady === false ? (
-          <div className="mt-3 rounded-2xl border border-coral/40 bg-coral/10 p-3">
+          <div className="mt-5 rounded-2xl border border-coral/40 bg-coral/10 p-3">
             <p className="text-sm text-white">
               Profil tady ještě vidíš z uložených dat v zařízení, ale cloud účet už není přihlášený.
               Pro kamarády a další online akce je potřeba přihlásit se znovu.
@@ -1415,32 +1393,71 @@ export function ProfileScreen() {
             </button>
           </div>
         ) : null}
+
         {cloudReady === true ? (
-          <div className="mt-4 space-y-3">
-            <input
-              value={friendCode}
-              onChange={(event) => setFriendCode(event.target.value.toUpperCase())}
-              placeholder="Kód kamaráda (např. BAT-AB12CD)"
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-mist"
-            />
-            <p className="text-sm text-mist">Zadej kód kamaráda.</p>
-            {friendCode.trim() ? (
-              <p className="text-xs text-mist/80">
-                Ověřím kód: <span className="font-semibold text-white/90">{friendCode.trim().toUpperCase()}</span>
-              </p>
-            ) : (
-              <p className="text-xs text-mist/80">Tip: veřejný kód má tvar BAT-XXXXXX.</p>
-            )}
-            <button
-              onClick={handleAddFriend}
-              disabled={savingFriend}
-              className="w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+          <>
+            <h2 className="mt-6 text-xl font-semibold">Přidat kamaráda</h2>
+            <form
+              className="mt-3 space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleFindFriend();
+              }}
             >
-              {savingFriend ? "Přidávám..." : "Přidat kamaráda"}
-            </button>
+              <label htmlFor="friend-code" className="block text-sm font-medium text-white">
+                Kód kamaráda
+              </label>
+              <input
+                id="friend-code"
+                value={friendCode}
+                onChange={(event) => {
+                  setFriendCode(normalizeFriendCode(event.target.value));
+                  setFriendPreview(null);
+                  if (friendMessage) {
+                    setFriendMessage("");
+                  }
+                }}
+                placeholder="BAT-XXXXXX"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={FRIEND_CODE_MAX_LENGTH}
+                aria-label="Kód kamaráda"
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base font-semibold uppercase tracking-wide text-white outline-none placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-mist"
+              />
+              {!friendPreview ? (
+                <button
+                  type="submit"
+                  disabled={findingFriend}
+                  className="w-full rounded-[20px] bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+                >
+                  {findingFriend ? "Hledám…" : "Najít kamaráda"}
+                </button>
+              ) : null}
+            </form>
+
+            {friendPreview ? (
+              <div className="mt-3 rounded-[24px] border border-lime/30 bg-lime/10 p-4">
+                <div className="flex items-center gap-3">
+                  <AvatarPreview avatar={friendPreview.avatar} size={56} />
+                  <p className="min-w-0 flex-1 break-words text-lg font-semibold text-white">{friendPreview.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmAddFriend()}
+                  disabled={savingFriend}
+                  className="mt-4 w-full rounded-[20px] bg-lime px-4 py-3 text-sm font-semibold text-night disabled:opacity-70"
+                >
+                  {savingFriend ? "Přidávám…" : "Přidat kamaráda"}
+                </button>
+              </div>
+            ) : null}
+
             {friendMessage ? (
-              <p
-                className={`text-sm ${
+              <div
+                className={`mt-3 text-sm ${
                   friendMessageTone === "error"
                     ? "text-coral"
                     : friendMessageTone === "success"
@@ -1448,15 +1465,93 @@ export function ProfileScreen() {
                       : "text-mist"
                 }`}
               >
-                {friendMessage}
-              </p>
+                <p className="font-semibold">{friendMessage}</p>
+                {friendMessageTone === "success" && friendMessage === "Hotovo." ? (
+                  <p className="mt-0.5 text-xs text-mist">Teď byste se měli vidět navzájem.</p>
+                ) : null}
+              </div>
             ) : null}
-          </div>
+
+            <h2 className="mt-6 text-xl font-semibold">Tvoji kamarádi</h2>
+            {friendsView === "loading" ? (
+              <div className="mt-3 rounded-2xl bg-white/5 p-4">
+                <p className="text-sm text-mist">Načítám tvoje kamarády…</p>
+                <div className="mt-2 h-2 w-40 animate-pulse rounded-full bg-white/10" />
+              </div>
+            ) : null}
+            {friendsView === "error" ? (
+              <p className="mt-3 rounded-2xl bg-white/5 p-4 text-sm text-coral">Kamarády se teď nepodařilo načíst.</p>
+            ) : null}
+            {friendsView === "empty" ? (
+              <p className="mt-3 rounded-2xl bg-white/5 p-4 text-sm text-mist">Zatím tu žádný kamarád není.</p>
+            ) : null}
+            {friendsView === "list" ? (
+              <ul className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                {friends.map((friend, index) => (
+                  <li
+                    key={friend.id ?? friend.code}
+                    className={`flex items-center gap-3 px-4 py-3 ${index !== friends.length - 1 ? "border-b border-white/10" : ""}`}
+                  >
+                    <AvatarPreview avatar={friend.avatar} size={48} />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-base font-semibold text-white">{friend.name}</p>
+                      <p className="text-xs tracking-wide text-mist">{friend.code}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFriendToRemove(friend)}
+                      disabled={removingFriendCode === normalizeFriendCode(friend.code)}
+                      className="shrink-0 rounded-[16px] border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-mist disabled:opacity-60"
+                    >
+                      Odebrat
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
       </section>
 
       {/* 5. Traki v telefonu */}
       <MobileAppCard />
+
+      {friendToRemove ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-night/80 p-4"
+          onClick={() => setFriendToRemove(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-friend-title"
+            onClick={(event) => event.stopPropagation()}
+            className="glass-card w-full max-w-sm p-5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="remove-friend-title" className="min-w-0 break-words text-lg font-semibold text-white">
+                Odebrat {friendToRemove.name} z přátel?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setFriendToRemove(null)}
+                aria-label="Zavřít"
+                className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-mist"
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => void confirmRemoveFriend()}
+              disabled={removingFriendCode !== null}
+              className="mt-5 w-full rounded-[20px] bg-coral px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+            >
+              {removingFriendCode ? "Odebírám…" : "Odebrat"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* 6. Odhlásit */}
       <button

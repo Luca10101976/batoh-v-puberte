@@ -7,6 +7,7 @@ type ChildProfileRow = {
   child_name: string;
   profile_code: string;
   player_code?: string | null;
+  avatar?: string | null;
 };
 
 function normalizeCode(value: string) {
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
 
   const { data: targetByPlayerCode } = await admin
     .from("child_profiles")
-    .select("id, child_name, profile_code, player_code")
+    .select("id, child_name, profile_code, player_code, avatar")
     .eq("player_code", requestedCode)
     .limit(1)
     .maybeSingle<ChildProfileRow>();
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
     ? { data: targetByPlayerCode }
     : await admin
         .from("child_profiles")
-        .select("id, child_name, profile_code, player_code")
+        .select("id, child_name, profile_code, player_code, avatar")
         .eq("profile_code", requestedCode)
         .limit(1)
         .maybeSingle<ChildProfileRow>();
@@ -111,7 +112,9 @@ export async function POST(request: NextRequest) {
     profile: {
       id: targetProfile.id,
       name: targetProfile.child_name,
-      code: targetProfile.player_code || targetProfile.profile_code
+      code: targetProfile.player_code || targetProfile.profile_code,
+      // R44 krok 5: hráč před přidáním vidí, koho našel – i s avatarem.
+      avatar: targetProfile.avatar ?? null
     }
   });
 }

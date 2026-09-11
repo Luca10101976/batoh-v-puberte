@@ -290,8 +290,10 @@ test("23 – štítek Solo tah je pryč a nic ho nenahradilo", () => {
 test("24 – veřejný kód kamaráda zůstává funkční", () => {
   const src = PROFIL();
   assert.match(src, /\{state\.playerCode\}/, "kód se dál zobrazuje");
-  assert.match(src, /BAT-XXXXXX/, "nápověda k tvaru kódu zůstává");
-  assert.match(src, /handleAddFriend/, "přidání kamaráda beze změny");
+  assert.match(src, /placeholder="BAT-XXXXXX"/, "tvar kódu ukazuje placeholder");
+  // R44 krok 5: přidání jde přes hledání a náhled, ne přímo
+  assert.match(src, /handleFindFriend/);
+  assert.match(src, /handleConfirmAddFriend/);
 });
 
 // --- 25–26: telefon a odhlášení ---------------------------------------------
@@ -394,7 +396,8 @@ test("34 – stav vychází z průběhu načítání, ne z čekání", () => {
   const profil = PROFIL();
   assert.match(profil, /const gamesView = resolveGamesView\(gamesLoadState, gameSummaries\.length\);/);
   const pouziteTimery = profil.match(/[a-zA-Z.]*setTimeout\(/g) ?? [];
-  assert.equal(pouziteTimery.length, 2, "v profilu zůstávají jen starší časovače avatara a hlášky o zkopírování");
+  // debounce avatara, reset „Zkopírováno" u Traki klíče a (R44 krok 5) u kódu kamaráda
+  assert.equal(pouziteTimery.length, 3, "v profilu jsou jen časovače avatara a dvou hlášek o zkopírování");
   assert.doesNotMatch(profil, /gamesLoadState[\s\S]{0,200}setTimeout/, "stav her nevisí na časovači");
 });
 

@@ -741,7 +741,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         groupCompletionMembers: {},
         currentExpeditionId: null,
         activeMode: "solo",
-        squadName: `${trimmedName || current.profile.name} a parta`,
+        squadName: `${trimmedName || current.profile.name} a kamarádi`,
         squadMembers: [{ id: SELF_MEMBER_ID, name: trimmedName || current.profile.name, joined: true }]
       };
 
@@ -787,7 +787,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ]
       }));
 
-      return { ok: true, message: "Kamarád byl přidán do tvé party." };
+      return { ok: true, message: "Kamarád přidán." };
     },
     [state.playerCode, state.squadMembers]
   );

@@ -95,3 +95,32 @@ test("parent_user_id zůstává vlastnickým sloupcem profilu", () => {
   const owners = files.filter((file) => /parent_user_id/.test(fs.readFileSync(file, "utf8")));
   assert.ok(owners.length >= 10, "parent_user_id je nosný sloupec vlastnictví profilu, nesmí zmizet");
 });
+
+test("R42 migrace ruší jen contact_email a jeho index", () => {
+  const dir = path.join(ROOT, "supabase/migrations");
+  const file = fs.readdirSync(dir).find((name) => /r42_drop_contact_email\.sql$/.test(name));
+  assert.ok(file, "migrace *_r42_drop_contact_email.sql musí existovat");
+  const sql = fs.readFileSync(path.join(dir, file!), "utf8");
+  const statements = sql
+    .replace(/--[^\n]*/g, "")
+    .split(";")
+    .map((statement) => statement.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+
+  assert.deepEqual(statements, [
+    "drop index if exists public.idx_child_profiles_contact_email",
+    "alter table public.child_profiles drop column if exists contact_email"
+  ]);
+
+  assert.ok(!/cascade/i.test(sql), "migrace nesmí použít CASCADE");
+  assert.deepEqual(
+    statements.filter((statement) => /parent_user_id|recovery_key|child_name|profile_code|player_code/i.test(statement)),
+    [],
+    "migrace se nesmí dotknout vlastnictví, Traki klíče ani identity hráče"
+  );
+});
+
+test("historické migrace zůstávají nezměněné", () => {
+  const baseline = fs.readFileSync(path.join(ROOT, "supabase/migrations/0001_baseline.sql"), "utf8");
+  assert.match(baseline, /contact_email/, "0001_baseline.sql musí zůstat historicky netknutá");
+});

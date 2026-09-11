@@ -11,6 +11,7 @@ import { getUnlockRequirement, isLocationUnlockedByChain } from "@/lib/location-
 import type { PublicGameplayEpisode } from "@/lib/gameplay-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { illustrationSrc } from "@/lib/illustrations";
+import { avatarSrc, resolveAvatarId } from "@/lib/avatars";
 
 // R26: závěr hry (endingTitle/endingStory/playerMessage) se do prohlížeče neposílá.
 type HomeLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory" | "playerMessage"> & {
@@ -22,26 +23,6 @@ type HomeLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory"
 
 function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
-}
-
-function formatStopCount(count: number) {
-  if (count === 1) {
-    return "1 zastavení";
-  }
-  if (count >= 2 && count <= 4) {
-    return `${count} zastavení`;
-  }
-  return `${count} zastavení`;
-}
-
-function formatTaskCount(count: number) {
-  if (count === 1) {
-    return "1 úkol";
-  }
-  if (count >= 2 && count <= 4) {
-    return `${count} úkoly`;
-  }
-  return `${count} úkolů`;
 }
 
 // Lokativ (6. pád) názvu města pro spojení „v <město>".
@@ -100,6 +81,12 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
     }
   }, [publishedCities, setCity, state.city]);
 
+  // R44: přihlášeného hráče poznáme podle dokončené registrace; jméno i avatar
+  // bereme přesně tak, jak jsou uložené (přezdívky se neskloňují).
+  const isSignedIn = state.registrationCompleted;
+  const playerName = state.profile.name?.trim() || "Hráči";
+  const hasCityChoice = publishedCities.length > 1;
+
   const cityLocatives = useMemo(() => {
     const map: Record<string, string> = {};
     for (const location of publishedLocations) {
@@ -129,22 +116,45 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
 
   return (
     <main className="flex flex-1 flex-col gap-6 pb-24">
+      {/* R44: nepřihlášený návštěvník se z hlavičky dozví, co Traki je. Přihlášený
+          hráč se místo toho pozná – uvidí svoji přezdívku a avatara, takže je hned
+          jasné, že registrace dopadla a pod kým je přihlášený. */}
       <header className="flex items-center gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.24em] text-lime">Traki na stopě tajemství</p>
-          <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">
-            V každém městě jsou skrytá tajemství, která je třeba odhalit.
-          </h1>
-          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-lime">Které tajemství odhalíš dnes?</p>
+          {isSignedIn ? (
+            <>
+              <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">Ahoj, {playerName}!</h1>
+              <p className="mt-2 text-sm leading-6 text-mist">Tak co dneska vypátráme?</p>
+            </>
+          ) : (
+            <>
+              <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight">
+                Vyraz ven a objev tajemství, kolem kterých ostatní jen projdou.
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-mist">Pátrej po městě, řeš úkoly a sbírej body.</p>
+            </>
+          )}
         </div>
-        <Image
-          src="/icons/traki-transparent.png"
-          alt="Traki"
-          width={112}
-          height={112}
-          priority
-          className="pointer-events-none h-24 w-24 flex-none -scale-x-100 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.35)] sm:h-28 sm:w-28"
-        />
+        {isSignedIn ? (
+          <Image
+            src={avatarSrc(resolveAvatarId(state.profile.avatar))}
+            alt=""
+            width={112}
+            height={112}
+            priority
+            className="pointer-events-none h-24 w-24 flex-none rounded-[24px] border border-white/10 bg-white/5 object-contain p-1 sm:h-28 sm:w-28"
+          />
+        ) : (
+          <Image
+            src="/icons/traki-transparent.png"
+            alt="Traki"
+            width={112}
+            height={112}
+            priority
+            className="pointer-events-none h-24 w-24 flex-none -scale-x-100 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.35)] sm:h-28 sm:w-28"
+          />
+        )}
       </header>
 
       {resumeCards.length === 1 ? (
@@ -215,9 +225,12 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
         </section>
       ) : null}
 
+      {/* R44: dřív tu byly dvě orámované karty („Vybrané město“ a „Přehled všech her“),
+          které říkaly skoro totéž, plus výběr města s jedinou položkou. Zůstala jedna
+          hlavička. Výběr města se objeví sám, jakmile budou hry ve dvou a více městech. */}
       <section className="glass-card p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
             <Image
               src={illustrationSrc("mapa")}
               alt=""
@@ -225,31 +238,14 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
               height={80}
               className="h-14 w-14 shrink-0 object-contain sm:h-20 sm:w-20"
             />
-            <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Vybrané město</p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight">{state.city}</h2>
-            <p className="mt-2 text-sm text-mist">Vyber si hru, která tě láká nejvíc. Zamčené hry se odemykají postupně.</p>
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold">Hry v {cityLocative(state.city, cityLocatives)}</h2>
+              <p className="mt-1 text-sm leading-6 text-mist">
+                Vyber si hru, která tě láká nejvíc. Zamčené hry se odemykají postupně.
+              </p>
             </div>
           </div>
-          <CitySelector cities={publishedCities} />
-        </div>
-      </section>
-
-      <section className="glass-card p-5">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-coral">Přehled všech her</p>
-          <h2 className="mt-2 text-xl font-semibold">
-            {cityLocations.length === 0
-              ? `Hry v ${cityLocative(state.city, cityLocatives)}`
-              : cityLocations.length === 1
-                ? `1 hra v ${cityLocative(state.city, cityLocatives)}`
-                : cityLocations.length >= 2 && cityLocations.length <= 4
-                  ? `${cityLocations.length} hry v ${cityLocative(state.city, cityLocatives)}`
-                  : `${cityLocations.length} her v ${cityLocative(state.city, cityLocatives)}`}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-mist">
-            Tady je celý katalog her v tomhle městě. Nic dalšího není schované mimo tenhle výběr.
-          </p>
+          {hasCityChoice ? <CitySelector cities={publishedCities} /> : null}
         </div>
 
         {cityLocations.length === 0 ? (
@@ -274,7 +270,6 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                 missionLocation.unlocked
               );
               const unlockRequirement = getUnlockRequirement(missionLocation, publishedLocations);
-              const taskCount = missionLocation.episodes.reduce((sum, episode) => sum + episode.tasks.length, 0);
 
               return (
                 <article
@@ -283,8 +278,11 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                     missionUnlocked ? "" : "opacity-80"
                   }`}
                 >
-                  <div className="flex gap-4 p-4">
-                    <div className="relative h-28 w-28 flex-none overflow-hidden rounded-[20px] border border-white/10 bg-ink sm:h-32 sm:w-32">
+                  {/* R44: na úzkém telefonu (do 480 px) jde obrázek nahoru přes celou
+                      šířku a obsah pod něj. Dřív si obrázek držel šířku vlevo a textu
+                      zbyl asi 90px sloupec, ve kterém se lámal i titulek a tlačítko. */}
+                  <div className="flex flex-col gap-4 p-4 min-[480px]:flex-row">
+                    <div className="relative h-40 w-full flex-none overflow-hidden rounded-[20px] border border-white/10 bg-ink min-[480px]:h-28 min-[480px]:w-28 sm:min-[480px]:h-32 sm:min-[480px]:w-32">
                     {isExternalImage(missionLocation.image) ? (
                       <img
                         src={missionLocation.image}
@@ -297,30 +295,26 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                         alt={missionLocation.name}
                         fill
                         className="object-cover"
-                        sizes="128px"
+                        sizes="(max-width: 479px) 100vw, 128px"
                       />
                     )}
                     </div>
                     <div className="min-w-0 flex-1">
+                      {/* R44: karta je minimalistická. „Odemčeno“ nemá vedle sebe s čím
+                          kontrastovat, dokud je hra jediná, „Městská mise“ nic nefiltruje
+                          a město už nese hlavička sekce. Počty zastavení a úkolů jsme se
+                          rozhodli v katalogu nezobrazovat. „Zamčeno“ zůstává – to informaci
+                          nese a doplňuje ho věta, po čem se hra odemkne. */}
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h3 className="text-xl font-bold tracking-tight text-white">{missionLocation.name}</h3>
                           <p className="mt-2 text-sm leading-6 text-white/80">{missionLocation.teaser}</p>
                         </div>
-                        <span
-                          className={`rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.2em] ${
-                            missionUnlocked ? "bg-lime/20 text-lime" : "bg-white/10 text-white/75"
-                          }`}
-                        >
-                          {missionUnlocked ? "Odemčeno" : "Zamčeno"}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-mist">
-                        <span className="rounded-full bg-white/5 px-3 py-2">{missionLocation.subtitle}</span>
-                        <span className="rounded-full bg-white/5 px-3 py-2">{missionLocation.distance}</span>
-                        <span className="rounded-full bg-white/5 px-3 py-2">{formatStopCount(missionLocation.episodes.length)}</span>
-                        <span className="rounded-full bg-white/5 px-3 py-2">{formatTaskCount(taskCount)}</span>
+                        {missionUnlocked ? null : (
+                          <span className="rounded-full bg-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/75">
+                            Zamčeno
+                          </span>
+                        )}
                       </div>
 
                       {!missionUnlocked ? (
@@ -332,7 +326,7 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
                       <div className="mt-4">
                         <Link
                           href={`/locations/${missionLocation.id}`}
-                          className={`inline-flex rounded-[20px] px-4 py-3 text-sm font-semibold ${
+                          className={`inline-flex w-full items-center justify-center whitespace-nowrap rounded-[20px] px-4 py-3 text-sm font-semibold min-[480px]:w-auto ${
                             missionUnlocked ? "bg-lime text-night" : "border border-white/10 bg-white/5 text-mist"
                           }`}
                         >

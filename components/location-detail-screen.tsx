@@ -54,6 +54,9 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
     }
     setActiveMode("solo");
     if (!state.registrationCompleted) {
+      // R44: návštěvník bez hráče míří na hru. Brána se otevře až tady a podle
+      // cílové adresy ví, kam ho po vytvoření nebo obnovení hráče vrátit –
+      // nekončí na domovské stránce a nemusí hru hledat znovu.
       router.push(`/play/${location.id}?mode=solo`);
       return;
     }

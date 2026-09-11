@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { type AvatarConfig, useAppState } from "@/components/app-state-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -15,6 +16,10 @@ import { AVATAR_IDS, DEFAULT_AVATAR_ID, avatarSrc } from "@/lib/avatars";
 //
 // R42: e-mail ani heslo v Traki neexistují. Hráčský účet je anonymní účet Supabase
 // a jediná obnova je Traki klíč. Žádné "starší účty" už nejsou.
+//
+// R44: brána se ukazuje až u akce, která hráče doopravdy potřebuje (spuštění hry,
+// profil, žebříček). Kam návštěvník mířil, si pamatuje a po založení nebo obnovení
+// hráče ho tam vrátí – nikdy ho nevysype na domovskou stránku.
 //
 // Traki klíč = 4 česká slova (LAMA-MOST-KUFR-MRAK). Není to friend code.
 // Plaintext klíče drží jen toto zařízení (localStorage), server má pouze hash.
@@ -68,6 +73,8 @@ export function readRecoveryKeyLocally(): string | null {
 
 export function PlayerAuthGate() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { completeRegistration } = useAppState();
   const supabase = useMemo(() => {
     try {
@@ -87,10 +94,46 @@ export function PlayerAuthGate() {
 
   const [issuedKey, setIssuedKey] = useState("");
   const [copied, setCopied] = useState(false);
+  // R44: klíč je jediná cesta zpátky k hráči, takže odsud se nejde dál jedním
+  // klepnutím – hráč musí potvrdit, že si ho opravdu uložil.
+  const [keySaved, setKeySaved] = useState(false);
+  // R44: popisek průběhu zakládání – ať je vidět, že se pracuje, ne že to zamrzlo.
+  const [creationStage, setCreationStage] = useState("Zakládám hráče…");
+
+  // R44: klíč rozdělíme na dvojice slov, aby se na úzkém telefonu nezalomil
+  // náhodně uprostřed (například 3+1).
+  const keyLines = useMemo(() => {
+    const words = issuedKey.split("-").filter(Boolean);
+    if (words.length !== 4) {
+      return issuedKey ? [issuedKey] : [];
+    }
+    return [`${words[0]}-${words[1]}`, `${words[2]}-${words[3]}`];
+  }, [issuedKey]);
 
   const [recoverInput, setRecoverInput] = useState("");
 
   const registrationAppliedRef = useRef(false);
+
+  // R44: kam návštěvník mířil. Bránu vyvolala buď přímo ta stránka (pak je to
+  // aktuální cesta), nebo tlačítko, které si cíl předalo v ?next=. Bereme jen
+  // vnitřní cesty, aby se přes parametr nedalo poslat nikam ven.
+  const intendedDestination = useMemo(() => {
+    const isInternal = (value: string) => value.startsWith("/") && !value.startsWith("//");
+
+    const requested = searchParams?.get("next") ?? "";
+    if (isInternal(requested)) {
+      return requested;
+    }
+    if (pathname && pathname !== "/" && isInternal(pathname)) {
+      // Parametry té stránky patří k záměru (třeba ?mode=solo u hry), jen si
+      // s sebou nebereme vlastní ?next=.
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      params.delete("next");
+      const query = params.toString();
+      return query ? `${pathname}?${query}` : pathname;
+    }
+    return "/";
+  }, [pathname, searchParams]);
 
   const fetchProfile = useCallback(async (accessToken: string): Promise<ChildProfileRow | null> => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -125,9 +168,10 @@ export function PlayerAuthGate() {
         avatar: profile.avatar ?? undefined,
         avatarConfig: profile.avatar_config ?? undefined
       });
-      router.replace("/");
+      // R44: vrátíme hráče tam, kam mířil, než po něm Traki chtělo identitu.
+      router.replace(intendedDestination);
     },
-    [completeRegistration, router]
+    [completeRegistration, intendedDestination, router]
   );
 
   // ---------------------------------------------------------------- nový hráč
@@ -145,17 +189,20 @@ export function PlayerAuthGate() {
       return;
     }
     setBusy(true);
+    setCreationStage("Zakládám hráče…");
 
     // 1) stabilní hráčský účet bez e-mailu a hesla
     const { data: anon, error: anonError } = await supabase.auth.signInAnonymously();
     const accessToken = anon?.session?.access_token ?? "";
     if (anonError || !accessToken) {
       setBusy(false);
+      setCreationStage("Zakládám hráče…");
       setError("Nepodařilo se založit hráče. Zkus to prosím znovu.");
       return;
     }
 
     // 2) profil hráče (stejný model jako dosud)
+    setCreationStage("Ukládám přezdívku a avatara…");
     const profileResponse = await fetch("/api/child-profile/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -176,6 +223,7 @@ export function PlayerAuthGate() {
     }
 
     // 3) Traki klíč (generuje výhradně server)
+    setCreationStage("Připravuji tvůj Traki klíč…");
     const keyResponse = await fetch("/api/recovery-key/create", {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -183,6 +231,7 @@ export function PlayerAuthGate() {
     const keyPayload = (await keyResponse?.json().catch(() => null)) as { ok?: boolean; recovery_key?: string } | null;
     if (!keyResponse?.ok || !keyPayload?.ok || !keyPayload.recovery_key) {
       setBusy(false);
+      setCreationStage("Zakládám hráče…");
       setError("Hráč je založený, ale Traki klíč se nepodařilo vytvořit. Zkus to prosím znovu.");
       return;
     }
@@ -274,13 +323,24 @@ export function PlayerAuthGate() {
   }
 
   // ---------------------------------------------------------------- UI
-  const shell = (children: React.ReactNode) => (
+  //
+  // R44: brána nesmí návštěvníka uvěznit. Dokud si zakládá hráče, cesta ven
+  // vede zpátky do katalogu; na obrazovce s klíčem ji schováme, protože v tu
+  // chvíli už hráč existuje a odejít bez uložení klíče by ho stálo profil.
+  const shell = (children: React.ReactNode, options?: { allowLeave?: boolean }) => (
     <main className="flex min-h-screen items-center justify-center px-4 py-6">
       <section className="glass-card w-full max-w-md p-6">
         <p className="text-xs uppercase tracking-[0.24em] text-sky">Traki na stopě tajemství</p>
         {children}
         {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
         {info ? <p className="mt-4 text-sm text-lime">{info}</p> : null}
+        {options?.allowLeave === false ? null : (
+          <div className="mt-6 border-t border-white/10 pt-4 text-center">
+            <Link href="/" className={linkButton}>
+              Zpět na hry
+            </Link>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -294,16 +354,16 @@ export function PlayerAuthGate() {
   if (screen === "start") {
     return shell(
       <>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Vítej v Traki</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Na tohle potřebuješ hráče</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Objevuj tajemství měst, plň úkoly a sbírej body. Stačí přezdívka a avatar.
+          Pátrej po městě, řeš úkoly a sbírej body. Stačí přezdívka a avatar – žádný e-mail ani heslo.
         </p>
         <div className="mt-6 space-y-3">
           <button type="button" className={primaryButton} onClick={() => setScreen("new")}>
-            Začít hrát
+            Vytvořit hráče
           </button>
           <button type="button" className={secondaryButton} onClick={() => setScreen("recover")}>
-            Už mám Traki
+            Mám Traki klíč
           </button>
         </div>
       </>
@@ -325,7 +385,7 @@ export function PlayerAuthGate() {
             autoComplete="off"
             className={inputClass}
           />
-          <span className="block text-xs text-mist">{NICKNAME_HINT}</span>
+          <span className="block text-xs text-mist">2–24 znaků. {NICKNAME_HINT}</span>
         </label>
         <div className="mt-4">
           <span className="text-sm text-mist">Vyber si avatara</span>
@@ -346,8 +406,11 @@ export function PlayerAuthGate() {
             ))}
           </div>
         </div>
-        <button type="submit" disabled={busy} className={`${primaryButton} mt-6`}>
-          {busy ? "Zakládám hráče…" : "Jdeme na to"}
+        {/* R44: zakládání hráče trvá několik vteřin (anonymní účet → profil → klíč).
+            Tlačítko je po celou dobu zablokované, takže akci nejde spustit dvakrát,
+            a popisek říká, co se zrovna děje. */}
+        <button type="submit" disabled={busy} className={`${primaryButton} mt-6`} aria-busy={busy}>
+          {busy ? creationStage : "Jdeme na to"}
         </button>
         <div className="mt-4 text-center">
           <button type="button" className={linkButton} onClick={() => setScreen("start")}>
@@ -361,31 +424,57 @@ export function PlayerAuthGate() {
   if (screen === "key") {
     return shell(
       <>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Tohle je tvůj Traki klíč</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Tenhle klíč si opravdu ulož.</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
-          Jsou to čtyři slova, která patří jen tobě. Budeš je potřebovat, když si Traki otevřeš na jiném telefonu
-          nebo tabletu, nebo když se ti tenhle vymaže. Nikomu je neukazuj.
+          Je to jediný způsob, jak se ke svému hráči dostaneš na jiném zařízení nebo po smazání dat. Bez klíče ti
+          profil neumíme obnovit. Nikomu ho neukazuj.
         </p>
+        {/* R44: klíč se nesmí zalomit náhodně (třeba 3+1). Dvě slova na řádek
+            vždycky, na širší obrazovce se vejdou všechna čtyři vedle sebe. */}
         <div className="mt-5 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-center">
-          <p className="select-all text-xl font-bold tracking-[0.12em] text-white">{issuedKey}</p>
+          <p className="select-all text-lg font-bold leading-8 tracking-[0.12em] text-white sm:text-xl">
+            {keyLines.map((lineWords, index) => (
+              <span key={lineWords} className="block sm:inline">
+                {lineWords}
+                {index === 0 && keyLines.length > 1 ? <span className="hidden sm:inline">-</span> : null}
+              </span>
+            ))}
+          </p>
         </div>
+        {/* Rada, co s klíčem udělat, stojí před kopírováním do schránky – ze schránky
+            se na telefonu snadno ztratí a dítě neví, kam ji vložit. */}
+        <p className="mt-4 text-sm leading-6 text-white/80">
+          Vyfoť si obrazovku nebo si slova napiš na papír. Klíč najdeš i v profilu, dokud ho z tohoto zařízení
+          nesmažeš.
+        </p>
         <button type="button" onClick={handleCopyKey} className={`${secondaryButton} mt-3`}>
           {copied ? "Zkopírováno ✓" : "Zkopírovat klíč"}
         </button>
-        <p className="mt-4 text-xs leading-5 text-mist/80">
-          Tip: vyfoť si obrazovku nebo si slova napiš na papír. Klíč najdeš i v profilu, dokud ho z tohoto zařízení
-          nesmažeš.
-        </p>
-        <button type="button" onClick={() => void handleKeySaved()} disabled={busy} className={`${primaryButton} mt-6`}>
-          {busy ? "Připravuji hru…" : "Mám klíč uložený, jdeme hrát"}
+        <label className="mt-5 flex items-start gap-3 text-sm leading-6 text-white">
+          <input
+            type="checkbox"
+            checked={keySaved}
+            onChange={(event) => setKeySaved(event.target.checked)}
+            className="mt-1 h-5 w-5 flex-none accent-lime"
+          />
+          <span>Mám Traki klíč uložený.</span>
+        </label>
+        <button
+          type="button"
+          onClick={() => void handleKeySaved()}
+          disabled={busy || !keySaved}
+          className={`${primaryButton} mt-4`}
+        >
+          {busy ? "Připravuji hru…" : "Jdeme hrát"}
         </button>
-      </>
+      </>,
+      { allowLeave: false }
     );
   }
 
   return shell(
       <form onSubmit={handleRecover}>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Už mám Traki</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Mám Traki klíč</h1>
         <p className="mt-3 text-sm leading-6 text-mist">
           Napiš svůj Traki klíč – čtyři slova. Na velkých písmenech, pomlčkách ani háčcích nezáleží.
         </p>

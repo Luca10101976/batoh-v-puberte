@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
         profile_code: string;
         player_code: string;
         contact_email: string | null;
-        has_pin: boolean;
         avatar: string | null;
         avatar_config: Record<string, unknown> | null;
       }
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest) {
     // Newer schema path.
     const modernByUpdated = await sessionClient
       .from("child_profiles")
-      .select("child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
+      .select("child_name, profile_code, player_code, contact_email, avatar, avatar_config, created_at, updated_at")
       .eq("parent_user_id", user.id)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
@@ -133,8 +132,6 @@ export async function POST(request: NextRequest) {
         profile_code: string;
         player_code: string | null;
         contact_email: string | null;
-        pin_hash: string | null;
-        pin_updated_at: string | null;
         avatar: string | null;
         avatar_config: Record<string, unknown> | null;
       }>();
@@ -143,7 +140,7 @@ export async function POST(request: NextRequest) {
       modernByUpdated.error?.code === "42703"
         ? await sessionClient
             .from("child_profiles")
-            .select("child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
+            .select("child_name, profile_code, player_code, contact_email, avatar, avatar_config, created_at")
             .eq("parent_user_id", user.id)
             .order("created_at", { ascending: true })
             .order("id", { ascending: true })
@@ -153,8 +150,6 @@ export async function POST(request: NextRequest) {
               profile_code: string;
               player_code: string | null;
               contact_email: string | null;
-              pin_hash: string | null;
-              pin_updated_at: string | null;
               avatar: string | null;
               avatar_config: Record<string, unknown> | null;
             }>()
@@ -166,17 +161,16 @@ export async function POST(request: NextRequest) {
         profile_code: modern.data.profile_code,
         player_code: modern.data.player_code || modern.data.profile_code,
         contact_email: modern.data.contact_email ?? null,
-        has_pin: Boolean(modern.data.pin_hash) || Boolean(modern.data.pin_updated_at),
         avatar: modern.data.avatar ?? null,
         avatar_config: (modern.data.avatar_config as Record<string, unknown> | null) ?? null
       };
     }
 
-    // Legacy schema compatibility path (missing player_code/contact_email/pin_hash).
+    // Legacy schema compatibility path (missing player_code/contact_email).
     if (modern.error?.code === "42703") {
       const legacy = await sessionClient
         .from("child_profiles")
-        .select("child_name, profile_code, pin_updated_at, created_at")
+        .select("child_name, profile_code, created_at")
         .eq("parent_user_id", user.id)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
@@ -184,7 +178,6 @@ export async function POST(request: NextRequest) {
         .maybeSingle<{
           child_name: string;
           profile_code: string;
-          pin_updated_at: string | null;
         }>();
 
       if (!legacy.error && legacy.data) {
@@ -193,7 +186,6 @@ export async function POST(request: NextRequest) {
           profile_code: legacy.data.profile_code,
           player_code: legacy.data.profile_code,
           contact_email: user.email ?? null,
-          has_pin: Boolean(legacy.data.pin_updated_at),
           avatar: null,
           avatar_config: null
         };
@@ -273,7 +265,7 @@ export async function POST(request: NextRequest) {
 
     const byParentUpdated = await admin
       .from("child_profiles")
-      .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at, updated_at")
+      .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, avatar, avatar_config, created_at, updated_at")
       .eq("parent_user_id", user.id)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
@@ -285,8 +277,6 @@ export async function POST(request: NextRequest) {
         profile_code: string;
         player_code: string | null;
         contact_email: string | null;
-        pin_hash: string | null;
-        pin_updated_at: string | null;
         avatar: string | null;
         avatar_config: Record<string, unknown> | null;
       }>();
@@ -295,7 +285,7 @@ export async function POST(request: NextRequest) {
       byParentUpdated.error?.code === "42703"
         ? await admin
             .from("child_profiles")
-            .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, pin_hash, pin_updated_at, avatar, avatar_config, created_at")
+            .select("id, parent_user_id, child_name, profile_code, player_code, contact_email, avatar, avatar_config, created_at")
             .eq("parent_user_id", user.id)
             .order("created_at", { ascending: true })
             .order("id", { ascending: true })
@@ -307,8 +297,6 @@ export async function POST(request: NextRequest) {
               profile_code: string;
               player_code: string | null;
               contact_email: string | null;
-              pin_hash: string | null;
-              pin_updated_at: string | null;
               avatar: string | null;
               avatar_config: Record<string, unknown> | null;
             }>()
@@ -322,7 +310,6 @@ export async function POST(request: NextRequest) {
         profile_code: resolved.profile_code,
         player_code: resolved.player_code || resolved.profile_code,
         contact_email: resolved.contact_email ?? null,
-        has_pin: Boolean(resolved.pin_hash) || Boolean(resolved.pin_updated_at),
         avatar: resolved.avatar ?? null,
         avatar_config: (resolved.avatar_config as Record<string, unknown> | null) ?? null
       };

@@ -19,7 +19,6 @@ type ChildProfileRow = {
   player_code?: string | null;
   avatar?: string | null;
   avatar_config?: AvatarConfig | null;
-  has_pin?: boolean;
 };
 
 type ResolvedFriendProfile = {
@@ -269,7 +268,6 @@ export function ProfileScreen() {
             player_code?: string;
             avatar?: string | null;
             avatar_config?: AvatarConfig | null;
-            has_pin?: boolean;
           } | null;
           profile_id?: string | null;
         }
@@ -310,7 +308,6 @@ export function ProfileScreen() {
               player_code?: string;
               avatar?: string | null;
               avatar_config?: AvatarConfig | null;
-              has_pin?: boolean;
             } | null;
             profile_id?: string | null;
           }
@@ -336,8 +333,7 @@ export function ProfileScreen() {
         playerCode: bootstrapped.player_code || bootstrapped.profile_code,
         profileRowId: bootstrapPayload?.profile_id ?? null,
         avatar: bootstrapProfile.avatar ?? undefined,
-        avatarConfig: bootstrapProfile.avatar_config ?? undefined,
-        hasPin: bootstrapProfile.has_pin
+        avatarConfig: bootstrapProfile.avatar_config ?? undefined
       });
 
       return bootstrapped;
@@ -357,8 +353,7 @@ export function ProfileScreen() {
       playerCode: resolved.player_code || resolved.profile_code,
       profileRowId: payload?.profile_id ?? null,
       avatar: profile.avatar ?? undefined,
-      avatarConfig: profile.avatar_config ?? undefined,
-      hasPin: profile.has_pin
+      avatarConfig: profile.avatar_config ?? undefined
     });
 
     return resolved;
@@ -394,7 +389,6 @@ export function ProfileScreen() {
               child_name?: string;
                           player_code?: string;
               profile_code?: string;
-              has_pin?: boolean;
               avatar?: string;
               avatar_config?: AvatarConfig;
             } | null;
@@ -412,7 +406,6 @@ export function ProfileScreen() {
         playerCode: profile.player_code,
         profileCode: profile.profile_code,
         profileRowId: payload?.profile_id ?? null,
-        hasPin: profile.has_pin,
         avatar: profile.avatar,
         avatarConfig: profile.avatar_config
       });
@@ -642,7 +635,6 @@ export function ProfileScreen() {
         child_name?: string;
               player_code?: string;
         profile_code?: string;
-        has_pin?: boolean;
         avatar?: string;
         avatar_config?: AvatarConfig;
       } | null;
@@ -669,8 +661,7 @@ export function ProfileScreen() {
       syncCloudProfile({
         playerCode: effectiveProfile.player_code,
         profileCode: effectiveProfile.profile_code,
-        profileRowId: payload.profile_id ?? null,
-        hasPin: effectiveProfile.has_pin
+        profileRowId: payload.profile_id ?? null
       });
     }
 

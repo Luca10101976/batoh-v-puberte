@@ -24,7 +24,6 @@ type ChildProfileBasicRow = {
   player_code?: string | null;
   avatar?: string | null;
   avatar_config?: Record<string, unknown> | null;
-  pin_hash?: string | null;
 };
 
 type MembershipRow = {
@@ -130,7 +129,7 @@ export async function GET(request: NextRequest) {
   const ownPublicCodes = new Set(ownProfiles.map((profile) => normalizeCode(profile.player_code || profile.profile_code)));
   const { data: canonicalProfileData } = await auth.admin
     .from("child_profiles")
-    .select("id, child_name, profile_code, player_code, avatar, avatar_config, pin_hash")
+    .select("id, child_name, profile_code, player_code, avatar, avatar_config")
     .eq("id", ownProfile.id)
     .limit(1)
     .maybeSingle();
@@ -237,8 +236,7 @@ export async function GET(request: NextRequest) {
             profile_code: canonicalProfile.profile_code,
             player_code: canonicalProfile.player_code || canonicalProfile.profile_code,
             avatar: canonicalProfile.avatar ?? "PB",
-            avatar_config: canonicalProfile.avatar_config ?? null,
-            has_pin: Boolean(canonicalProfile.pin_hash)
+            avatar_config: canonicalProfile.avatar_config ?? null
           }
         : null,
       friends,
@@ -295,8 +293,7 @@ export async function GET(request: NextRequest) {
           profile_code: canonicalProfile.profile_code,
           player_code: canonicalProfile.player_code || canonicalProfile.profile_code,
           avatar: canonicalProfile.avatar ?? "PB",
-          avatar_config: canonicalProfile.avatar_config ?? null,
-          has_pin: Boolean(canonicalProfile.pin_hash)
+          avatar_config: canonicalProfile.avatar_config ?? null
         }
       : null,
     friends,

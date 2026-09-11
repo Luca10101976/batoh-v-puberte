@@ -19,7 +19,6 @@ type ChildProfileDto = {
   player_code: string;
   profile_code: string;
   contact_email: string | null;
-  has_pin: boolean;
   avatar: string;
   avatar_config: {
     head: "round" | "oval" | "square";
@@ -87,8 +86,6 @@ type GenericProfileRow = Record<string, unknown> & {
   player_code?: string | null;
   contact_email?: string | null;
   child_name?: string | null;
-  pin_hash?: string | null;
-  pin_updated_at?: string | null;
   avatar?: string | null;
   avatar_config?: unknown;
   created_at?: string | null;
@@ -119,7 +116,6 @@ function normalizeProfileRow(row: GenericProfileRow, userEmail: string | null): 
     player_code: publicPlayerCode,
     profile_code: legacyProfileCode,
     contact_email: toStr(row.contact_email).trim() || userEmail || null,
-    has_pin: Boolean(row.pin_hash) || Boolean(row.pin_updated_at),
     avatar,
     avatar_config: avatarConfig
   };
@@ -588,7 +584,6 @@ export async function PATCH(request: Request) {
         player_code: toCode(targetRow.player_code) || toCode(targetRow.profile_code),
         profile_code: toCode(targetRow.profile_code),
         contact_email: user.email ?? null,
-        has_pin: false,
         avatar: hasAvatarUpdate ? avatar : DEFAULT_AVATAR,
         avatar_config: hasAvatarConfigUpdate && avatarConfig ? avatarConfig : DEFAULT_AVATAR_CONFIG
       },

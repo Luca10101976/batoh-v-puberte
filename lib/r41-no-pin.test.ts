@@ -83,3 +83,52 @@ test("Traki recovery klíč zůstává nedotčený", () => {
     "recovery-key musí mít dál create i redeem"
   );
 });
+
+test("R41 migrace ruší jen PIN struktury a nic jiného", () => {
+  const dir = path.join(ROOT, "supabase/migrations");
+  const file = fs.readdirSync(dir).find((name) => /r41_drop_pin_infrastructure\.sql$/.test(name));
+  assert.ok(file, "migrace *_r41_drop_pin_infrastructure.sql musí existovat");
+  const sql = fs.readFileSync(path.join(dir, file!), "utf8");
+  // Středník uvnitř textu komentáře není konec příkazu – dělíme mimo apostrofy.
+  const statements: string[] = [];
+  let buffer = "";
+  let inString = false;
+  for (const char of sql.replace(/--[^\n]*/g, "")) {
+    if (char === "'") inString = !inString;
+    if (char === ";" && !inString) {
+      if (buffer.trim()) statements.push(buffer.trim().replace(/\s+/g, " "));
+      buffer = "";
+      continue;
+    }
+    buffer += char;
+  }
+  if (buffer.trim()) statements.push(buffer.trim().replace(/\s+/g, " "));
+
+  assert.deepEqual(statements, [
+    "alter table public.child_profiles drop column if exists pin_hash",
+    "alter table public.child_profiles drop column if exists pin_updated_at",
+    "alter table public.child_profiles drop column if exists pin_failed_attempts",
+    "alter table public.child_profiles drop column if exists pin_locked_until",
+    "drop table if exists public.pin_audit_log",
+    "comment on column public.child_profiles.parent_user_id is 'parent_user_id represents the Supabase auth.users owner of the player profile; the legacy column name does not imply a current parent-account model.'"
+  ]);
+
+  assert.ok(!/cascade/i.test(sql), "migrace nesmí použít CASCADE");
+  const touchesOwner = statements.filter(
+    (statement) => /parent_user_id/i.test(statement) && !/^comment on column/i.test(statement)
+  );
+  assert.deepEqual(touchesOwner, [], "migrace nesmí sahat na parent_user_id jinak než komentářem");
+  assert.deepEqual(
+    statements.filter((statement) => /contact_email|recovery_key/i.test(statement)),
+    [],
+    "migrace se nesmí dotknout e-mailu ani Traki klíče"
+  );
+});
+
+test("historické migrace zůstávají nezměněné", () => {
+  const dir = path.join(ROOT, "supabase/migrations");
+  const baseline = fs.readFileSync(path.join(dir, "0001_baseline.sql"), "utf8");
+  assert.match(baseline, /pin_hash/, "0001_baseline.sql musí zůstat historicky netknutá");
+  const snapshot = fs.readFileSync(path.join(dir, "0002_production_snapshot_2026-09-07.sql"), "utf8");
+  assert.match(snapshot, /pin_audit_log/, "0002_production_snapshot musí zůstat historicky netknutá");
+});

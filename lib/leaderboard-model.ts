@@ -153,7 +153,16 @@ export function rankPlayers(
       return { player, ...stats };
     })
     .filter((entry) => entry.score >= 1)
-    .sort((a, b) => b.score - a.score);
+    // R44 krok 6: řadí se podle skóre; při shodě abecedně podle přezdívky.
+    // Abeceda je POUZE pro stabilní vykreslení – pořadí (rank) z ní nevzniká,
+    // hráči se shodným skóre mají dál shodné číslo. Bez toho databáze vracela
+    // shodné hráče pokaždé v jiném pořadí a seznam se při každém načtení míchal.
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.player.nickname.localeCompare(b.player.nickname, "cs", { sensitivity: "base" }) ||
+        a.player.profileCode.localeCompare(b.player.profileCode)
+    );
 
   const entries: LeaderboardEntry[] = [];
   let rank = 0;
@@ -206,4 +215,40 @@ export function buildLeaderboard(args: {
     },
     rankedPlayers: ranked.length
   };
+}
+
+/**
+ * R44 krok 6: co má ukázat záložka Kamarádi.
+ *
+ * R33 se nemění: do pořadí patří jen hráč s alespoň jedním bodem. Tady se jen
+ * rozlišuje, PROČ je seznam prázdný – „nemám kamarády" a „kamarádi zatím nemají
+ * body" jsou dvě různé věci a dřív obojí říkalo totéž.
+ *
+ * @param friendCount počet kamarádů podle serveru (bez vlastního profilu)
+ */
+export function resolveFriendsBoardView(args: {
+  friendCount: number;
+  entries: LeaderboardEntry[];
+}): "no-friends" | "friends-without-score" | "board" {
+  if (args.friendCount <= 0) {
+    // Hráč bez kamarádů nesmí vidět sám sebe jako jednočlenný žebříček.
+    return "no-friends";
+  }
+  return args.entries.some((entry) => !entry.isYou) ? "board" : "friends-without-score";
+}
+
+export type BoardLoadStatus = "idle" | "loading" | "ready" | "error";
+
+/**
+ * R43: už načtená data se kvůli pozdějšímu selhání neschovávají. Chyba se
+ * ukazuje jen tehdy, když ještě žádná data nemáme.
+ */
+export function resolveBoardView(status: BoardLoadStatus, hasBoard: boolean): "loading" | "error" | "ready" {
+  if (hasBoard) {
+    return "ready";
+  }
+  if (status === "error") {
+    return "error";
+  }
+  return "loading";
 }

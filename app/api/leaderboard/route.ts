@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
     const publishedLocationIds = Array.from(publishedScores.keys());
 
     let profiles: ChildProfileRow[];
+    let friendCount = 0;
 
     if (scope === "friends") {
       const [{ data: outgoing }, { data: incoming }] = await Promise.all([
@@ -191,6 +192,9 @@ export async function POST(request: NextRequest) {
         memberIds.add(link.friend_child_profile_id);
       }
 
+      // R44 krok 6: obrazovka potřebuje rozlišit „nemám kamarády" od „kamarádi
+      // zatím nemají body". Počítá se bez vlastního profilu.
+      friendCount = Math.max(0, memberIds.size - 1);
       profiles = await selectProfiles(admin, (query: any) => query.in("id", Array.from(memberIds)));
     } else {
       profiles = await selectProfiles(admin, (query: any) => query);
@@ -217,7 +221,7 @@ export async function POST(request: NextRequest) {
     const totals = totalsByProfile(progressRows, publishedScores);
     const { entries, you, rankedPlayers } = buildLeaderboard({ players, totals, limit });
 
-    return NextResponse.json({ ok: true, scope, entries, you, rankedPlayers });
+    return NextResponse.json({ ok: true, scope, entries, you, rankedPlayers, friendCount });
   } catch (error) {
     console.error("[leaderboard]", error);
     return NextResponse.json({ ok: false, error: "leaderboard_failed" }, { status: 500 });

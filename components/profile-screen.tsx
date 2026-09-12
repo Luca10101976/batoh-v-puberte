@@ -885,6 +885,19 @@ export function ProfileScreen() {
   }
 
   useEffect(() => {
+    // R44 krok 6: odkaz ze Žebříčku míří rovnou na formulář přidání kamaráda.
+    // Ten se vykreslí až po ověření cloud účtu, takže v okamžiku načtení stránky
+    // prohlížeč kotvu ještě nenajde a zůstal by nahoře.
+    if (typeof window === "undefined" || window.location.hash !== "#pridat-kamarada") {
+      return;
+    }
+    const target = document.getElementById("pridat-kamarada");
+    if (target) {
+      target.scrollIntoView({ block: "start" });
+    }
+  }, [cloudReady]);
+
+  useEffect(() => {
     if (!friendToRemove) {
       return;
     }
@@ -1396,7 +1409,9 @@ export function ProfileScreen() {
 
         {cloudReady === true ? (
           <>
-            <h2 className="mt-6 text-xl font-semibold">Přidat kamaráda</h2>
+            <h2 id="pridat-kamarada" className="mt-6 scroll-mt-4 text-xl font-semibold">
+              Přidat kamaráda
+            </h2>
             <form
               className="mt-3 space-y-3"
               onSubmit={(event) => {

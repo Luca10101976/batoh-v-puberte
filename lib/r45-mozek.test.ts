@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { slugifyCityName, validateCity } from "./cities.ts";
-import { findMissionPublishBlockers } from "./mission-publish-validation.ts";
+import { findMissionPublishBlockers, findPublishBlockers, splitAcceptedAnswers } from "./mission-publish-validation.ts";
+import { getCanonicalCorrectAnswer } from "./mission-task-normalization.ts";
+import { isTaskAnswerCorrect } from "./answer-matching.ts";
 
 // R45: UX Mozku. Bezpečné mazání, poctivé stavy, kontrola bez publikace,
 // pořadí šipkami, neuložené změny a automatický identifikátor města.
@@ -359,4 +361,114 @@ test("J4 – žádná migrace nepřepisuje existující identifikátory", () => 
     .map((f) => f.slice(0, 14))
     .filter((razitko) => /^\d{14}$/.test(razitko) && razitko > "20260911200000");
   assert.deepEqual(migrace, [], "R45 nemá žádnou migraci");
+});
+
+// ═══════════ K. Výběr z možností: validace čte odpověď stejně jako hra ═══════════
+// Správná odpověď u „vyber" je JEDNA celá nabízená možnost. Čárka uvnitř textu
+// možnosti není oddělovač – dřív se odpověď dělila jako u otevřených úkolů
+// a možnost „Vlci, medvědi, kůň a brazilský ptáček" se rozpadla na kusy,
+// které mezi možnostmi nejsou, takže publikace hlásila falešnou chybu.
+
+const vyberUkol = (correctAnswer: string, options: unknown, type = "vyber") => ({
+  id: "t1",
+  stopTitle: "Zastávka",
+  taskOrder: 1,
+  type,
+  question: "Otázka?",
+  correctAnswer,
+  options
+});
+const zkontroluj = (task: ReturnType<typeof vyberUkol>) =>
+  findPublishBlockers([{ id: "s1", title: "Zastávka", order: 1, tasks: [task] }]);
+const kody = (task: ReturnType<typeof vyberUkol>) => zkontroluj(task).map((i) => i.code);
+
+test("K1 – výběr s jednoduchou správnou možností projde", () => {
+  assert.deepEqual(kody(vyberUkol("Nebe a peklo", ["Nebe a peklo", "Den a noc", "Sláva a pád"])), []);
+});
+
+test("K2 – správná možnost s čárkami projde (jedna i více čárek)", () => {
+  assert.deepEqual(
+    kody(vyberUkol("Vlci, medvědi, kůň a brazilský ptáček", ["Pávi a labutě", "Vlci, medvědi, kůň a brazilský ptáček", "Sloni a velbloudi"])),
+    [],
+    "dvě čárky uvnitř možnosti nejsou oddělovač"
+  );
+  assert.deepEqual(
+    kody(vyberUkol("Chléb, sůl", ["Chléb, sůl", "Voda", "Med"])),
+    [],
+    "jedna čárka uvnitř možnosti nejsou dvě odpovědi"
+  );
+});
+
+test("K3 – odpověď musí opravdu odpovídat jedné z nabízených možností", () => {
+  // shoda se nehledá po kusech: „Vlci" samo o sobě žádná možnost není
+  assert.deepEqual(
+    kody(vyberUkol("Vlci", ["Pávi a labutě", "Vlci, medvědi, kůň a brazilský ptáček", "Sloni a velbloudi"])),
+    ["choice_answer_not_in_options"],
+    "fragment možnosti není platná odpověď"
+  );
+  // a naopak celá možnost projde
+  assert.deepEqual(kody(vyberUkol("Sloni a velbloudi", ["Pávi a labutě", "Vlci, medvědi, kůň a brazilský ptáček", "Sloni a velbloudi"])), []);
+});
+
+test("K4 – neexistující správná možnost dál blokuje publikaci", () => {
+  assert.deepEqual(
+    kody(vyberUkol("Žirafy", ["Pávi a labutě", "Vlci, medvědi", "Sloni a velbloudi"])),
+    ["choice_answer_not_in_options"]
+  );
+  // prázdná odpověď zůstává „chybí odpověď", ne „není mezi možnostmi"
+  assert.deepEqual(kody(vyberUkol("", ["Ano", "Ne"])), ["missing_answer"]);
+  // málo možností se hlásí dál
+  assert.deepEqual(kody(vyberUkol("Ano", ["Ano"])), ["choice_without_options"]);
+});
+
+test("K5 – skutečná data Klamovky tímto pravidlem projdou", () => {
+  const klamovka = vyberUkol("Vlci, medvědi, kůň a brazilský ptáček", [
+    "Pávi a labutě",
+    "Vlci, medvědi, kůň a brazilský ptáček",
+    "Sloni a velbloudi"
+  ]);
+  assert.deepEqual(zkontroluj(klamovka), [], "úkol 2 zastávky Novogotický altán už nehlásí nic");
+});
+
+test("K6 – validace a hra vykládají „vyber“ stejně", () => {
+  const pripady: Array<[string, string[]]> = [
+    ["Vlci, medvědi, kůň a brazilský ptáček", ["Pávi a labutě", "Vlci, medvědi, kůň a brazilský ptáček", "Sloni a velbloudi"]],
+    ["Nebe a peklo", ["Nebe a peklo", "Den a noc"]],
+    ["2", ["Pávi", "Vlci", "Sloni"]],
+    ["Žirafy", ["Pávi", "Vlci", "Sloni"]],
+    ["Vlci", ["Pávi a labutě", "Vlci, medvědi", "Sloni"]]
+  ];
+  for (const [odpoved, moznosti] of pripady) {
+    // hra: kanonická odpověď určuje, co se uzná
+    const kanonicka = getCanonicalCorrectAnswer({
+      id: "t1",
+      type: "vyber",
+      question: "Otázka?",
+      correct_answer: odpoved,
+      options: moznosti
+    });
+    const hraUkolVyresitelny = Boolean(kanonicka) && isTaskAnswerCorrect({ type: "vyber", correctAnswers: kanonicka ? [kanonicka] : [] }, kanonicka ?? "");
+    // validace: blokuje publikaci?
+    const validaceBlokuje = kody(vyberUkol(odpoved, moznosti)).includes("choice_answer_not_in_options");
+    assert.equal(
+      validaceBlokuje,
+      !hraUkolVyresitelny,
+      `rozchod u odpovědi ${JSON.stringify(odpoved)}: hra řešitelná=${hraUkolVyresitelny}, validace blokuje=${validaceBlokuje}`
+    );
+  }
+});
+
+test("K7 – otevřené úkoly a jejich oddělovače zůstávají beze změny", () => {
+  // víc uznávaných odpovědí oddělených čárkou u otevřeného úkolu dál platí
+  assert.deepEqual(splitAcceptedAnswers("4, ctyri, čtyři"), ["4", "ctyri", "čtyři"]);
+  assert.deepEqual(splitAcceptedAnswers("galerie\nvystavni prostor"), ["galerie", "vystavni prostor"]);
+  assert.deepEqual(kody(vyberUkol("4, ctyri, čtyři", [], "otevrena")), [], "otevřený úkol s variantami projde");
+  // „pro splnění stačí N" se dál počítá z rozdělených odpovědí
+  const whitelist = {
+    ...vyberUkol("Rakousko; Polsko; Monako", [], "otevrena"),
+    minCorrectMatches: 3
+  };
+  assert.deepEqual(zkontroluj(whitelist), [], "whitelist se třemi odpověďmi a min 3 je v pořádku");
+  const prilis = { ...vyberUkol("Rakousko; Polsko", [], "otevrena"), minCorrectMatches: 5 };
+  assert.deepEqual(zkontroluj(prilis).map((i) => i.code), ["invalid_min_matches"]);
 });

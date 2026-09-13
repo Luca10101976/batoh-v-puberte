@@ -7,6 +7,8 @@
 //
 // Pravidla jsou čistá a testovatelná; načítání dat dělá volající.
 
+import { getCanonicalCorrectAnswer } from "./mission-task-normalization.ts";
+
 export type PublishTaskInput = {
   id: string;
   stopTitle: string;
@@ -143,10 +145,21 @@ export function findPublishBlockers(stops: PublishStopInput[]): PublishIssue[] {
             stopTitle: stop.title,
             taskOrder: task.taskOrder
           });
-        } else if (answers.length > 0) {
-          const normalizedOptions = options.map(normalize);
-          const everyAnswerIsAnOption = answers.every((answer) => normalizedOptions.includes(normalize(answer)));
-          if (!everyAnswerIsAnOption) {
+        } else if (task.correctAnswer.trim()) {
+          // R45: u výběru je správná odpověď JEDNA celá nabízená možnost, takže
+          // čárka uvnitř textu možnosti není oddělovač. Dřív se odpověď dělila
+          // stejně jako u otevřených úkolů, a možnost jako „Vlci, medvědi, kůň
+          // a brazilský ptáček" se rozpadla na kusy, které mezi možnostmi nejsou.
+          // Používá se přímo tatáž funkce, podle které správnou odpověď určuje
+          // herní logika – aby validace a hraní nemohly říkat něco jiného.
+          const canonical = getCanonicalCorrectAnswer({
+            id: task.id,
+            type: task.type as "otevrena" | "vyber" | "ano-ne",
+            question: task.question,
+            correct_answer: task.correctAnswer,
+            options: task.options
+          });
+          if (!canonical) {
             issues.push({
               code: "choice_answer_not_in_options",
               message: `${where}: správná odpověď není mezi nabízenými možnostmi.`,

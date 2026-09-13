@@ -10,6 +10,35 @@ městě, projde v terénu její zastávky a na každé odpovídá na úkoly.
 Technické názvy `batoh-v-puberte` a `traki` jsou historické a **nepřejmenovávají se**.
 Pan Batoh je zastřešující značka, tento dokument je technická dokumentace Traki.
 
+## Stav projektu (13. 9. 2026)
+
+Plán běží po bodech v `TRAKI_MASTER_PLAN.xlsx`. Body R41–R45 jsou hotové:
+
+| Bod | Co přinesl |
+| --- | --- |
+| R41 | odstranění PIN infrastruktury |
+| R42 | konec legacy e-mailového přihlášení, úklid mrtvých rout a tabulek |
+| R43 | poctivé chybové stavy – nezjištěný stav se nesmí tvářit jako nula |
+| R44 | UX obrazovku po obrazovce: vstup, katalog, hraní, profil, přátelé, žebříček |
+| R45 | UX Mozku: bezpečné mazání, kontrola hry bez publikace, řazení šipkami |
+
+**Upřímný odhad stavu.** Aplikace dělá to, co má, ale produkt stojí na jediné
+publikované hře a zatím ho nehrál žádný skutečný hráč:
+
+| Otázka | Odhad |
+| --- | --- |
+| Funguje to, co je postavené? | ~93 % |
+| Je to připravené na skutečné hráče? | ~65 % |
+| Je hotový obsah? | ~50 % |
+
+Rozdíl mezi prvním a druhým číslem není v kódu. Publikovaná je **jedna hra**
+(Klamovka, ~50 minut). Budějovice jsou rozepsané – třináct úkolů nemá správnou
+odpověď a chybí titulní obrázek i závěr, takže je publikace zatím nepustí ven.
+Dokud je druhé město bez publikované hry, výběr města se hráčům vůbec nezobrazí.
+
+Ověřováno průchodem produkce se syntetickými profily, které se po každém testu
+mažou. Produkční databáze proto běžně stojí na nule hráčů.
+
 ## Stack
 
 Verze podle `package.json`:
@@ -216,9 +245,28 @@ v Mozku proto neodpojí postup hráčů. Mapa je v `lib/legacy-location-ids.ts`.
 
 ## Mozek
 
-Editor obsahu na adrese `/mozek`. Dnes umí spravovat hry a jejich zastávky:
-seznam her, vytvoření a úprava hry, publikace, zastávky a úkoly. Není to zatím
-kompletní administrace Traki, cílový rozsah je teprve v plánu.
+Editor obsahu na adrese `/mozek`, chráněný HTTP Basic (`ADMIN_BASIC_USER`,
+`ADMIN_BASIC_PASS`). `/mozek/*` re-exportuje implementaci z `/admin/*`; samotná
+adresa `/admin` je middlewarem skrytá (404). Tohle rozdělení je záměrné.
+
+Novou hru dnes jde vytvořit, zkontrolovat a publikovat celou v Mozku, bez zásahu
+do kódu, Gitu nebo Supabase: města, hry, zastávky, úkoly, nápovědy, přechodové
+texty, obrázky, pořadí, náhled a publikace.
+
+Co drží obsah pohromadě:
+
+- **Publikace má serverovou kontrolu hratelnosti.** Hru bez zastávek, bez úkolů,
+  bez správných odpovědí, bez titulního obrázku nebo bez závěru publikovat nejde.
+  Hlášky pojmenují konkrétní zastávku i číslo úkolu.
+- **Zkontrolovat hru** pouští tatáž pravidla, ale nic nezveřejňuje – autor zjistí,
+  co hře chybí, bez rizika publikace.
+- **Mazání je dvoukrokové** u hry, zastávky i úkolu; u zastávky se říká, že zmizí
+  i její úkoly. Odehraný obsah server smazat nedovolí vůbec.
+- **Pořadí se ovládá šipkami**, ruční čísla se nezadávají a server je dopočítá tak,
+  aby nevznikla duplicita.
+- **Neuložené změny** jsou vidět a odchod z rozepsané stránky se ptá. Autosave není.
+- **Náhled** je kontrolní arch pro autora včetně správných odpovědí. Nezakládá
+  výpravu, nepočítá body a hráči ho nevidí.
 
 ## Příkazy
 
@@ -241,29 +289,44 @@ hodnotami Supabase, protože skutečné klíče se čtou až za běhu požadavku
 
 ## Co zatím není hotové
 
-Aby dokumentace neslibovala víc, než aplikace umí:
+Aby dokumentace neslibovala víc, než aplikace umí. Ověřeno k 13. 9. 2026:
 
-- **Spouštění a pokračování ve výpravě.** Sólo výprava vzniká až první odpovědí,
-  ne kliknutím na Hrát. Aplikace nabídne k pokračování jen jednu rozehranou hru,
-  i když jich hráč může mít víc. Pravidlo pro souběžné hraní na dvou zařízeních
-  není finální.
+- **Obsah.** Publikovaná je jediná hra. Druhá je rozepsaná a publikace ji
+  nepustí ven, dokud nebude dohraná (viz [Stav projektu](#stav-projektu-13-9-2026)).
+- **Skutečný provoz.** Aplikaci zatím nehrál žádný opravdový hráč. Všechno, co je
+  ověřené, se testovalo syntetickými profily.
+- **Žádný monitoring.** Chyba v produkci nikoho neupozorní, skončí jen v logu Vercelu.
 - **Společná výprava.** Server umí celou smyčku od založení po ukončení, ale
-  aplikace pro ni nemá ovládání. Přijetí pozvánky, spuštění, ukončení ani zrušení
-  se z rozhraní vyvolat nedá.
-- **Nápovědy** nejsou implementované, i když s nimi model počítá. Sloupec pro text
-  nápovědy v databázi existuje a je prázdný.
-- **Správné odpovědi jsou stále součástí dat posílaných do prohlížeče.** Ověřování
-  na serveru tím obejít nejde, ale kdo se podívá do zdroje stránky, odpovědi uvidí.
-- **Pořadí zastávek** vynucuje jen rozhraní. Parametry v adrese umí zastávku
-  přeskočit.
-- **Historie odehraných výprav** se v profilu nezobrazuje, profil zatím staví
-  seznam her z dat v kódu.
-- **Offline hraní neexistuje.** Obsah hry se nestahuje do zařízení, odpovědi se bez
-  signálu neukládají a žádná fronta k pozdějšímu odeslání není. Datový model je na
-  to připravený, samotná funkce ne.
-- **Obsah v kódu.** `lib/mock-data.ts` je stále v produkční cestě, mimo jiné
-  u žebříčku, profilu, papírové verze a mapy webu. Databáze zatím není jediným
-  zdrojem pravdy pro všechno.
+  aplikace pro ni nemá ovládání. Pozvání kamaráda do konkrétní hry je odložené.
+- **Offline hraní neexistuje.** Service worker (`traki-na-stope-v6`) cachuje jen
+  aplikační obal. Obsah hry se do zařízení nestahuje, odpovědi se bez signálu
+  neukládají a fronta k pozdějšímu odeslání není. Datový model je na to připravený,
+  funkce ne.
+- **Souběžné hraní na dvou zařízeních** nemá finální pravidlo.
+- **Mozek:** chybí náhled očima hráče, nápověda k odpovědím se opakuje u každého
+  úkolu a vyměněné obrázky zůstávají v úložišti jako osiřelé soubory.
+- **Odmítnutá registrace** nechá v `auth.users` prázdný anonymní účet – validace
+  délky přezdívky běží až po jeho vytvoření.
+- **Globální žebříček** načte všechny profily a až pak je ořízne na TOP 20. Při
+  dnešním objemu to nevadí, při stovkách hráčů bude.
+
+### Co už naopak hotové je
+
+Dřívější verze tohoto dokumentu uváděla jako chybějící i věci, které od té doby
+vznikly. Pro pořádek:
+
+- **Nápovědy** fungují. Text se spravuje v Mozku a otevřená nápověda sníží odměnu
+  za úkol z 10 na 5 bodů (`POINTS_PER_TASK_WITH_HINT`).
+- **Správné odpovědi se do prohlížeče neposílají.** `toPublicTask` odstraňuje
+  `correctAnswers` i `hintText` (`SERVER_ONLY_TASK_FIELDS`).
+- **Pořadí úkolů vynucuje server**, ne rozhraní – přeskočení adresou vrátí
+  `task_out_of_order`.
+- **Výprava vzniká vědomým zahájením hry**, ne až první odpovědí, a hráč jich může
+  mít rozehraných víc najednou.
+- **Profil staví seznam her z databáze**, ne z obsahu v kódu, a ukazuje rozehrané
+  i dokončené hry.
+- **`lib/mock-data.ts` v repozitáři není.** Zbylé zmínky v komentářích jen
+  popisují historii; produkční cesta obsah v kódu nepoužívá.
 
 ## supabase/legacy
 

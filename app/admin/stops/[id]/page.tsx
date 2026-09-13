@@ -21,6 +21,18 @@ function statusText(status?: string) {
       return { text: "✅ Úkol byl uložený.", tone: "ok" as const };
     case "task_deleted":
       return { text: "🗑️ Úkol byl smazaný.", tone: "ok" as const };
+    // R45: tyhle stavy server posílal, ale obrazovka je zahazovala – zablokované
+    // smazání i změna pořadí vypadaly jako tiché přenačtení stránky.
+    case "reordered":
+      return { text: "✅ Pořadí úkolů bylo změněné.", tone: "ok" as const };
+    case "reorder_edge":
+      return { text: "Úkol už je na kraji, dál se posunout nedá.", tone: "ok" as const };
+    case "reorder_blocked":
+      return { text: "🚫 Pořadí teď měnit nejde:", tone: "error" as const };
+    case "delete_blocked":
+      return { text: "🚫 Smazat to nejde:", tone: "error" as const };
+    case "delete_not_confirmed":
+      return { text: "Smazání se neprovedlo, protože nebylo potvrzené.", tone: "error" as const };
     case "error":
       return { text: "❌ Akce se nepovedla.", tone: "error" as const };
     default:
@@ -33,7 +45,7 @@ export default async function StopEditPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ status?: string; issues?: string }>;
+  searchParams?: Promise<{ status?: string; issues?: string; confirmTask?: string }>;
 }) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -103,6 +115,8 @@ export default async function StopEditPage({
     answers: 0
   }));
   const isUsed = usage.activeRuns > 0 || usage.playersWithResult > 0 || usage.answers > 0;
+  // R45: mazání úkolu potřebuje druhé kliknutí.
+  const confirmingTaskId = resolvedSearchParams?.confirmTask ?? "";
   const issues = (resolvedSearchParams?.issues ?? "")
     .split(" | ")
     .map((item) => item.trim())
@@ -200,6 +214,23 @@ export default async function StopEditPage({
                     </button>
                   </form>
                   {isUsed ? null : (
+                    <Link
+                      href={`/mozek/stops/${stop.id}?confirmTask=${task.id}`}
+                      className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-center text-sm font-semibold text-coral"
+                    >
+                      Smazat úkol
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {confirmingTaskId === task.id ? (
+                <div className="rounded-2xl border border-coral/30 bg-coral/10 p-4">
+                  <p className="text-sm font-semibold text-coral">Smazat úkol {index + 1}?</p>
+                  <p className="mt-1 text-sm text-mist">
+                    {task.question?.trim() ? `„${task.question.trim()}“ ` : ""}Tohle nejde vrátit.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <form action={deleteTaskAction}>
                       <input type="hidden" name="task_id" value={task.id} />
                       <input type="hidden" name="stop_id" value={stop.id} />
@@ -207,14 +238,20 @@ export default async function StopEditPage({
                       <input type="hidden" name="confirm" value="smazat" />
                       <button
                         type="submit"
-                        className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-sm font-semibold text-coral"
+                        className="rounded-xl border border-coral/30 bg-coral/20 px-4 py-3 text-sm font-semibold text-coral"
                       >
-                        Smazat úkol
+                        Ano, smazat úkol {index + 1}
                       </button>
                     </form>
-                  )}
+                    <Link
+                      href={`/mozek/stops/${stop.id}`}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
+                    >
+                      Nechat být
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <TaskForm stopId={stop.id} missionId={stop.mission_id} task={task} action={updateTaskAction} />
             </article>

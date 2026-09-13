@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import type { FormState } from "@/app/admin/types";
+import { UnsavedChangesBadge, useUnsavedChanges } from "@/components/admin/unsaved-changes";
 import { EMPTY_FORM_STATE } from "@/app/admin/types";
 import { AdminImageField } from "@/components/admin/image-field";
 
@@ -28,6 +29,7 @@ function SubmitButton() {
 
 export function StopNewForm({ missionId, initialOrder, action }: StopNewFormProps) {
   const [state, formAction] = useFormState(action, EMPTY_FORM_STATE);
+  const { dirty, formProps } = useUnsavedChanges(state.success, state.error);
   const router = useRouter();
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function StopNewForm({ missionId, initialOrder, action }: StopNewFormProp
   }, [router, state.success]);
 
   return (
-    <form action={formAction} encType="multipart/form-data" className="space-y-5">
+    <form action={formAction} encType="multipart/form-data" className="space-y-5" {...formProps}>
       <input type="hidden" name="mission_id" value={missionId} />
 
       <section className="glass-card p-5">
@@ -77,20 +79,10 @@ export function StopNewForm({ missionId, initialOrder, action }: StopNewFormProp
             emptyLabel="Tady se po uložení ukáže nová fotka"
           />
 
-          <label className="block space-y-2">
-            <span className="text-sm text-mist">Pořadí</span>
-            <input
-              name="order"
-              type="number"
-              min={0}
-              defaultValue={initialOrder}
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-              required
-            />
-            {state.fieldErrors?.order ? <p className="text-xs text-coral">{state.fieldErrors.order}</p> : null}
-          </label>
         </div>
       </section>
+
+      <UnsavedChangesBadge dirty={dirty} />
 
       {state.success ? (
         <div className="rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3 text-sm text-lime">{state.success}</div>

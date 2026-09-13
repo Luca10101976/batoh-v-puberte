@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { EMPTY_FORM_STATE, type FormState } from "@/app/admin/types";
+import { UnsavedChangesBadge, useUnsavedChanges } from "@/components/admin/unsaved-changes";
 import type { City } from "@/lib/cities";
 
 function SubmitButton({ label }: { label: string }) {
@@ -28,9 +29,10 @@ export function CityForm({
   city?: City;
 }) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  const { dirty, formProps } = useUnsavedChanges(state.success, state.error);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" {...formProps}>
       {city ? <input type="hidden" name="city_id" value={city.id} /> : null}
 
       <section className="glass-card p-5">
@@ -65,17 +67,31 @@ export function CityForm({
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="block space-y-2">
+          {/* R45: identifikátor se u nového města odvodí z názvu a u existujícího
+              se nemění – odkazují na něj už uložené hry i adresy. */}
+          <div className="block space-y-2">
             <span className="text-sm text-mist">Identifikátor</span>
-            <input
-              name="slug"
-              defaultValue={city?.slug ?? ""}
-              maxLength={60}
-              placeholder="Nech prázdné a odvodí se z názvu"
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-            />
+            {city ? (
+              <>
+                <p className="w-full rounded-2xl border border-white/10 bg-night/40 px-4 py-3 text-base text-mist">
+                  {city.slug}
+                </p>
+                <span className="block text-xs text-mist">
+                  Identifikátor zůstává stejný i po přejmenování města. Odkazují na něj uložené hry.
+                </span>
+              </>
+            ) : (
+              <>
+                <p className="w-full rounded-2xl border border-white/10 bg-night/40 px-4 py-3 text-base text-mist">
+                  Vytvoří se z názvu
+                </p>
+                <span className="block text-xs text-mist">
+                  Například „České Budějovice“ → <span className="font-mono">ceske-budejovice</span>.
+                </span>
+              </>
+            )}
             {state.fieldErrors?.slug ? <p className="text-xs text-coral">{state.fieldErrors.slug}</p> : null}
-          </label>
+          </div>
 
           <label className="block space-y-2">
             <span className="text-sm text-mist">Pořadí</span>
@@ -136,6 +152,8 @@ export function CityForm({
           />
         </label>
       </section>
+
+      <UnsavedChangesBadge dirty={dirty} />
 
       {state.success ? (
         <div className="rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3 text-sm text-lime">{state.success}</div>

@@ -42,7 +42,8 @@ export default async function AdminMissionsPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("mission_stops")
-      .select("id, mission_id, title, description, image_url, order")
+      // R45: přehled potřebuje jen počty zastávek, ne jejich obsah ani URL obrázků.
+      .select("id, mission_id, order")
       .order("mission_id", { ascending: true })
       .order("order", { ascending: true })
   ]);
@@ -183,94 +184,41 @@ export default async function AdminMissionsPage({
                   </div>
                 </div>
 
-                <div className="grid w-full gap-3 sm:w-56">
-                  <>
-                      <form action={toggleMissionPublishAction}>
-                        <input type="hidden" name="mission_id" value={mission.id} />
-                        <input type="hidden" name="next_published" value={mission.is_published ? "false" : "true"} />
-                        <button
-                          type="submit"
-                          className={`w-full rounded-xl px-4 py-3 text-center text-sm font-semibold ${
-                            mission.is_published
-                              ? "border border-amber-300/30 bg-amber-300/10 text-amber-100"
-                              : "bg-lime/20 text-lime"
-                          }`}
-                        >
-                          {mission.is_published ? "Vypnout publikaci" : "Publikovat"}
-                        </button>
-                      </form>
-                      <Link
-                        href={`/mozek/missions/${mission.id}`}
-                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold"
-                      >
-                        Upravit misi
-                      </Link>
-                      <Link
-                        href={`/mozek/stops/new?missionId=${mission.id}`}
-                        className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-semibold text-night"
-                      >
-                        Přidat zastavení
-                      </Link>
-                      <Link
-                        href={`/mozek/missions/${mission.id}/preview`}
-                        className="rounded-xl border border-sky/30 bg-sky/10 px-4 py-3 text-center text-sm font-semibold text-sky"
-                      >
-                        Náhled hry
-                      </Link>
-                  </>
+                {/* R45: hlavní akce je otevřít hru. Publikace tu zůstává jako
+                    zkratka, ale už nepřebíjí běžnou editaci. */}
+                <div className="grid w-full gap-2 sm:w-56">
+                  <Link
+                    href={`/mozek/missions/${mission.id}`}
+                    className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-semibold text-night"
+                  >
+                    Otevřít hru
+                  </Link>
+                  <Link
+                    href={`/mozek/missions/${mission.id}/preview`}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold"
+                  >
+                    Náhled hry
+                  </Link>
+                  <form action={toggleMissionPublishAction}>
+                    <input type="hidden" name="mission_id" value={mission.id} />
+                    <input type="hidden" name="next_published" value={mission.is_published ? "false" : "true"} />
+                    <button
+                      type="submit"
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-mist"
+                    >
+                      {mission.is_published ? "Vypnout publikaci" : "Publikovat"}
+                    </button>
+                  </form>
                 </div>
               </div>
 
-              <section className="mt-5">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold">Zastavení v misi</h3>
-                    <p className="text-sm text-mist">
-                      {missionStops.length === 0 ? "Mise ještě nemá žádné zastavení." : `${missionStops.length} zastavení k editaci`}
-                    </p>
-                  </div>
-                </div>
-
-                {missionStops.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-mist">
-                    Tady se zatím nic neukazuje. Přidejte první zastavení a hned bude vidět v obsahu mise.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {missionStops.map((stop) => (
-                      <div key={stop.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="max-w-3xl">
-                            <p className="text-xs uppercase tracking-[0.2em] text-sky">Zastavení {stop.order}</p>
-                            <h4 className="mt-1 text-lg font-semibold">{stop.title}</h4>
-                            <p className="mt-2 text-sm leading-6 text-mist">
-                              {stop.description?.trim() || "Zatím bez popisu."}
-                            </p>
-                            <p className="mt-3 text-xs text-mist">
-                              {stop.image_url?.trim() ? `Obrázek: ${stop.image_url}` : "Zatím bez obrázku."}
-                            </p>
-                          </div>
-
-                            <div className="grid w-full gap-2 sm:w-44">
-                              <Link
-                                href={`/mozek/stops/${stop.id}`}
-                                className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-center text-sm font-semibold"
-                              >
-                                Upravit
-                              </Link>
-                              <Link
-                                href={`/mozek/missions/${mission.id}`}
-                                className="rounded-xl border border-white/10 bg-night/30 px-3 py-2 text-center text-sm font-semibold text-mist"
-                              >
-                                Pořadí a mazání
-                              </Link>
-                            </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+              {/* R45: zastavení patří do detailu hry. Přehled dřív vypisoval
+                  všechna zastavení všech her včetně plných URL obrázků z úložiště. */}
+              <p className="mt-4 text-sm text-mist">
+                {missionStops.length === 0
+                  ? "Hra zatím nemá žádné zastavení."
+                  : `${missionStops.length} zastavení · otevři hru a uprav je`}
+              </p>
             </article>
           );
         })}

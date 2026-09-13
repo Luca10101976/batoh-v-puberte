@@ -149,7 +149,7 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-night/30 px-4 py-3 text-sm text-mist">
             <strong>Přechod na další zastávku:</strong>{" "}
-            {episode.transitionText?.trim() || "bez vlastního textu – hráč uvidí obecnou větu"}
+            {episode.transitionText?.trim() || "bez vlastního textu – hráč uvidí jen název dalšího místa"}
           </div>
         </section>
       ))}

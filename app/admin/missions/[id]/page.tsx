@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  checkMissionAction,
   deleteMissionAction,
   deleteStopAction,
   moveStopAction,
@@ -42,6 +43,13 @@ function statusText(status?: string) {
       return { text: "🚫 Hru zatím nejde publikovat, protože by nešla dohrát. Oprav prosím tohle:", tone: "error" as const };
     case "delete_blocked":
       return { text: "🚫 Smazat to nejde:", tone: "error" as const };
+    case "check_ok":
+      return {
+        text: "✅ Hra prošla kontrolou. Podle pravidel publikace je dohratelná a jde zveřejnit.",
+        tone: "ok" as const
+      };
+    case "check_failed":
+      return { text: "🚫 Hra zatím není hotová. Než půjde publikovat, oprav tohle:", tone: "error" as const };
     case "delete_not_confirmed":
       return { text: "Smazání se neprovedlo, protože nebylo potvrzené.", tone: "error" as const };
     case "error":
@@ -59,7 +67,7 @@ export default async function MissionDetailPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ status?: string; issues?: string; confirm?: string }>;
+  searchParams?: Promise<{ status?: string; issues?: string; confirm?: string; confirmStop?: string }>;
 }) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -118,6 +126,8 @@ export default async function MissionDetailPage({
     .map((item) => item.trim())
     .filter(Boolean);
   const confirmingDelete = resolvedSearchParams?.confirm === "delete";
+  // R45: smazání zastavení už není jedno kliknutí – smaže i všechny jeho úkoly.
+  const confirmingStopId = resolvedSearchParams?.confirmStop ?? "";
   const isUsed = usage.activeRuns > 0 || usage.playersWithResult > 0 || usage.answers > 0;
 
   return (
@@ -139,6 +149,16 @@ export default async function MissionDetailPage({
             >
               Náhled hry
             </Link>
+            {/* R45: kontrola pouští stejná pravidla jako publikace, ale nic nezveřejní. */}
+            <form action={checkMissionAction}>
+              <input type="hidden" name="mission_id" value={mission.id} />
+              <button
+                type="submit"
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold"
+              >
+                Zkontrolovat hru
+              </button>
+            </form>
             <form action={toggleMissionPublishAction}>
               <input type="hidden" name="mission_id" value={mission.id} />
               <input type="hidden" name="next_published" value={mission.is_published ? "false" : "true"} />
@@ -158,6 +178,13 @@ export default async function MissionDetailPage({
             </Link>
           </div>
         </div>
+
+        {/* R45: u publikované hry jde každé uložení rovnou ven. */}
+        {mission.is_published ? (
+          <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+            Hra je publikovaná. Uložené změny hráči uvidí okamžitě.
+          </p>
+        ) : null}
 
         {/* R37: administrátorka musí vidět, že se hry někdo dotkl, dřív než do ní zasáhne. */}
         {isUsed ? (
@@ -274,20 +301,45 @@ export default async function MissionDetailPage({
                     Upravit
                   </Link>
                   {isUsed ? null : (
+                    <Link
+                      href={`/mozek/missions/${mission.id}?confirmStop=${stop.id}`}
+                      className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-center text-xs font-semibold text-coral"
+                    >
+                      Smazat
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* R45: potvrzení mazání zastávky. Smazat jde až druhým kliknutím
+                  a autorka vidí, že s ním zmizí i jeho úkoly. */}
+              {confirmingStopId === stop.id ? (
+                <div className="mt-4 rounded-2xl border border-coral/30 bg-coral/10 p-4">
+                  <p className="text-sm font-semibold text-coral">Smazat zastavení „{stop.title}“?</p>
+                  <p className="mt-1 text-sm text-mist">
+                    Smazáním zastavení se smažou i všechny jeho úkoly. Tohle nejde vrátit.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <form action={deleteStopAction}>
                       <input type="hidden" name="mission_id" value={mission.id} />
                       <input type="hidden" name="stop_id" value={stop.id} />
                       <input type="hidden" name="confirm" value="smazat" />
                       <button
                         type="submit"
-                        className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral"
+                        className="rounded-xl border border-coral/30 bg-coral/20 px-4 py-3 text-sm font-semibold text-coral"
                       >
-                        Smazat
+                        Ano, smazat „{stop.title}“
                       </button>
                     </form>
-                  )}
+                    <Link
+                      href={`/mozek/missions/${mission.id}`}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
+                    >
+                      Nechat být
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </article>
           ))}
         </div>

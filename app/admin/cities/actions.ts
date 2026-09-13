@@ -100,7 +100,9 @@ export async function updateCityAction(_prevState: FormState, formData: FormData
       .from("cities")
       .update({
         name: parsed.value.name,
-        slug: parsed.value.slug,
+        // R45: slug se u existujícího města neaktualizuje. Dřív se odvozoval
+        // z názvu, takže přejmenování města tiše přepsalo identifikátor, na
+        // který odkazují uložené hry.
         name_locative: parsed.value.nameLocative,
         display_order: parsed.value.displayOrder,
         is_active: parsed.value.isActive,

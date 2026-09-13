@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import type { FormState, MissionTaskRow, MissionTaskType } from "@/app/admin/types";
 import { EMPTY_FORM_STATE } from "@/app/admin/types";
+import { UnsavedChangesBadge, useUnsavedChanges } from "@/components/admin/unsaved-changes";
 
 type TaskFormProps = {
   stopId: string;
@@ -34,6 +35,7 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
 
 export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
   const [state, formAction] = useFormState(action, EMPTY_FORM_STATE);
+  const { dirty, formProps } = useUnsavedChanges(state.success, state.error);
   const router = useRouter();
   const isEditing = Boolean(task?.id);
   const defaultOptions = Array.isArray(task?.options) ? task?.options.join("\n") : "";
@@ -47,12 +49,12 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
   }, [router, state.success]);
 
   return (
-    <form action={formAction} className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+    <form action={formAction} className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4" {...formProps}>
       {task?.id ? <input type="hidden" name="task_id" value={task.id} /> : null}
       <input type="hidden" name="stop_id" value={stopId} />
       <input type="hidden" name="mission_id" value={missionId} />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4">
         <label className="block space-y-2">
           <span className="text-sm text-mist">Typ úkolu</span>
           <select
@@ -69,18 +71,6 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
           {state.fieldErrors?.type ? <p className="text-xs text-coral">{state.fieldErrors.type}</p> : null}
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm text-mist">Pořadí</span>
-          <input
-            name="order"
-            type="number"
-            min={0}
-            defaultValue={task?.order ?? 0}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-            required
-          />
-          {state.fieldErrors?.order ? <p className="text-xs text-coral">{state.fieldErrors.order}</p> : null}
-        </label>
       </div>
 
       <label className="block space-y-2">
@@ -210,6 +200,7 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
         </div>
       </section>
 
+      <UnsavedChangesBadge dirty={dirty} />
       {state.success ? <div className="rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3 text-sm text-lime">{state.success}</div> : null}
       {state.error ? <div className="rounded-2xl border border-coral/30 bg-coral/10 px-4 py-3 text-sm text-coral">{state.error}</div> : null}
 

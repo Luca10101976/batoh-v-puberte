@@ -400,6 +400,36 @@ export async function toggleMissionPublishAction(formData: FormData) {
  * R37: smazat jde jen hra, kterou nikdo nikdy nerozehrál. Kontrola je serverová –
  * potvrzení v prohlížeči je jen zdvořilost, rozhodnutí dělá server.
  */
+/**
+ * R45: kontrola hry bez publikace.
+ *
+ * Dřív šlo zjistit, co hře chybí, jedině pokusem o publikaci – autorka musela
+ * riskovat zveřejnění, aby se dozvěděla, že hra ještě není hotová. Tahle akce
+ * pouští PŘESNĚ stejná pravidla (collectPublishBlockers), ale nesahá na
+ * is_published, nezakládá výpravu a nedotýká se hráčských dat.
+ */
+export async function checkMissionAction(formData: FormData) {
+  const missionId = normalizeText(formData.get("mission_id"));
+
+  if (!missionId) {
+    redirect("/mozek?status=error");
+  }
+
+  let blockers: PublishIssue[] = [];
+  try {
+    blockers = await collectPublishBlockers(getSupabaseServerClient(), missionId);
+  } catch (error) {
+    rethrowIfRedirectError(error);
+    redirect(`/mozek/missions/${missionId}?status=error`);
+  }
+
+  if (blockers.length > 0) {
+    redirect(`/mozek/missions/${missionId}?status=check_failed&issues=${encodePublishIssues(blockers)}`);
+  }
+
+  redirect(`/mozek/missions/${missionId}?status=check_ok`);
+}
+
 export async function deleteMissionAction(formData: FormData) {
   const missionId = normalizeText(formData.get("mission_id"));
   const confirmed = normalizeText(formData.get("confirm")) === "smazat";

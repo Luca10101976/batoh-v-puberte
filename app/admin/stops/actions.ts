@@ -13,6 +13,36 @@ function normalizeText(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * R45: pořadí se v Mozku ovládá šipkami, ne psaním čísel. Formulář proto pole
+ * „Pořadí" nemá a server si hodnotu doplní sám – u úprav ponechá stávající,
+ * u nového obsahu přidá na konec. Tím ani nejde vyrobit dvě stejná čísla.
+ */
+async function nextOrderFor(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  table: "mission_stops" | "mission_tasks",
+  column: "mission_id" | "stop_id",
+  parentId: string
+) {
+  const { data } = await supabase
+    .from(table)
+    .select("order")
+    .eq(column, parentId)
+    .order("order", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ order: number }>();
+  return (data?.order ?? 0) + 1;
+}
+
+async function currentOrderOf(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  table: "mission_stops" | "mission_tasks",
+  rowId: string
+) {
+  const { data } = await supabase.from(table).select("order").eq("id", rowId).maybeSingle<{ order: number }>();
+  return data?.order ?? 0;
+}
+
 function parseNonNegativeInt(value: string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -56,7 +86,7 @@ export async function createStopAction(_prevState: FormState, formData: FormData
   const imageUrl = normalizeText(formData.get("image_url"));
   const imageFileValue = formData.get("image_file");
   const orderRaw = normalizeText(formData.get("order"));
-  const order = parseNonNegativeInt(orderRaw);
+  const order = orderRaw ? parseNonNegativeInt(orderRaw) : "auto";
 
   const fieldErrors: Record<string, string> = {};
   if (!missionId) fieldErrors.mission_id = "Chybí missionId.";
@@ -79,6 +109,7 @@ export async function createStopAction(_prevState: FormState, formData: FormData
 
   try {
     const supabase = getSupabaseServerClient();
+    const resolvedOrder = order === "auto" ? await nextOrderFor(supabase, "mission_stops", "mission_id", missionId) : (order as number);
     let resolvedImageUrl = imageUrl;
 
     if (imageFile) {
@@ -98,7 +129,7 @@ export async function createStopAction(_prevState: FormState, formData: FormData
       title,
       description,
       image_url: resolvedImageUrl,
-      order
+      order: resolvedOrder
     });
 
     if (error) {
@@ -126,7 +157,7 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
   const existingImageUrl = normalizeText(formData.get("existing_image_url"));
   const imageFileValue = formData.get("image_file");
   const orderRaw = normalizeText(formData.get("order"));
-  const order = parseNonNegativeInt(orderRaw);
+  const order = orderRaw ? parseNonNegativeInt(orderRaw) : "auto";
   const intent = normalizeText(formData.get("intent"));
 
   const fieldErrors: Record<string, string> = {};
@@ -181,13 +212,15 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
         resolvedImageUrl = uploaded.publicUrl;
       }
 
+      const resolvedOrder = order === "auto" ? await currentOrderOf(supabase, "mission_stops", stopId) : (order as number);
+
       const { error } = await supabase
         .from("mission_stops")
         .update({
           title,
           description,
           image_url: resolvedImageUrl,
-          order,
+          order: resolvedOrder,
           // R26: autorský text přechodu; prázdný znamená obecný text v aplikaci.
           transition_text: transitionText
         })
@@ -245,7 +278,7 @@ export async function createTaskAction(_prevState: FormState, formData: FormData
   const correctAnswer = normalizeText(formData.get("correct_answer"));
   const optionsRaw = normalizeText(formData.get("options"));
   const orderRaw = normalizeText(formData.get("order"));
-  const order = parseNonNegativeInt(orderRaw);
+  const order = orderRaw ? parseNonNegativeInt(orderRaw) : "auto";
   const options = parseTaskOptions(optionsRaw);
   const storedOptions = buildStoredTaskOptions(type, options);
   const hintText = normalizeText(formData.get("hint_text"));
@@ -282,13 +315,14 @@ export async function createTaskAction(_prevState: FormState, formData: FormData
 
   try {
     const supabase = getSupabaseServerClient();
+    const resolvedOrder = order === "auto" ? await nextOrderFor(supabase, "mission_tasks", "stop_id", stopId) : (order as number);
     const { error } = await supabase.from("mission_tasks").insert({
       stop_id: stopId,
       type,
       question,
       correct_answer: storedCorrectAnswer,
       options: storedOptions,
-      order,
+      order: resolvedOrder,
       hint_text: hintText,
       min_correct_matches: minMatches.value
     });
@@ -315,7 +349,7 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
   const correctAnswer = normalizeText(formData.get("correct_answer"));
   const optionsRaw = normalizeText(formData.get("options"));
   const orderRaw = normalizeText(formData.get("order"));
-  const order = parseNonNegativeInt(orderRaw);
+  const order = orderRaw ? parseNonNegativeInt(orderRaw) : "auto";
   const options = parseTaskOptions(optionsRaw);
   const storedOptions = buildStoredTaskOptions(type, options);
   const hintText = normalizeText(formData.get("hint_text"));
@@ -353,6 +387,7 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
 
   try {
     const supabase = getSupabaseServerClient();
+    const resolvedOrder = order === "auto" ? await currentOrderOf(supabase, "mission_tasks", taskId) : (order as number);
     const { error } = await supabase
       .from("mission_tasks")
       .update({
@@ -360,7 +395,7 @@ export async function updateTaskAction(_prevState: FormState, formData: FormData
         question,
         correct_answer: storedCorrectAnswer,
         options: storedOptions,
-        order,
+        order: resolvedOrder,
         hint_text: hintText,
         min_correct_matches: minMatches.value
       })

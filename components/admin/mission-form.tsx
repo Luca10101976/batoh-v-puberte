@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { EMPTY_FORM_STATE, type FormState, type MissionRow } from "@/app/admin/types";
+import { UnsavedChangesBadge, useUnsavedChanges } from "@/components/admin/unsaved-changes";
 import { AdminImageField } from "@/components/admin/image-field";
 import type { City } from "@/lib/cities";
 
@@ -35,10 +36,11 @@ export function MissionForm({
   unlockCandidates: UnlockCandidate[];
 }) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  const { dirty, formProps } = useUnsavedChanges(state.success, state.error);
   const selectedCity = cities.find((city) => city.id === mission?.city_id) ?? cities[0];
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" {...formProps}>
       {mission ? <input type="hidden" name="mission_id" value={mission.id} /> : null}
 
       <section className="glass-card p-5">
@@ -297,6 +299,8 @@ export function MissionForm({
         </label>
 
       </section>
+
+      <UnsavedChangesBadge dirty={dirty} />
 
       {state.success ? (
         <div className="rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3 text-sm text-lime">{state.success}</div>

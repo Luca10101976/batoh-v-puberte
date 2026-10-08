@@ -130,10 +130,38 @@ Pravidla, která platí bez výjimky:
 - Kompletní seznam migrací v tomto dokumentu záměrně není, aby nezastaral.
   Zdrojem pravdy je adresář a `supabase migration list --linked`.
 
-Známý rozdíl: produkční tabulka `mission_tasks` má navíc sloupce `hint_text`
-a `answer_mode`, které v žádné migraci nejsou. Nové prostředí je tedy bude mít
-jinak než produkce. Kód dnes ani jeden z nich nečte. Srovnání migrací se
-skutečnou produkcí je samostatný úkol.
+### Skutečné schéma: `supabase/schema.sql`
+
+Audit 8. 10. 2026 ukázal, že **`0001_baseline.sql` se na produkci nikdy
+nespustil** – byl jen zapsaný do historie migrací. Tabulky `child_task_progress`
+a `child_location_progress` mají na produkci jiný tvar, než baseline popisuje,
+a deset CHECK omezení, dva spouštěče a jejich funkce nejsou v žádné migraci.
+Nové prostředí postavené z migrací se tedy od produkce liší.
+
+Jediný věrný popis produkce je **`supabase/schema.sql`**. Generuje se přímo
+z katalogu Postgresu (`pg_get_*def`, `pg_policies`, `information_schema`),
+nic v něm není psané rukou. Na produkci se nespouští – je to dokumentace
+a základ pro kontrolu driftu.
+
+```
+npm run schema:snapshot   # obnoví snímek z produkce (jen čtení; přihlášení supabase login)
+npm run schema:verify     # porovná tabulky, sloupce a cizí klíče produkce se snímkem
+```
+
+Po každé migraci se snímek obnoví. Před návrhem migrace se čte snímek, ne baseline.
+
+**Evidovaný technický dluh schématu – neřešit bez samostatného zadání:**
+na produkci jsou tři dvojice duplicitních indexů nad stejnými sloupci
+(zbytečně zdražují zápis, na správnost vliv nemají):
+
+| Sloupec | Duplicitní indexy |
+| --- | --- |
+| `missions.catalog_order` | `idx_missions_catalog_order`, `missions_catalog_order_idx` |
+| `missions.unlock_after_mission_id` | `idx_missions_unlock_after`, `missions_unlock_after_mission_id_idx` |
+| `child_profiles.player_code` | `child_profiles_player_code_key`, `child_profiles_player_code_uidx` |
+
+Úklid je samostatná migrace s vlastním schválením. Dřívější poznámka o sloupci
+`answer_mode` byla mylná – na produkci není; `hint_text` zavádí migrace R25.
 
 ## Hráčský účet a Traki klíč
 
@@ -278,6 +306,8 @@ Co drží obsah pohromadě:
 | `npm test` | testy herní logiky (`lib/*.test.ts`) |
 | `npm run lint` | ESLint |
 | `npm run env:pull` | stažení `.env.local` z Vercelu |
+| `npm run schema:snapshot` | snímek skutečného produkčního schématu do `supabase/schema.sql` (jen čtení) |
+| `npm run schema:verify` | kontrola driftu produkce proti snímku (jen čtení) |
 
 V `package.json` jsou navíc pomocné skripty pro jednorázové kontroly a přepočty
 (`verify:runtime-readonly`, `score:migrate:dry-run`, `score:migrate:apply`).
@@ -309,6 +339,9 @@ Aby dokumentace neslibovala víc, než aplikace umí. Ověřeno k 13. 9. 2026:
   délky přezdívky běží až po jeho vytvoření.
 - **Globální žebříček** načte všechny profily a až pak je ořízne na TOP 20. Při
   dnešním objemu to nevadí, při stovkách hráčů bude.
+- **Schéma databáze:** migrace nepopisují produkci věrně (baseline nikdy neběžel)
+  a na produkci jsou tři duplicitní dvojice indexů – evidováno v
+  [Databáze a migrace](#skutečné-schéma-supabaseschemasql), zatím záměrně neřešeno.
 
 ### Co už naopak hotové je
 

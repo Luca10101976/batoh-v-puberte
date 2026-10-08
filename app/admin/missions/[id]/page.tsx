@@ -7,7 +7,9 @@ import {
   toggleMissionPublishAction,
   updateMissionAction
 } from "@/app/admin/missions/actions";
-import type { MissionRow, MissionStopRow } from "@/app/admin/types";
+import { deleteCharacterAction, saveCharacterAction } from "@/app/admin/missions/character-actions";
+import type { MissionCharacterRow, MissionRow, MissionStopRow } from "@/app/admin/types";
+import { CharacterManager } from "@/components/admin/character-manager";
 import { MissionForm } from "@/components/admin/mission-form";
 import { loadActiveCities, loadCities } from "@/lib/cities-server";
 import { describeUsage } from "@/lib/mission-usage";
@@ -33,6 +35,8 @@ function statusText(status?: string) {
       return { text: "✅ Zastavení bylo přidané.", tone: "ok" as const };
     case "stop_deleted":
       return { text: "🗑️ Zastavení bylo smazané.", tone: "ok" as const };
+    case "character_deleted":
+      return { text: "🗑️ Postava byla smazaná.", tone: "ok" as const };
     case "reordered":
       return { text: "✅ Pořadí zastavení bylo změněné.", tone: "ok" as const };
     case "reorder_edge":
@@ -120,6 +124,14 @@ export default async function MissionDetailPage({
     .order("order", { ascending: true });
 
   const orderedStops = ((stops ?? []) as MissionStopRow[]) ?? [];
+
+  // R51: postavy hry. Prostředí bez migrace R51 tabulku nemá – sekce je pak prázdná.
+  const { data: characterRows } = await supabase
+    .from("mission_characters")
+    .select("id, mission_id, name, image_url")
+    .eq("mission_id", mission.id)
+    .order("created_at", { ascending: true });
+  const characters = ((characterRows as MissionCharacterRow[] | null) ?? []);
   const status = statusText(resolvedSearchParams?.status);
   const issues = (resolvedSearchParams?.issues ?? "")
     .split(" | ")
@@ -220,6 +232,13 @@ export default async function MissionDetailPage({
         mission={mission}
         cities={cityOptions}
         unlockCandidates={unlockCandidates}
+      />
+
+      <CharacterManager
+        missionId={mission.id}
+        characters={characters}
+        saveAction={saveCharacterAction}
+        deleteAction={deleteCharacterAction}
       />
 
       <section className="glass-card p-5">

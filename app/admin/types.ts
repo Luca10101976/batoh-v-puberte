@@ -40,6 +40,17 @@ export type MissionStopRow = {
   order: number;
   /** R26: autorský text po dokončení téhle zastávky. R44: prázdný = hráč uvidí jen název dalšího místa. */
   transition_text?: string | null;
+  /** R51: bublina při příchodu na zastavení – kdo mluví a co říká. */
+  bubble_character_id?: string | null;
+  bubble_text?: string | null;
+};
+
+/** R51: postava konkrétní hry. Mluví v bublinách při příchodu na zastavení. */
+export type MissionCharacterRow = {
+  id: string;
+  mission_id: string;
+  name: string;
+  image_url: string | null;
 };
 
 export type MissionTaskRow = {

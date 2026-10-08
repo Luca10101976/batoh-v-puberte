@@ -127,25 +127,38 @@ begin
     if coalesce(array_length(option_values, 1), 0) < 2 then
       raise exception 'U typu Výběr z možností musí být aspoň 2 možnosti.';
     end if;
-    normalized_answer := lower(regexp_replace(new.correct_answer, '\s+', ' ', 'g'));
-    if normalized_answer ~ '^\d+$' then
-      option_index := normalized_answer::integer;
-      if option_index < 1 or option_index > array_length(option_values, 1) then
-        raise exception 'Číslo správné možnosti není v seznamu možností.';
+    -- R49: správných možností smí být víc, každá na samostatném řádku. Čárka
+    -- nedělí (bývá uvnitř textu možnosti). Každý řádek musí být přesný text
+    -- možnosti nebo její pořadí; jeden řádek se chová přesně jako dřív.
+    cleaned_answers := '{}';
+    answer_values := regexp_split_to_array(new.correct_answer, E'\r?\n');
+    foreach answer_value in array answer_values loop
+      answer_value := btrim(answer_value);
+      continue when answer_value = '';
+      normalized_answer := lower(regexp_replace(answer_value, '\s+', ' ', 'g'));
+      selected_option := null;
+      if normalized_answer ~ '^\d+$' then
+        option_index := normalized_answer::integer;
+        if option_index < 1 or option_index > array_length(option_values, 1) then
+          raise exception 'Číslo správné možnosti není v seznamu možností.';
+        end if;
+        selected_option := option_values[option_index];
+      else
+        foreach option_value in array option_values loop
+          if lower(regexp_replace(option_value, '\s+', ' ', 'g')) = normalized_answer then
+            selected_option := option_value;
+            exit;
+          end if;
+        end loop;
       end if;
-      new.correct_answer := option_values[option_index];
-      return new;
-    end if;
-    foreach option_value in array option_values loop
-      if lower(regexp_replace(option_value, '\s+', ' ', 'g')) = normalized_answer then
-        selected_option := option_value;
-        exit;
+      if selected_option is null then
+        raise exception 'U typu Výběr z možností musí být každá správná odpověď přesný text možnosti nebo její pořadí. Víc správných možností napište každou na samostatný řádek.';
+      end if;
+      if not (selected_option = any(cleaned_answers)) then
+        cleaned_answers := array_append(cleaned_answers, selected_option);
       end if;
     end loop;
-    if selected_option is null then
-      raise exception 'U typu Výběr z možností musí být správná odpověď přesný text možnosti nebo její pořadí.';
-    end if;
-    new.correct_answer := selected_option;
+    new.correct_answer := array_to_string(cleaned_answers, E'\n');
     return new;
   end if;
 
@@ -296,6 +309,15 @@ create table public.cities (
 );
 comment on table public.cities is $txt$R37: města spravovaná v Mozku. Zdroj pravdy pro nabídku měst, jejich pořadí, skloňování a souřadnice.$txt$;
 
+create table public.mission_characters (
+  id uuid not null default gen_random_uuid(),
+  mission_id uuid not null,
+  name text not null,
+  image_url text,
+  created_at timestamp with time zone not null default now()
+);
+comment on table public.mission_characters is $txt$Postavy konkrétní hry (jméno + obrázek). Mluví v bublinách při příchodu na zastavení.$txt$;
+
 create table public.mission_stops (
   id uuid not null default gen_random_uuid(),
   mission_id uuid not null,
@@ -303,9 +325,13 @@ create table public.mission_stops (
   description text,
   image_url text,
   order integer not null default 1,
-  transition_text text not null default ''::text
+  transition_text text not null default ''::text,
+  bubble_character_id uuid,
+  bubble_text text
 );
 comment on column public.mission_stops.transition_text is $txt$R26: autorský text, který hráč uvidí po dokončení TÉTO zastávky, než vyrazí na další. Prázdný = obecný text.$txt$;
+comment on column public.mission_stops.bubble_character_id is $txt$Kdo mluví v bublině při příchodu na zastavení. Prázdné = bez bubliny.$txt$;
+comment on column public.mission_stops.bubble_text is $txt$Text bubliny při příchodu na zastavení.$txt$;
 
 create table public.mission_tasks (
   id uuid not null default gen_random_uuid(),
@@ -404,6 +430,9 @@ alter table public.child_task_progress add constraint child_task_progress_pkey P
 alter table public.child_task_progress add constraint child_task_progress_status_check CHECK ((status = ANY (ARRAY['correct'::text, 'wrong'::text, 'unknown'::text])));
 alter table public.cities add constraint cities_name_length CHECK (((char_length(btrim(name)) >= 2) AND (char_length(btrim(name)) <= 60)));
 alter table public.cities add constraint cities_pkey PRIMARY KEY (id);
+alter table public.mission_characters add constraint mission_characters_id_mission_key UNIQUE (id, mission_id);
+alter table public.mission_characters add constraint mission_characters_name_length CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 60)));
+alter table public.mission_characters add constraint mission_characters_pkey PRIMARY KEY (id);
 alter table public.mission_stops add constraint mission_stops_pkey PRIMARY KEY (id);
 alter table public.mission_tasks add constraint mission_tasks_min_correct_matches_check CHECK (((min_correct_matches IS NULL) OR (min_correct_matches > 0)));
 alter table public.mission_tasks add constraint mission_tasks_pkey PRIMARY KEY (id);
@@ -428,6 +457,8 @@ alter table public.child_location_progress add constraint child_location_progres
 alter table public.child_profiles add constraint child_profiles_parent_user_id_fkey FOREIGN KEY (parent_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.child_task_progress add constraint child_task_progress_child_profile_id_fkey FOREIGN KEY (child_profile_id) REFERENCES child_profiles(id) ON DELETE CASCADE;
 alter table public.child_task_progress add constraint child_task_progress_session_id_fkey FOREIGN KEY (session_id) REFERENCES child_game_sessions(id) ON DELETE SET NULL;
+alter table public.mission_characters add constraint mission_characters_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE;
+alter table public.mission_stops add constraint mission_stops_bubble_character_fk FOREIGN KEY (bubble_character_id, mission_id) REFERENCES mission_characters(id, mission_id) ON DELETE SET NULL (bubble_character_id);
 alter table public.mission_stops add constraint mission_stops_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE;
 alter table public.mission_tasks add constraint mission_tasks_stop_id_fkey FOREIGN KEY (stop_id) REFERENCES mission_stops(id) ON DELETE CASCADE;
 alter table public.missions add constraint missions_city_id_fkey FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL;
@@ -461,6 +492,7 @@ CREATE INDEX child_task_progress_session_idx ON public.child_task_progress USING
 CREATE UNIQUE INDEX cities_name_key ON public.cities USING btree (lower(btrim(name)));
 CREATE INDEX cities_order_idx ON public.cities USING btree (display_order, name);
 CREATE UNIQUE INDEX cities_slug_key ON public.cities USING btree (lower(btrim(slug)));
+CREATE INDEX mission_characters_mission_idx ON public.mission_characters USING btree (mission_id);
 CREATE INDEX idx_mission_stops_mission_id_order ON public.mission_stops USING btree (mission_id, "order");
 CREATE UNIQUE INDEX mission_stops_mission_order_key ON public.mission_stops USING btree (mission_id, "order");
 CREATE INDEX idx_mission_tasks_stop_id_order ON public.mission_tasks USING btree (stop_id, "order");
@@ -493,6 +525,7 @@ alter table public.child_location_progress enable row level security;
 alter table public.child_profiles enable row level security;
 alter table public.child_task_progress enable row level security;
 alter table public.cities enable row level security;
+alter table public.mission_characters enable row level security;
 alter table public.mission_stops enable row level security;
 alter table public.mission_tasks enable row level security;
 alter table public.missions enable row level security;

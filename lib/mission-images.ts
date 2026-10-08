@@ -132,6 +132,29 @@ export async function uploadMissionHeroImage({
   });
 }
 
+/** R51: obrázek postavy hry. */
+export async function uploadMissionCharacterImage({
+  supabase,
+  missionId,
+  characterId,
+  file
+}: {
+  supabase: SupabaseClient<any, any, any>;
+  missionId: string;
+  characterId: string;
+  file: File;
+}) {
+  const extension = fileExtensionForType(file.type, file.name);
+  const baseName = sanitizeFileName(file.name.replace(/\.[^.]+$/, ""));
+  const filePath = `missions/${missionId}/characters/${characterId}/${Date.now()}-${baseName}.${extension}`;
+
+  return uploadImageToMissionStorage({
+    supabase,
+    filePath,
+    file
+  });
+}
+
 export async function deleteMissionImageByPath(
   supabase: SupabaseClient<any, any, any>,
   path: string | null | undefined

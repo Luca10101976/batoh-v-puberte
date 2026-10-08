@@ -1095,6 +1095,27 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         ) : null}
       </section>
 
+      {/* R51: bublina postavy při příchodu na zastavení, nad úkoly. Jako u úvodu
+          zastávky se ukáže jen u prvního úkolu místa – hráč ji už četl. */}
+      {isFirstTaskOfEpisode && activeEpisode.bubble ? (
+        <section aria-label={`${activeEpisode.bubble.name} říká`} className="flex items-end gap-3 px-1">
+          {activeEpisode.bubble.image ? (
+            <img
+              src={activeEpisode.bubble.image}
+              alt={activeEpisode.bubble.name}
+              className="h-20 w-20 shrink-0 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
+            />
+          ) : null}
+          <div className="relative mb-4 min-w-0 flex-1 rounded-[22px] bg-white px-4 py-3 text-night shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
+            {activeEpisode.bubble.image ? (
+              <span aria-hidden="true" className="absolute -left-1.5 bottom-5 h-4 w-4 rotate-45 rounded-[3px] bg-white" />
+            ) : null}
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{activeEpisode.bubble.name}</p>
+            <p className="mt-1 whitespace-pre-line text-[15px] leading-6">{activeEpisode.bubble.text}</p>
+          </div>
+        </section>
+      ) : null}
+
       <section className="glass-card p-5">
         {/* R44: štítek typu úkolu („Výběr“, „Otázka“) hráči nic neříká. Typ zůstává
             interně, jen se nevypisuje. */}

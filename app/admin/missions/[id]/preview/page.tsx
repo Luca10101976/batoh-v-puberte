@@ -141,6 +141,19 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
 
           <p className="mt-3 text-sm font-semibold text-white/90">{episode.intro}</p>
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-mist">{episode.background}</p>
+          {/* R51: bublina při příchodu na zastavení. */}
+          {episode.bubble ? (
+            <div className="mt-3 flex items-end gap-3">
+              {episode.bubble.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={episode.bubble.image} alt={episode.bubble.name} className="h-14 w-14 shrink-0 object-contain" />
+              ) : null}
+              <div className="min-w-0 flex-1 rounded-2xl bg-white px-3 py-2 text-night">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{episode.bubble.name}</p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-6">{episode.bubble.text}</p>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4 space-y-3">
             {episode.tasks.length === 0 ? (

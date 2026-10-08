@@ -153,6 +153,11 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
   const title = normalizeText(formData.get("title"));
   const description = normalizeText(formData.get("description"));
   const transitionText = normalizeText(formData.get("transition_text"));
+  // R51: bublina při příchodu. Pole ve formuláři chybí jen u starší verze stránky –
+  // pak se bublina neukládá ani nemaže.
+  const hasBubbleFields = formData.has("bubble_character_id") || formData.has("bubble_text");
+  const bubbleCharacterId = normalizeText(formData.get("bubble_character_id"));
+  const bubbleText = normalizeText(formData.get("bubble_text"));
   const imageUrl = normalizeText(formData.get("image_url"));
   const existingImageUrl = normalizeText(formData.get("existing_image_url"));
   const imageFileValue = formData.get("image_file");
@@ -166,6 +171,12 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
   if (intent !== "delete_image") {
     if (!title) fieldErrors.title = "Název zastavení je povinný.";
     if (order === null) fieldErrors.order = "Pořadí musí být číslo.";
+    if (hasBubbleFields && bubbleText && !bubbleCharacterId) {
+      fieldErrors.bubble_character_id = "Vyber, kdo bublinu říká.";
+    }
+    if (hasBubbleFields && bubbleCharacterId && !bubbleText) {
+      fieldErrors.bubble_text = "Napiš text bubliny, nebo vyber „bez bubliny“.";
+    }
   }
 
   let imageFile: File | null = null;
@@ -222,7 +233,11 @@ export async function updateStopAction(_prevState: FormState, formData: FormData
           image_url: resolvedImageUrl,
           order: resolvedOrder,
           // R26: autorský text přechodu; prázdný znamená obecný text v aplikaci.
-          transition_text: transitionText
+          transition_text: transitionText,
+          // R51: bublina při příchodu. Postavu z jiné hry odmítne databáze (cizí klíč).
+          ...(hasBubbleFields
+            ? { bubble_character_id: bubbleCharacterId || null, bubble_text: bubbleCharacterId ? bubbleText : null }
+            : {})
         })
         .eq("id", stopId)
         .eq("mission_id", missionId);

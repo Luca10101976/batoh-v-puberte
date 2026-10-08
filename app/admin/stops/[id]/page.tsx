@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createTaskAction, deleteTaskAction, moveTaskAction, updateStopAction, updateTaskAction } from "@/app/admin/stops/actions";
 import { describeUsage } from "@/lib/mission-usage";
 import { getMissionUsage } from "@/lib/mission-usage-server";
-import type { MissionStopRow, MissionTaskRow } from "@/app/admin/types";
+import type { MissionCharacterRow, MissionStopRow, MissionTaskRow } from "@/app/admin/types";
 import { StopForm } from "@/components/admin/stop-form";
 import { TaskForm } from "@/components/admin/task-form";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -58,8 +58,12 @@ export default async function StopEditPage({
     }>;
 
   let { data: stop, error: stopError } = await stopQuery(
-    "id, mission_id, title, description, image_url, order, transition_text"
+    "id, mission_id, title, description, image_url, order, transition_text, bubble_character_id, bubble_text"
   );
+  // R51: prostředí bez migrace R51 bublinu nemá – formulář pak funguje jako dřív.
+  if (stopError && /bubble_/i.test(stopError.message ?? "")) {
+    ({ data: stop, error: stopError } = await stopQuery("id, mission_id, title, description, image_url, order, transition_text"));
+  }
   if (stopError?.message?.toLowerCase().includes("transition_text")) {
     ({ data: stop, error: stopError } = await stopQuery("id, mission_id, title, description, image_url, order"));
   }
@@ -73,6 +77,14 @@ export default async function StopEditPage({
       </main>
     );
   }
+
+  // R51: postavy této hry pro výběr „kdo mluví v bublině".
+  const { data: characterRows } = await supabase
+    .from("mission_characters")
+    .select("id, mission_id, name, image_url")
+    .eq("mission_id", stop.mission_id)
+    .order("created_at", { ascending: true });
+  const characters = (characterRows as MissionCharacterRow[] | null) ?? [];
 
   const { data: mission } = await supabase
     .from("missions")
@@ -163,7 +175,7 @@ export default async function StopEditPage({
         </section>
       ) : null}
 
-      <StopForm stop={stop} action={updateStopAction} />
+      <StopForm stop={stop} action={updateStopAction} characters={characters} />
 
       <section className="glass-card p-5">
         <h2 className="section-title">Úkoly</h2>

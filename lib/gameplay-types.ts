@@ -20,6 +20,13 @@ export type GameplayTask = {
   legacyTaskId?: string;
 };
 
+/** R51: replika postavy v bublině. */
+export type GameplayBubble = {
+  name: string;
+  image?: string;
+  text: string;
+};
+
 export type GameplayEpisode = {
   id: string;
   name: string;
@@ -27,6 +34,8 @@ export type GameplayEpisode = {
   background: string;
   /** R26: autorský text po dokončení téhle zastávky. Prázdný = obecný text. Není spoiler. */
   transitionText?: string;
+  /** R51: bublina při příchodu na zastavení – postava hry a její replika. */
+  bubble?: GameplayBubble;
   illustrationImage?: string;
   illustrationImageAlt?: string;
   tasks: GameplayTask[];

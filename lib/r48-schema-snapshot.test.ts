@@ -12,11 +12,11 @@ const verify = cti("scripts/verify-schema-drift.mjs");
 const pkg = JSON.parse(cti("package.json"));
 
 const TABULKY = ["child_friendships","child_game_session_players","child_game_sessions","child_location_progress","child_profiles",
-  "child_task_progress","cities","mission_stops","mission_tasks","missions","panbatoh_content","rate_limits"];
+  "child_task_progress","cities","mission_characters","mission_stops","mission_tasks","missions","panbatoh_content","rate_limits"];
 
-test("S1: snímek popisuje všech 12 produkčních tabulek", () => {
+test("S1: snímek popisuje všechny produkční tabulky (R51: 13)", () => {
   for (const t of TABULKY) assert.match(snimek, new RegExp(`^create table public\\.${t} \\(`, "m"), t);
-  assert.equal((snimek.match(/^create table public\./gm) ?? []).length, 12);
+  assert.equal((snimek.match(/^create table public\./gm) ?? []).length, TABULKY.length);
 });
 
 test("S2: snímek nese to, co migrace nepopisují (nález auditu 8. 10. 2026)", () => {

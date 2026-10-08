@@ -15,7 +15,11 @@ type MissionStopDbRow = {
   image_url: string | null;
   order: number;
   transition_text?: string | null;
+  bubble_character_id?: string | null;
+  bubble_text?: string | null;
 };
+
+type MissionCharacterDbRow = { id: string; name: string; image_url: string | null };
 
 type MissionTaskDbRow = {
   id: string;
@@ -400,7 +404,12 @@ function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): Gamepl
   };
 }
 
-function buildEpisodesFromDb(stops: MissionStopDbRow[], tasks: MissionTaskDbRow[]): GameplayEpisode[] {
+function buildEpisodesFromDb(
+  stops: MissionStopDbRow[],
+  tasks: MissionTaskDbRow[],
+  characters: MissionCharacterDbRow[] = []
+): GameplayEpisode[] {
+  const charactersById = new Map(characters.map((character) => [character.id, character]));
   const tasksByStopId = new Map<string, MissionTaskDbRow[]>();
   tasks.forEach((task) => {
     const current = tasksByStopId.get(task.stop_id) ?? [];
@@ -418,12 +427,23 @@ function buildEpisodesFromDb(stops: MissionStopDbRow[], tasks: MissionTaskDbRow[
       background: backgroundParts.join("\n\n"),
       illustrationImage: stop.image_url || undefined,
       transitionText: (stop.transition_text ?? "").trim() || undefined,
+      bubble: buildBubble(stop, charactersById),
       clue: [],
       tasks: (tasksByStopId.get(stop.id) ?? [])
         .sort((a, b) => a.order - b.order)
         .map((task) => buildTaskFromDb(stop, task))
     };
   });
+}
+
+/** R51: bublina se ukáže jen s postavou i textem – polovičatá se raději neukáže vůbec. */
+function buildBubble(stop: MissionStopDbRow, charactersById: Map<string, MissionCharacterDbRow>) {
+  const text = (stop.bubble_text ?? "").trim();
+  const character = stop.bubble_character_id ? charactersById.get(stop.bubble_character_id) : undefined;
+  if (!text || !character) {
+    return undefined;
+  }
+  return { name: character.name, image: (character.image_url ?? "").trim() || undefined, text };
 }
 
 export async function getGameplayEpisodes(
@@ -457,8 +477,14 @@ export async function getGameplayEpisodes(
     }>;
 
   let { data: stopsData, error: stopsError } = await stopQuery(
-    "id, mission_id, title, description, image_url, order, transition_text"
+    "id, mission_id, title, description, image_url, order, transition_text, bubble_character_id, bubble_text"
   );
+  // R51: prostředí bez migrace R51 bubliny nemá – hra jede dál bez nich.
+  if (stopsError && /bubble_/i.test(stopsError.message ?? "")) {
+    ({ data: stopsData, error: stopsError } = await stopQuery(
+      "id, mission_id, title, description, image_url, order, transition_text"
+    ));
+  }
   if (stopsError?.message?.toLowerCase().includes("transition_text")) {
     ({ data: stopsData, error: stopsError } = await stopQuery(
       "id, mission_id, title, description, image_url, order"
@@ -489,7 +515,17 @@ export async function getGameplayEpisodes(
 
   const normalizedTasks = (tasksData ?? []).map((task) => ({ ...task }));
 
-  return buildEpisodesFromDb((stopsData as MissionStopDbRow[]) ?? [], normalizedTasks);
+  // R51: postavy hry pro bubliny. Chybějící tabulka (bez migrace) = žádné bubliny.
+  const usesBubbles = (stopsData ?? []).some((stop) => stop.bubble_character_id);
+  const { data: charactersData } = usesBubbles
+    ? await supabase.from("mission_characters").select("id, name, image_url").eq("mission_id", mission.id)
+    : { data: [] as MissionCharacterDbRow[] };
+
+  return buildEpisodesFromDb(
+    (stopsData as MissionStopDbRow[]) ?? [],
+    normalizedTasks,
+    (charactersData as MissionCharacterDbRow[] | null) ?? []
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 export type MissionDifficulty = "lehka" | "stredni" | "tezka";
-export type MissionTaskType = "otevrena" | "vyber" | "ano-ne";
+export type MissionTaskType = "otevrena" | "vyber" | "ano-ne" | "serad";
 
 export type MissionRow = {
   id: string;
@@ -18,6 +18,7 @@ export type MissionRow = {
   short_description?: string | null;
   /** R44: vlastní lákací text detailu hry; prázdný = použije se krátký popis. */
   detail_text?: string | null;
+  print_url?: string | null;
   /** R44: kam má hráč fyzicky přijít, a souřadnice pro odkaz do mapy. */
   start_place_name?: string | null;
   start_lat?: number | null;

@@ -1,4 +1,4 @@
-export type GameplayTaskType = "question" | "photo" | "choice";
+export type GameplayTaskType = "question" | "photo" | "choice" | "order";
 
 export type GameplayTask = {
   id: string;
@@ -86,4 +86,6 @@ export type MapLocation = {
   startLng?: number | null;
   /** R44: vlastní lákací text detailu. Prázdný = použije se krátký popis z katalogu. */
   detailText?: string | null;
+  /** R47: odkaz na papírovou verzi u Šneldy. Prázdný = hra ji nemá. */
+  printUrl?: string | null;
 };

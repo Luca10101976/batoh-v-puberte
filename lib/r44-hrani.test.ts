@@ -144,7 +144,8 @@ test("prázdná odpověď je validace, ne serverová chyba", () => {
   assert.match(src, /setMessage\("Vyber nejdřív odpověď\."\)/);
   // kontrola musí předcházet odeslání na server
   const validace = src.indexOf('Napiš nejdřív odpověď');
-  const odeslani = src.indexOf('await submitTaskAnswer("answer", input)');
+  // R46: argument se jmenuje jinak podle typu úkolu, záměr testu je pořadí kroků
+  const odeslani = src.search(/await submitTaskAnswer\("answer",/);
   assert.ok(validace > 0 && odeslani > 0 && validace < odeslani, "prázdný vstup se na server neposílá");
   // skutečné serverové chyby si dál hlásí svoje
   assert.match(src, /Ověření odpovědi se nepodařilo/, "technická chyba má dál vlastní hlášku");

@@ -126,6 +126,21 @@ export function MissionForm({
         </label>
 
         <label className="mt-4 block space-y-2">
+          <span className="text-sm text-mist">Papírová verze u Šneldy</span>
+          <input
+            name="print_url"
+            type="url"
+            defaultValue={mission?.print_url ?? ""}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+            placeholder="https://snelda.cz/hra/klamovka"
+          />
+          <span className="block text-xs text-mist">
+            Když má hra papírovou verzi u Šneldy, detail pošle hráče sem. Bez vyplnění
+            si hráč stáhne tiskové PDF přímo z Trakiho.
+          </span>
+        </label>
+
+        <label className="mt-4 block space-y-2">
           <span className="text-sm text-mist">Závěr – titulek</span>
           <input
             name="ending_title"

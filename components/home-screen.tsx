@@ -229,13 +229,6 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
       <section className="glass-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <Image
-              src={illustrationSrc("mapa")}
-              alt=""
-              width={80}
-              height={80}
-              className="h-14 w-14 shrink-0 object-contain sm:h-20 sm:w-20"
-            />
             <div className="min-w-0">
               <h2 className="text-xl font-semibold">Hry v {cityLocative(state.city, cityLocatives)}</h2>
               <p className="mt-1 text-sm leading-6 text-mist">
@@ -338,6 +331,36 @@ export function HomeScreen({ publishedLocations }: { publishedLocations: HomeLoc
             })}
           </div>
         )}
+      </section>
+
+      {/* R47: Šnelda je původní papírová hra, Traki je její aplikace. Hráč na to
+          jinde v apce nenarazí, a přitom na papírovou verzi u Šneldy odkazujeme
+          z detailu hry – bez téhle věty by ten odkaz nedával smysl. */}
+      <section className="glass-card mt-6 p-5">
+        <div className="flex items-center gap-4">
+          <Image
+            src={illustrationSrc("blok")}
+            alt=""
+            width={56}
+            height={56}
+            className="h-12 w-12 shrink-0 object-contain"
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold text-white">Traki a Šnelda</h2>
+            <p className="mt-1 text-sm leading-6 text-mist">
+              Šnelda vymýšlí pátrací hry na papíře. Traki je její kamarádka a nosí je do
+              telefonu – stejná místa, stejné otázky, jen s body a nápovědami.
+            </p>
+            <a
+              href="https://snelda.cz"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex text-sm font-semibold text-lime"
+            >
+              Mrkni na Šneldu
+            </a>
+          </div>
+        </div>
       </section>
     </main>
   );

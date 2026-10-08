@@ -356,11 +356,14 @@ test("J3 – přejmenování města identifikátor nepřepíše", () => {
 });
 
 test("J4 – žádná migrace nepřepisuje existující identifikátory", () => {
-  const migrace = fs
-    .readdirSync(path.join(ROOT, "supabase/migrations"))
-    .map((f) => f.slice(0, 14))
-    .filter((razitko) => /^\d{14}$/.test(razitko) && razitko > "20260911200000");
-  assert.deepEqual(migrace, [], "R45 nemá žádnou migraci");
+  // Záměr: identifikátory existujících měst nikdo hromadně nepřepisuje.
+  // Hlídá se obsah migrací, ne jejich počet – nové migrace smí přibývat.
+  const migrace = fs.readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+  for (const soubor of migrace.filter((f) => f.slice(0, 14) > "20260911200000")) {
+    const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations", soubor), "utf8");
+    assert.doesNotMatch(sql, /update\s+(public\.)?cities/i, `${soubor} přepisuje města`);
+    assert.doesNotMatch(sql, /cities[\s\S]{0,40}set\s+slug/i, `${soubor} přepisuje slug měst`);
+  }
 });
 
 // ═══════════ K. Výběr z možností: validace čte odpověď stejně jako hra ═══════════

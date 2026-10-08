@@ -85,6 +85,9 @@ async function parseMission(formData: FormData) {
   // R44: místo srazu a vlastní text detailu. Obojí je nepovinné – hra bez nich
   // se chová přesně jako dosud.
   const detailText = normalizeText(formData.get("detail_text"));
+  // R47: odkaz na papírovou verzi u Šneldy. Nepovinný – bez něj nabídne detail
+  // vlastní tiskové PDF jako dosud.
+  const printUrl = normalizeText(formData.get("print_url"));
   const startPlaceName = normalizeText(formData.get("start_place_name"));
   const startLat = parseCoordinate(normalizeText(formData.get("start_lat")), 90);
   const startLng = parseCoordinate(normalizeText(formData.get("start_lng")));
@@ -138,6 +141,7 @@ async function parseMission(formData: FormData) {
       ending_text: endingText,
       ending_player_message: endingPlayerMessage,
       detail_text: detailText,
+      print_url: printUrl,
       start_place_name: startPlaceName,
       start_lat: startLat === "invalid" ? null : startLat,
       start_lng: startLng === "invalid" ? null : startLng

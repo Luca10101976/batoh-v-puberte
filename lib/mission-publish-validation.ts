@@ -136,6 +136,36 @@ export function findPublishBlockers(stops: PublishStopInput[]): PublishIssue[] {
         });
       }
 
+      // R46: u seřazení musí být aspoň dvě položky a správné pořadí musí být
+      // jejich přesná permutace. Posuzuje to tatáž kanonická funkce jako hraní.
+      if (task.type === "serad") {
+        const options = parseOptions(task.options);
+        if (options.length < 2) {
+          issues.push({
+            code: "choice_without_options",
+            message: `${where}: seřazení potřebuje aspoň dvě položky.`,
+            stopTitle: stop.title,
+            taskOrder: task.taskOrder
+          });
+        } else if (task.correctAnswer.trim()) {
+          const canonical = getCanonicalCorrectAnswer({
+            id: task.id,
+            type: "serad",
+            question: task.question,
+            correct_answer: task.correctAnswer,
+            options: task.options
+          });
+          if (!canonical) {
+            issues.push({
+              code: "choice_answer_not_in_options",
+              message: `${where}: správné pořadí neodpovídá nabízeným položkám. Musí obsahovat všechny, každou právě jednou.`,
+              stopTitle: stop.title,
+              taskOrder: task.taskOrder
+            });
+          }
+        }
+      }
+
       if (task.type === "vyber" || task.type === "ano-ne") {
         const options = parseOptions(task.options);
         if (options.length < 2) {
@@ -154,7 +184,7 @@ export function findPublishBlockers(stops: PublishStopInput[]): PublishIssue[] {
           // herní logika – aby validace a hraní nemohly říkat něco jiného.
           const canonical = getCanonicalCorrectAnswer({
             id: task.id,
-            type: task.type as "otevrena" | "vyber" | "ano-ne",
+            type: task.type as "otevrena" | "vyber" | "ano-ne" | "serad",
             question: task.question,
             correct_answer: task.correctAnswer,
             options: task.options

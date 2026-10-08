@@ -20,7 +20,7 @@ type MissionStopDbRow = {
 type MissionTaskDbRow = {
   id: string;
   stop_id: string;
-  type: "otevrena" | "vyber" | "ano-ne";
+  type: "otevrena" | "vyber" | "ano-ne" | "serad";
   question: string;
   correct_answer: string;
   options: unknown;
@@ -43,6 +43,7 @@ type MissionDbRow = {
   start_lat?: number | null;
   start_lng?: number | null;
   detail_text?: string | null;
+  print_url?: string | null;
   catalog_order?: number | null;
   unlock_after_mission_id?: string | null;
   ending_title?: string | null;
@@ -58,6 +59,8 @@ type DbBackedLocationSeed = {
   shortDescription?: string;
   /** R44: vlastní text detailu a místo startu hry. */
   detailText?: string | null;
+  /** R47: odkaz na papírovou verzi u Šneldy. */
+  printUrl?: string | null;
   startPlaceName?: string | null;
   startLat?: number | null;
   startLng?: number | null;
@@ -131,6 +134,10 @@ function mapTaskType(type: MissionTaskDbRow["type"]): GameplayTask["type"] {
   if (type === "vyber" || type === "ano-ne") {
     return "choice";
   }
+  // R46: seřazení položek. Hráč nepíše ani nevybírá, mění pořadí.
+  if (type === "serad") {
+    return "order";
+  }
   return "question";
 }
 
@@ -140,6 +147,9 @@ function mapTaskTypeLabel(type: MissionTaskDbRow["type"]) {
   }
   if (type === "ano-ne") {
     return "Ano / ne";
+  }
+  if (type === "serad") {
+    return "Seřaď";
   }
   return "Otázka";
 }
@@ -233,6 +243,9 @@ function buildDbBackedLocationSeed(
     // R44: detail hry má vlastní lákací vrstvu. Dokud ji autor nevyplní, chová se
     // detail přesně jako dosud a ukáže krátký popis z katalogu.
     detailText: (mission.detail_text ?? "").trim() || null,
+    // R47: papírová verze je Šneldina. Prázdné = hra ji nemá a detail nabídne
+    // vlastní tiskové PDF jako dosud.
+    printUrl: (mission.print_url ?? "").trim() || null,
     // R44: místo srazu je vlastnost hry. Souřadnice města zůstávají jen pro
     // zpětnou kompatibilitu pole lat/lng níž.
     startPlaceName: (mission.start_place_name ?? "").trim() || null,
@@ -286,7 +299,7 @@ async function fetchPublishedMissionById(
     supabase
       .from("missions")
       .select(
-        "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published, ending_title, ending_text, ending_player_message, start_place_name, start_lat, start_lng, detail_text"
+        "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published, ending_title, ending_text, ending_player_message, start_place_name, start_lat, start_lng, detail_text, print_url"
       )
       .eq("id", missionId)
   ).maybeSingle<MissionDbRow>();
@@ -483,7 +496,7 @@ export async function getGameplayEpisodes(
 // ---------------------------------------------------------------------------
 
 const CATALOG_COLUMNS =
-  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, catalog_order, is_published, unlock_after_mission_id, start_place_name, start_lat, start_lng, detail_text";
+  "id, title, city, intro_text, hero_image_url, short_description, difficulty, duration_min, catalog_order, is_published, unlock_after_mission_id, start_place_name, start_lat, start_lng, detail_text, print_url";
 const CATALOG_COLUMNS_LEGACY = "id, title, city, intro_text, hero_image_url, difficulty, duration_min, is_published";
 
 /** Historický slug hry podle UUID mise (stabilní mapa); jinak UUID mise. */
@@ -533,7 +546,7 @@ export async function getCatalog(): Promise<CatalogEntry[]> {
     return [];
   }
   let { data, error } = await supabase.from("missions").select(CATALOG_COLUMNS);
-  if (error && /short_description|catalog_order|unlock_after_mission_id|start_place_name|start_lat|start_lng|detail_text/i.test(error.message ?? "")) {
+  if (error && /short_description|catalog_order|unlock_after_mission_id|start_place_name|start_lat|start_lng|detail_text|print_url/i.test(error.message ?? "")) {
     ({ data, error } = await supabase.from("missions").select(CATALOG_COLUMNS_LEGACY));
   }
   if (error || !data) {

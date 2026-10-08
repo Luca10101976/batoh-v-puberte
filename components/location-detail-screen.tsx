@@ -23,12 +23,21 @@ function isExternalImage(src: string) {
   return /^https?:\/\//i.test(src);
 }
 
+// R47: odkaz ven pouštíme jen jako http(s). Cokoli jiného (prázdno, překlep,
+// javascript:) bereme, jako by papírová verze nebyla – radši bezpečné selhání
+// než odkaz, který hráče zavede nikam.
+function externalLinkOrNull(value: string | null | undefined) {
+  const url = String(value ?? "").trim();
+  return /^https?:\/\//i.test(url) ? url : null;
+}
+
 export function LocationDetailScreen({ location }: { location: DetailLocation }) {
   const { state, isLocationUnlocked, setActiveMode, activeRuns, startRun } = useAppState();
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const hasActiveRun = activeRuns.some((run) => run.locationId === location.id);
   const completed = state.completedLocationIds.includes(location.id);
+  const printUrl = externalLinkOrNull(location.printUrl);
   const unlocked = isLocationUnlocked(location.id, location.unlocked, location.unlockedByPlaceId ?? null);
   const model = buildLocationDetailModel({
     name: location.name,
@@ -167,14 +176,20 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
             />
             <span className="min-w-0 flex-1">
               <span className="block text-base font-semibold text-white">Chceš hrát s papírem?</span>
-              <span className="mt-1 block text-sm leading-6 text-mist">Stáhni si tiskovou verzi hry.</span>
+              <span className="mt-1 block text-sm leading-6 text-mist">
+                {printUrl ? "Papírovou verzi vydává Šnelda." : "Stáhni si tiskovou verzi hry."}
+              </span>
             </span>
-            <span className="shrink-0 text-sm font-semibold text-lime group-open:hidden">Tisková verze</span>
+            <span className="shrink-0 text-sm font-semibold text-lime group-open:hidden">
+              {printUrl ? "Papírová verze" : "Tisková verze"}
+            </span>
             <span className="hidden shrink-0 text-sm font-semibold text-mist group-open:block">Skrýt</span>
           </summary>
 
           <p className="mt-4 text-sm leading-6 text-mist">
-            Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon.
+            {printUrl
+              ? "Tahle hra vznikla nejdřív na papíře u Šneldy. Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon."
+              : "Sešit má stejné otázky jako hra, takže se hodí, když nechceš mít venku v ruce telefon."}
           </p>
           <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-white/90 marker:font-semibold marker:text-white">
             <li>
@@ -189,12 +204,26 @@ export function LocationDetailScreen({ location }: { location: DetailLocation })
               příběhu pak fungují úplně stejně jako při hraní v aplikaci.
             </li>
           </ol>
-          <a
-            href={`/api/export/game-content?format=pdf&locationId=${location.id}`}
-            className="mt-4 inline-flex rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
-          >
-            Stáhnout tiskové PDF
-          </a>
+          {/* R47: papírová verze je Šneldina. Když ji hra u Šneldy má, vede odkaz
+              tam – Traki ji nerozdává zdarma vedle. Hry bez papírové verze si
+              dál stáhnou vlastní tiskové PDF jako dosud. */}
+          {printUrl ? (
+            <a
+              href={printUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
+            >
+              Papírová verze na snelda.cz
+            </a>
+          ) : (
+            <a
+              href={`/api/export/game-content?format=pdf&locationId=${location.id}`}
+              className="mt-4 inline-flex rounded-[20px] border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white"
+            >
+              Stáhnout tiskové PDF
+            </a>
+          )}
         </details>
       </section>
     </main>

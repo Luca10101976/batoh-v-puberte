@@ -130,10 +130,12 @@ test("7 – nic jiného v tabulce se nedotklo: PK, čtení podle kódu a legacy 
   const src = ROUTE();
   assert.match(src, /insertInProgressError\?\.code === "42703"/, "legacy větev bez sloupců zůstává");
   assert.match(src, /updateInProgressError\?\.code === "42703"/);
-  // poslední známá migrace je R44 (20260911200000); porovnává se jen časové razítko, ne přípona
-  const migrace = fs
-    .readdirSync(path.join(ROOT, "supabase/migrations"))
-    .map((f) => f.slice(0, 14))
-    .filter((razitko) => /^\d{14}$/.test(razitko) && razitko > "20260911200000");
-  assert.deepEqual(migrace, [], "oprava nemá žádnou novou migraci");
+  // Záměr: oprava kaskády se obešla bez zásahu do schématu. Hlídá se tedy, že
+  // žádná migrace nesahá na child_location_progress, ne to, že migrace nepřibyla.
+  const migrace = fs.readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+  const pozdejsi = migrace.filter((f) => f.slice(0, 14) > "20260911200000");
+  for (const soubor of pozdejsi) {
+    const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations", soubor), "utf8");
+    assert.doesNotMatch(sql, /child_location_progress/, `${soubor} sahá na child_location_progress`);
+  }
 });

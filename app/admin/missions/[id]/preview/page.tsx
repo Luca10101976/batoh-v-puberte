@@ -41,8 +41,12 @@ function TaskCard({
       ) : null}
 
       <div className="mt-3 rounded-xl border border-lime/20 bg-lime/5 px-3 py-2 text-sm text-lime">
-        <strong>Uznávané odpovědi:</strong>{" "}
-        {task.correctAnswers.length > 0 ? task.correctAnswers.join(" | ") : "zatím žádné"}
+        <strong>{task.typeLabel === "Seřaď" ? "Správné pořadí:" : "Uznávané odpovědi:"}</strong>{" "}
+        {task.correctAnswers.length > 0
+          ? task.typeLabel === "Seřaď"
+            ? task.correctAnswers[0].split("\n").join(" → ")
+            : task.correctAnswers.join(" | ")
+          : "zatím žádné"}
         {task.minCorrectMatches ? ` • stačí ${task.minCorrectMatches}` : ""}
       </div>
 

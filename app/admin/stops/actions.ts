@@ -51,7 +51,7 @@ function parseNonNegativeInt(value: string) {
   return Math.max(0, Math.floor(parsed));
 }
 
-const TASK_TYPES = new Set<MissionTaskType>(["otevrena", "vyber", "ano-ne"]);
+const TASK_TYPES = new Set<MissionTaskType>(["otevrena", "vyber", "ano-ne", "serad"]);
 
 function parseTaskOptions(value: string) {
   return value

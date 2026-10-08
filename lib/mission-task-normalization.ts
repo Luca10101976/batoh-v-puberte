@@ -1,4 +1,4 @@
-type MissionTaskType = "otevrena" | "vyber" | "ano-ne";
+type MissionTaskType = "otevrena" | "vyber" | "ano-ne" | "serad";
 
 export type MissionTaskAnswerRow = {
   id: string;
@@ -81,6 +81,14 @@ function parseTaskOptions(type: MissionTaskType, options: unknown) {
   return [];
 }
 
+/** R46: položky správného pořadí. Čárka se záměrně nedělí – bývá uvnitř textu položky. */
+export function splitOrderedAnswers(value: string | null | undefined) {
+  return String(value ?? "")
+    .split(/\n|[|;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function getCanonicalCorrectAnswer(row: MissionTaskAnswerRow): string | null {
   const current = String(row.correct_answer ?? "").trim();
   if (!current) {
@@ -110,6 +118,29 @@ export function getCanonicalCorrectAnswer(row: MissionTaskAnswerRow): string | n
 
   const options = parseTaskOptions(row.type, row.options);
   const normalizedCurrent = normalizeForCompare(current);
+
+  // R46: u seřazení je správná odpověď celé pořadí – přesná permutace nabídky.
+  // Vrací se položky přesně tak, jak jsou napsané v nabídce, jedna na řádek.
+  if (row.type === "serad") {
+    if (options.length < 2) {
+      return null;
+    }
+    const wanted = splitOrderedAnswers(current);
+    if (wanted.length !== options.length) {
+      return null;
+    }
+    const zbyva = options.map((option) => ({ text: option, key: normalizeForCompare(option) }));
+    const serazeno: string[] = [];
+    for (const item of wanted) {
+      const index = zbyva.findIndex((candidate) => candidate.key === normalizeForCompare(item));
+      if (index < 0) {
+        return null;
+      }
+      serazeno.push(zbyva[index].text);
+      zbyva.splice(index, 1);
+    }
+    return serazeno.join("\n");
+  }
 
   if (row.type === "ano-ne") {
     if (normalizedCurrent === "ano") {

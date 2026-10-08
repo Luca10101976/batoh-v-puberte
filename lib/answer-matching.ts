@@ -16,6 +16,14 @@ export type AnswerRule = {
   minCorrectMatches?: number;
 };
 
+/** R46: položky pořadí. Čárka nedělí – může být uvnitř názvu položky. */
+export function splitOrderedLines(value: string) {
+  return String(value ?? "")
+    .split(/\n|[|;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function normalizeAnswer(value: string) {
   return value
     .toLowerCase()
@@ -61,6 +69,17 @@ export function isTaskAnswerCorrect(task: AnswerRule | null | undefined, answer:
     const uniqueWords = Array.from(new Set(splitToNormalizedWords(answer)));
     const matchedWords = uniqueWords.filter((word) => acceptedSet.has(word));
     return matchedWords.length >= minimumMatches;
+  }
+
+  // R46: u seřazení se neporovnává text jako celek, ale posloupnost položek.
+  // Hráč posílá své pořadí po řádcích; musí sedět položka po položce.
+  if (task?.type === "order") {
+    const spravne = splitOrderedLines(acceptedAnswers[0] ?? "");
+    const hracovo = splitOrderedLines(answer);
+    if (spravne.length === 0 || spravne.length !== hracovo.length) {
+      return false;
+    }
+    return spravne.every((item, index) => normalizeAnswer(item) === normalizeAnswer(hracovo[index]));
   }
 
   const normalizedInput = normalizeAnswer(answer);

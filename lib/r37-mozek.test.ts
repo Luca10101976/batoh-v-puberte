@@ -437,7 +437,7 @@ test("H1 – katalogová pole se spravují v Mozku", () => {
 
 test("H2 – fotoúkol se do Mozku nepřidal", () => {
   const stopsActions = read("app/admin/stops/actions.ts");
-  assert.match(stopsActions, /new Set<MissionTaskType>\(\["otevrena", "vyber", "ano-ne"\]\)/);
+  assert.match(stopsActions, /new Set<MissionTaskType>\(\[[^\]]*"otevrena"[^\]]*"vyber"[^\]]*"ano-ne"[^\]]*\]\)/);
   assert.ok(!/"photo"/.test(stopsActions));
   const types = read("app/admin/types.ts");
   assert.ok(!/photo/.test(types), "typ photo se dostal do administračních typů");

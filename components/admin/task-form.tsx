@@ -17,7 +17,8 @@ type TaskFormProps = {
 const TASK_TYPE_OPTIONS: Array<{ value: MissionTaskType; label: string }> = [
   { value: "otevrena", label: "Otevřená odpověď" },
   { value: "vyber", label: "Výběr z možností" },
-  { value: "ano-ne", label: "Ano / ne" }
+  { value: "ano-ne", label: "Ano / ne" },
+  { value: "serad", label: "Seřaď podle pořadí" }
 ];
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
@@ -190,6 +191,21 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
             </p>
           </div>
 
+          <div>
+            <p className="font-semibold text-white">Seřaď podle pořadí</p>
+            <p className="text-mist">
+              Do „Možnosti pro výběr“ napište položky tak, jak je hráč uvidí na začátku – jednu na řádek.
+              Do „Správná odpověď“ napište tytéž položky ve správném pořadí, taky jednu na řádek. Musí
+              tam být všechny a každá právě jednou.
+            </p>
+            <p className="mt-1 text-mist">
+              Příklad: možnosti <span className="font-mono text-white">Tělocvična / Tančírna / Zámeček</span>,
+              správná odpověď <span className="font-mono text-white">Zámeček / Tančírna / Tělocvična</span>.
+            </p>
+            <p className="mt-1 text-mist">
+              Hráč položky posouvá šipkami. Body dostane, jen když sedí celé pořadí.
+            </p>
+          </div>
           <div>
             <p className="font-semibold text-white">Ano / ne</p>
             <p className="text-mist">

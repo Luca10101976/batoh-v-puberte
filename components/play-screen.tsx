@@ -585,7 +585,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
 
     // R44: prázdný vstup je věc formuláře, ne serveru. Dřív se odeslal a hráč
     // dostal obecnou technickou hlášku, ze které nepoznal, co má udělat.
-    if (activeTask.type !== "choice" && !input.trim()) {
+    if (activeTask.type !== "choice" && activeTask.type !== "order" && !input.trim()) {
       setStatus("wrong");
       setMessage("Napiš nejdřív odpověď.");
       return;
@@ -597,7 +597,11 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     }
 
     setSubmittingAnswer(true);
-    const result = await submitTaskAnswer("answer", input);
+    // R46: u řazení se posílá celé pořadí po řádcích. Když s ním hráč nehnul,
+    // platí to, které vidí na obrazovce – ne prázdná hodnota.
+    const odesilanaOdpoved =
+      activeTask.type === "order" && !input.trim() ? (activeTask.options ?? []).join("\n") : input;
+    const result = await submitTaskAnswer("answer", odesilanaOdpoved);
     setSubmittingAnswer(false);
     if (!result) {
       return;
@@ -1140,6 +1144,71 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 );
               })}
             </div>
+          ) : activeTask.type === "order" ? (
+            /* R46: hráč nepíše ani nevybírá – mění pořadí položek šipkami.
+               Tažení by na telefonu v terénu bylo křehké, šipky fungují všude
+               a jdou i z klávesnice. Šipky jsou nad sebou, ať se řádek vejde
+               i na úzký displej. */
+            (() => {
+              const poradi = input.trim() ? input.split("\n") : (activeTask.options ?? []);
+              const posun = (index: number, smer: -1 | 1) => {
+                const cil = index + smer;
+                if (cil < 0 || cil >= poradi.length) {
+                  return;
+                }
+                const nove = [...poradi];
+                [nove[index], nove[cil]] = [nove[cil], nove[index]];
+                setInput(nove.join("\n"));
+              };
+              const sipka = "flex h-7 w-9 items-center justify-center rounded-lg border border-white/10 bg-night/50 text-sm font-bold text-white transition-colors hover:border-white/25 hover:bg-night/80 disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:bg-night/50";
+              return (
+                <div className="space-y-3">
+                  <p className="text-xs leading-5 text-mist">
+                    Seřaď položky šipkami. Body jsou za celé správné pořadí.
+                  </p>
+                  <ol className="space-y-2">
+                    {poradi.map((polozka, index) => (
+                      <li
+                        key={polozka}
+                        className={`flex items-stretch gap-3 rounded-[20px] border bg-white/5 p-2 pl-3 ${
+                          verificationFinished ? "border-white/5 opacity-70" : "border-white/10"
+                        }`}
+                      >
+                        <span
+                          aria-hidden
+                          className="flex w-8 shrink-0 items-center justify-center rounded-xl bg-lime/15 text-sm font-bold tabular-nums text-lime"
+                        >
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 self-center break-words py-1 text-sm font-medium leading-6 text-white">
+                          {polozka}
+                        </span>
+                        <span className="flex shrink-0 flex-col justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => posun(index, -1)}
+                            disabled={index === 0 || verificationFinished}
+                            aria-label={`Posunout ${polozka} nahoru`}
+                            className={sipka}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => posun(index, 1)}
+                            disabled={index === poradi.length - 1 || verificationFinished}
+                            aria-label={`Posunout ${polozka} dolů`}
+                            className={sipka}
+                          >
+                            ↓
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              );
+            })()
           ) : activeTask.type === "photo" ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-mist">
               Tohle je úkol na místě. Splň ho a klikni na potvrzení.

@@ -169,11 +169,18 @@ export default async function MissionDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* R54: projít hru tak, jak ji uvidí hráč – bez hráče, bez bodů. */}
+            <Link
+              href={`/mozek/missions/${mission.id}/hrat`}
+              className="rounded-xl bg-sky px-3 py-2 text-sm font-semibold text-night"
+            >
+              ▶ Projít jako hráč
+            </Link>
             <Link
               href={`/mozek/missions/${mission.id}/preview`}
               className="rounded-xl border border-sky/30 bg-sky/10 px-3 py-2 text-sm font-semibold text-sky"
             >
-              Náhled hry
+              Přehled obsahu
             </Link>
             {/* R45: kontrola pouští stejná pravidla jako publikace, ale nic nezveřejní. */}
             <form action={checkMissionAction}>

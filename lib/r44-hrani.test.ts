@@ -14,46 +14,49 @@ const bezKomentaru = (src: string) =>
   src.replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/[^\n]*$/gm, "");
 
 const PLAY = () => bezKomentaru(read("components/play-screen.tsx"));
+// R54: kreslicí kusy hry žijí ve sdílených komponentách (hra i průchod v Mozku).
+const UI = () => bezKomentaru(read("components/game/game-ui.tsx"));
 
 // --- 1–3: kontext zastávky ---------------------------------------------------
 
 test("kontext zastávky se váže na příchod na zastávku, ne na každý úkol", () => {
   const src = PLAY();
   assert.match(src, /const isFirstTaskOfEpisode = taskIndex === 0;/, "musí existovat rozlišení prvního úkolu zastávky");
-  assert.match(src, /\{isFirstTaskOfEpisode \? \(/, "uvedení místa se ukazuje jen při příchodu");
-  // uvedení, historie i fotka jsou uvnitř té podmínky
-  const zacatek = src.indexOf("{isFirstTaskOfEpisode ? (");
-  const konec = src.indexOf("</section>", zacatek);
-  const blok = src.slice(zacatek, konec);
-  assert.match(blok, /activeEpisode\.intro/, "uvedení zastávky patří do bloku příchodu");
+  assert.match(src, /<StopArrival locationName=\{location\.name\} stop=\{activeEpisode\} showContext=\{isFirstTaskOfEpisode\} \/>/, "uvedení místa se ukazuje jen při příchodu");
+  // uvedení, historie i fotka jsou uvnitř podmínky showContext ve sdílené komponentě
+  const ui = UI();
+  const zacatek = ui.indexOf("{showContext ? (");
+  const konec = ui.indexOf("</section>", zacatek);
+  const blok = ui.slice(zacatek, konec);
+  assert.match(blok, /stop\.intro/, "uvedení zastávky patří do bloku příchodu");
   assert.match(blok, /Trocha nudné historie/, "historie patří do bloku příchodu");
-  assert.match(blok, /activeEpisode\.illustrationImage/, "fotka patří do bloku příchodu");
+  assert.match(blok, /stop\.illustrationImage/, "fotka patří do bloku příchodu");
 });
 
 test("TROCHA NUDNÉ HISTORIE zůstává a nesbaluje se", () => {
-  const src = PLAY();
+  const src = UI();
   assert.match(src, /Trocha nudné historie/, "nadpis historie musí zůstat");
-  assert.match(src, /activeEpisode\.background/, "obsah historie z Mozku se dál zobrazuje");
+  assert.match(src, /stop\.background/, "obsah historie z Mozku se dál zobrazuje");
   const zacatek = src.indexOf("Trocha nudné historie");
   const okoli = src.slice(Math.max(0, zacatek - 600), zacatek);
   assert.ok(!/<details/.test(okoli), "historie se nesmí automaticky sbalit");
 });
 
 test("název zastávky není na obrazovce vícekrát a zmizely nálepkové nadpisy", () => {
-  const src = PLAY();
+  const src = PLAY() + UI();
   for (const zakazane of ["Aktuální zastavení", "O tomhle zastavení", "Jsi na správném místě ve hře"]) {
     assert.ok(!src.includes(zakazane), `„${zakazane}“ se už nezobrazuje`);
   }
   // alt popisky fotky název obsahovat smí – ty hráč nevidí, slouží čtečkám
   const bezAltu = src.replace(/alt=\{[^}]*\}/g, "");
-  const vyskyty = (bezAltu.match(/\{activeEpisode\.name\}/g) ?? []).length;
+  const vyskyty = (bezAltu.match(/\{(activeEpisode|stop)\.name\}/g) ?? []).length;
   assert.equal(vyskyty, 1, `název zastávky se vypisuje jednou, nalezeno ${vyskyty}×`);
 });
 
 // --- 4: fotografie -----------------------------------------------------------
 
 test("fotka zastávky je na mobilu menší", () => {
-  const src = PLAY();
+  const src = UI();
   assert.match(src, /max-w-\[120px\][^"]*sm:max-w-\[160px\]/, "na mobilu má fotka menší strop než dřív (168/220)");
   assert.ok(!/max-w-\[168px\]/.test(src), "původní mobilní rozměr fotky zastávky je pryč");
 });
@@ -154,12 +157,12 @@ test("prázdná odpověď je validace, ne serverová chyba", () => {
 // --- 13–14: přechod mezi zastávkami -----------------------------------------
 
 test("přechod mezi zastávkami je zjednodušený", () => {
-  const src = PLAY();
+  const src = PLAY() + UI();
   assert.match(src, /Zastávka hotová/);
   assert.match(src, /Pokračuješ na/);
   assert.ok(!/text-mist">Dokončeno</.test(src), "nadpis Dokončeno je pryč");
   assert.ok(!/pendingTransition\.fromStopName/.test(src), "název právě dokončené zastávky se neopakuje");
-  assert.match(src, /\{transitionText \? \(/, "autorský text se ukáže, jen když existuje");
+  assert.match(src, /\{text \? \(/, "autorský text se ukáže, jen když existuje");
 });
 
 test("před posledním úkolem zastávky se nic nehlásí dopředu", () => {

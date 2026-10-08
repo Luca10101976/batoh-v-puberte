@@ -101,7 +101,7 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Breadcrumbs items={[{ label: "Hry", href: "/mozek" }, { label: preview.title, href: `/mozek/missions/${preview.id}` }, { label: "Náhled" }]} />
+            <Breadcrumbs items={[{ label: "Hry", href: "/mozek" }, { label: preview.title, href: `/mozek/missions/${preview.id}` }, { label: "Přehled obsahu" }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{preview.title}</h1>
             <p className="mt-2 text-sm text-mist">
               {preview.isPublished ? "Publikováno" : "Koncept"} • {preview.episodes.length} zastavení • {taskCount} úkolů

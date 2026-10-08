@@ -207,9 +207,12 @@ test("B9 – zastávka bez autorského textu dostane obecný", () => {
   // R44: přechodová obrazovka už chybějící autorský text ničím nenahrazuje.
   // Hráč vidí „Pokračuješ na <zastávka>“ a text z Mozku jen tehdy, když existuje –
   // prázdný text tak zůstane poznat a nezamaskuje ho obecná věta.
+  // R54: přechod kreslí sdílená komponenta StopTransitionCard (hra i průchod v Mozku).
   const play = read("components/play-screen.tsx");
-  assert.ok(!/fallbackTransitionText\(/.test(play), "náhradní věta se v průchodu hrou nepoužívá");
-  assert.match(play, /transitionText \? \(/, "autorský text se zobrazí, jen když je vyplněný");
+  const ui = read("components/game/game-ui.tsx");
+  assert.ok(!/fallbackTransitionText\(/.test(play + ui), "náhradní věta se v průchodu hrou nepoužívá");
+  assert.match(ui, /const text = transitionText\?\.trim\(\) \|\| "";/);
+  assert.match(ui, /\{text \? \(/, "autorský text se zobrazí, jen když je vyplněný");
 });
 
 test("B10 – potvrdit jde jen přechod ze skutečně dokončené zastávky", () => {

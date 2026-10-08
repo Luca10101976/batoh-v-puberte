@@ -21,6 +21,7 @@ import type { PublicGameplayEpisode, PublicGameplayTask } from "@/lib/gameplay-t
 import { POINTS_PER_TASK, POINTS_PER_TASK_WITH_HINT, formatRemainingAttempts, getLocationMaxScore } from "@/lib/game-rules";
 import { fetchWithSessionRecovery } from "@/lib/session-recovery";
 import { illustrationSrc, type IllustrationName } from "@/lib/illustrations";
+import { Bubliny, EndingStory, GameIntroCard, StopArrival, StopTransitionCard, TaskPrompt, isExternalImage } from "@/components/game/game-ui";
 
 type TaskStatus = "idle" | "correct" | "manual" | "unknown" | "wrong";
 const SELF_MEMBER_ID = "self";
@@ -31,45 +32,9 @@ type PlayLocation = Omit<MapLocation, "episodes" | "endingTitle" | "endingStory"
   episodes: PublicGameplayEpisode[];
 };
 
-function isExternalImage(src: string) {
-  return /^https?:\/\//i.test(src);
-}
 
 function isManualTask(task: PublicGameplayTask) {
   return task.type === "photo";
-}
-
-/**
- * R51/R52: komiksové bubliny postav. Mluvčí s obrázkem má ocásek k figurce;
- * bez obrázku se ukáže jen jméno. Prázdný seznam nevykreslí nic.
- */
-function Bubliny({ bubliny }: { bubliny?: GameplayBubble[] }) {
-  if (!bubliny || bubliny.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex flex-col gap-3">
-      {bubliny.map((bublina, index) => (
-        <section key={`${bublina.name}-${index}`} aria-label={`${bublina.name} říká`} className="flex items-end gap-3 px-1">
-          {bublina.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={bublina.image}
-              alt={bublina.name}
-              className="h-20 w-20 shrink-0 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
-            />
-          ) : null}
-          <div className="relative mb-4 min-w-0 flex-1 rounded-[22px] bg-white px-4 py-3 text-night shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
-            {bublina.image ? (
-              <span aria-hidden="true" className="absolute -left-1.5 bottom-5 h-4 w-4 rotate-45 rounded-[3px] bg-white" />
-            ) : null}
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{bublina.name}</p>
-            <p className="mt-1 whitespace-pre-line text-[15px] leading-6">{bublina.text}</p>
-          </div>
-        </section>
-      ))}
-    </div>
-  );
 }
 
 export function PlayScreen({ location }: { location: PlayLocation }) {
@@ -851,33 +816,20 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   if (introOpen) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
-        <section className="glass-card overflow-hidden p-0">
-          <div className="relative h-56 w-full">
-            {isExternalImage(location.image) ? (
-              <img src={location.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <Image src={location.image} alt="" fill priority className="object-cover" sizes="100vw" />
-            )}
-          </div>
-          <div className="p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Začínáme</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{location.name}</h1>
-            {location.introStory ? (
-              <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mist">{location.introStory}</p>
-            ) : null}
-            {location.episodes[0]?.name ? (
-              <p className="mt-4 text-sm text-white/90">
-                První zastávka: <span className="font-semibold">{location.episodes[0].name}</span>
-              </p>
-            ) : null}
+        <GameIntroCard
+          image={location.image}
+          name={location.name}
+          introStory={location.introStory}
+          firstStopName={location.episodes[0]?.name}
+          action={
             <button
               onClick={() => setIntroOpen(false)}
               className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-center text-base font-bold text-night"
             >
               Vyrážíme
             </button>
-          </div>
-        </section>
+          }
+        />
       </main>
     );
   }
@@ -931,34 +883,13 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
   if ((finished || completedSummary) && endingView) {
     return (
       <main className="flex flex-1 flex-col gap-5 pb-24">
-        <section className="glass-card p-5">
-          <div className="flex justify-center">
-            <Image
-              src={illustrationSrc("konfety")}
-              alt=""
-              width={140}
-              height={140}
-              className="h-[140px] w-[140px] object-contain"
-            />
-          </div>
-          <p className="mt-2 text-xs uppercase tracking-[0.24em] text-coral">
-            {endingView.justFinished ? "Závěrečné odhalení" : "Hru už máš dohranou"}
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{endingView.ending?.endingTitle ?? location.name}</h1>
-          {/* R52: závěr jako sled bublin – dialog postav před závěrečným textem. */}
-          <Bubliny bubliny={endingView.ending?.bubbles} />
-          {/* R50: texty z Mozku zachovávají odřádkování – dialog a odstavce se nesmí slít do jednoho bloku. */}
-          {endingView.ending?.endingStory ? (
-            <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mist">{endingView.ending.endingStory}</p>
-          ) : null}
-        </section>
-
-        {endingView.ending?.playerMessage ? (
-          <section className="glass-card p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-lime">Zpráva pro hráče</p>
-            <p className="mt-3 whitespace-pre-line text-base leading-7 text-white/90">{endingView.ending.playerMessage}</p>
-          </section>
-        ) : null}
+        <EndingStory
+          eyebrow={endingView.justFinished ? "Závěrečné odhalení" : "Hru už máš dohranou"}
+          title={endingView.ending?.endingTitle ?? location.name}
+          bubbles={endingView.ending?.bubbles}
+          story={endingView.ending?.endingStory}
+          playerMessage={endingView.ending?.playerMessage}
+        />
 
         <section className="glass-card p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-lime">Výsledek</p>
@@ -1041,127 +972,37 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
     // R44: přechod říká jen to podstatné – zastávka je hotová a kam se jde dál.
     // Autorský text z Mozku se zobrazí, když existuje; nic se za autora nevymýšlí
     // a chybějící text se ničím nenahrazuje, aby bylo poznat, že chybí.
-    const transitionText = pendingTransition.transitionText?.trim() || "";
-
     return (
       <main className="flex flex-1 flex-col justify-center gap-5 pb-24">
-        <section className="rounded-[32px] border-2 border-lime bg-lime/20 p-6 shadow-[0_0_0_1px_rgba(178,247,93,0.35),0_0_36px_rgba(178,247,93,0.2)]">
-          <p className="text-sm font-bold uppercase tracking-[0.28em] text-lime">Zastávka hotová</p>
-          <div className="mt-5 rounded-2xl border border-lime/40 bg-night/35 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-lime">Pokračuješ na</p>
-            <p className="mt-1 text-3xl font-bold text-white">{pendingTransition.toStopName}</p>
-          </div>
-          {transitionText ? (
-            <div className="mt-4 flex items-start gap-3">
-              <Image
-                src={illustrationSrc("rozcestnik")}
-                alt=""
-                width={72}
-                height={72}
-                className="h-[72px] w-[72px] shrink-0 object-contain"
-              />
-              <p className="whitespace-pre-line text-base leading-7 text-white/90">{transitionText}</p>
-            </div>
-          ) : null}
-          <button
-            onClick={() => void continueToNextEpisode()}
-            disabled={confirmingTransition}
-            className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-base font-bold text-night disabled:opacity-70"
-          >
-            {confirmingTransition ? "Ukládám…" : "Pokračovat na další zastavení"}
-          </button>
-        </section>
+        <StopTransitionCard
+          toStopName={pendingTransition.toStopName}
+          transitionText={pendingTransition.transitionText}
+          action={
+            <button
+              onClick={() => void continueToNextEpisode()}
+              disabled={confirmingTransition}
+              className="mt-6 w-full rounded-[24px] bg-lime px-5 py-4 text-base font-bold text-night disabled:opacity-70"
+            >
+              {confirmingTransition ? "Ukládám…" : "Pokračovat na další zastavení"}
+            </button>
+          }
+        />
       </main>
     );
   }
 
   return (
     <main className="flex flex-1 flex-col gap-5 pb-24">
-      <section className="glass-card p-4 sm:p-5">
-        {/* R44: hra je dobrodružství, které se odkrývá, ne ukazatel postupu.
-            Pryč je „Rozehraná hra“, procenta, pruh postupu, počty zastavení
-            i úkolů a štítek režimu – hráč si žádný režim nevybíral a skupinové
-            hraní je odložené (R34). Evidence postupu na serveru se nemění,
-            mění se jen to, co vidí hráč. */}
-        {/* R44: název zastávky je na obrazovce jednou. Uvedení místa, historie
-            a fotka patří k PŘÍCHODU na zastávku – u dalších úkolů téhož místa už
-            se neopakují, protože hráč se nikam nepřesunul a četl je. Kdo se vrací
-            do rozehrané hry doprostřed zastávky, úvodem znovu procházet nemusí. */}
-        <div>
-          <h1 className="text-2xl font-bold">{location.name}</h1>
-          <p className="mt-2 text-base font-semibold text-white">{activeEpisode.name}</p>
-        </div>
-
-        {isFirstTaskOfEpisode ? (
-        <div className="mt-3 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-            <div className="min-w-0 flex-1">
-              <p className="whitespace-pre-line text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
-
-              {activeEpisode.background ? (
-                <div className="mt-3 rounded-[24px] border border-white/10 bg-night/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-6 text-mist">{activeEpisode.background}</p>
-                </div>
-              ) : null}
-            </div>
-
-            {activeEpisode.illustrationImage ? (
-              <figure className="mx-auto w-full max-w-[120px] overflow-hidden rounded-[24px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:max-w-[160px] lg:mx-0 lg:w-[180px] lg:flex-none">
-                {isExternalImage(activeEpisode.illustrationImage) ? (
-                  <img
-                    src={activeEpisode.illustrationImage}
-                    alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
-                    className="aspect-square w-full object-cover object-center"
-                  />
-                ) : (
-                  <Image
-                    src={activeEpisode.illustrationImage}
-                    alt={activeEpisode.illustrationImageAlt || `Ilustrační foto k zastavení ${activeEpisode.name}`}
-                    width={720}
-                    height={720}
-                    className="aspect-square w-full object-cover object-center"
-                  />
-                )}
-              </figure>
-            ) : null}
-          </div>
-        </div>
-        ) : null}
-      </section>
-
-      {/* R51/R52: bubliny při příchodu na zastavení, nad úkoly. Jako úvod zastávky
-          se ukážou jen u prvního úkolu místa – hráč je už četl. */}
-      {isFirstTaskOfEpisode ? <Bubliny bubliny={activeEpisode.bubbles} /> : null}
+      {/* R44: hra je dobrodružství, které se odkrývá, ne ukazatel postupu – žádná
+          procenta ani počty. Uvedení místa, historie, fotka a bubliny patří
+          k PŘÍCHODU na zastávku; u dalších úkolů téhož místa se neopakují. */}
+      <StopArrival locationName={location.name} stop={activeEpisode} showContext={isFirstTaskOfEpisode} />
 
       {/* R52: bubliny k úkolu – při každém zobrazení úkolu, těsně nad zadáním. */}
       <Bubliny bubliny={activeTask.bubbles} />
 
       <section className="glass-card p-5">
-        {/* R44: štítek typu úkolu („Výběr“, „Otázka“) hráči nic neříká. Typ zůstává
-            interně, jen se nevypisuje. */}
-        <h2 className="text-2xl font-semibold">{activeTask.title}</h2>
-        <p className="mt-2 whitespace-pre-line text-sm leading-6 text-mist">{activeTask.content}</p>
-        {activeTask.illustrationImage ? (
-          <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
-            {isExternalImage(activeTask.illustrationImage) ? (
-              <img
-                src={activeTask.illustrationImage}
-                alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
-                className="aspect-square w-full object-cover object-center"
-              />
-            ) : (
-              <Image
-                src={activeTask.illustrationImage}
-                alt={activeTask.illustrationImageAlt || `Ilustrační foto k úkolu ${activeTask.title}`}
-                width={720}
-                height={720}
-                className="aspect-square w-full object-cover object-center"
-              />
-            )}
-            <figcaption className="px-3 py-2 text-center text-xs text-mist">Ilustrační foto k úkolu</figcaption>
-          </figure>
-        ) : null}
+        <TaskPrompt task={activeTask} />
 
         <div className="mt-5 rounded-[24px] border border-dashed border-white/15 bg-night/70 p-4">
           {activeTask.type === "choice" ? (

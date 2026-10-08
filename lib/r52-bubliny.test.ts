@@ -10,6 +10,7 @@ const migrace51 = cti("supabase/migrations/20261008140000_r51_postavy_a_bubliny.
 const migrace = cti("supabase/migrations/20261008160000_r52_bubliny.sql");
 const server = cti("lib/gameplay-server.ts");
 const hra = cti("components/play-screen.tsx");
+const ui = cti("components/game/game-ui.tsx");
 const typy = cti("lib/gameplay-types.ts");
 const akce = cti("app/admin/missions/bubble-actions.ts");
 const editor = cti("components/admin/bubble-editor.tsx");
@@ -62,11 +63,14 @@ test("B6: závěrové bubliny jsou spoiler – jen přes getGameplayEnding, ne v
 });
 
 test("B7: ve hře jedna komponenta bublin na třech místech – zastavení, úkol, závěr", () => {
-  assert.match(hra, /function Bubliny\(\{ bubliny \}: \{ bubliny\?: GameplayBubble\[\] \}\)/);
-  assert.match(hra, /\{isFirstTaskOfEpisode \? <Bubliny bubliny=\{activeEpisode\.bubbles\} \/> : null\}/);
+  // R54: Bubliny žijí ve sdílených komponentách; hra je skládá.
+  assert.match(ui, /export function Bubliny\(\{ bubliny \}: \{ bubliny\?: GameplayBubble\[\] \}\)/);
+  assert.match(ui, /\{showContext \? <Bubliny bubliny=\{stop\.bubbles\} \/> : null\}/, "bubliny zastavení jen při příchodu");
+  assert.match(hra, /showContext=\{isFirstTaskOfEpisode\}/);
   assert.match(hra, /<Bubliny bubliny=\{activeTask\.bubbles\} \/>/);
-  assert.match(hra, /<Bubliny bubliny=\{endingView\.ending\?\.bubbles\} \/>/);
-  assert.ok(hra.indexOf("<Bubliny bubliny={activeTask.bubbles} />") < hra.indexOf("{activeTask.title}</h2>"), "bublina úkolu je nad zadáním");
+  assert.match(ui, /<Bubliny bubliny=\{bubbles\} \/>/, "závěr");
+  assert.match(hra, /bubbles=\{endingView\.ending\?\.bubbles\}/);
+  assert.ok(hra.indexOf("<Bubliny bubliny={activeTask.bubbles} />") < hra.indexOf("<TaskPrompt task={activeTask} />"), "bublina úkolu je nad zadáním");
 });
 
 test("B8: Mozek – editor u zastavení, u každého úkolu a v závěru hry; Traki první volba", () => {

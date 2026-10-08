@@ -830,7 +830,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Začínáme</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{location.name}</h1>
             {location.introStory ? (
-              <p className="mt-4 text-sm leading-7 text-mist">{location.introStory}</p>
+              <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mist">{location.introStory}</p>
             ) : null}
             {location.episodes[0]?.name ? (
               <p className="mt-4 text-sm text-white/90">
@@ -912,15 +912,16 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             {endingView.justFinished ? "Závěrečné odhalení" : "Hru už máš dohranou"}
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{endingView.ending?.endingTitle ?? location.name}</h1>
+          {/* R50: texty z Mozku zachovávají odřádkování – dialog a odstavce se nesmí slít do jednoho bloku. */}
           {endingView.ending?.endingStory ? (
-            <p className="mt-4 text-sm leading-7 text-mist">{endingView.ending.endingStory}</p>
+            <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mist">{endingView.ending.endingStory}</p>
           ) : null}
         </section>
 
         {endingView.ending?.playerMessage ? (
           <section className="glass-card p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-lime">Zpráva pro hráče</p>
-            <p className="mt-3 text-base leading-7 text-white/90">{endingView.ending.playerMessage}</p>
+            <p className="mt-3 whitespace-pre-line text-base leading-7 text-white/90">{endingView.ending.playerMessage}</p>
           </section>
         ) : null}
 
@@ -1024,7 +1025,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
                 height={72}
                 className="h-[72px] w-[72px] shrink-0 object-contain"
               />
-              <p className="text-base leading-7 text-white/90">{transitionText}</p>
+              <p className="whitespace-pre-line text-base leading-7 text-white/90">{transitionText}</p>
             </div>
           ) : null}
           <button
@@ -1060,12 +1061,12 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         <div className="mt-3 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <div className="min-w-0 flex-1">
-              <p className="text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
+              <p className="whitespace-pre-line text-sm leading-6 text-white/90 sm:leading-7">{activeEpisode.intro}</p>
 
               {activeEpisode.background ? (
                 <div className="mt-3 rounded-[24px] border border-white/10 bg-night/35 p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-coral">Trocha nudné historie</p>
-                  <p className="mt-3 text-sm leading-6 text-mist">{activeEpisode.background}</p>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-6 text-mist">{activeEpisode.background}</p>
                 </div>
               ) : null}
             </div>
@@ -1098,7 +1099,7 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         {/* R44: štítek typu úkolu („Výběr“, „Otázka“) hráči nic neříká. Typ zůstává
             interně, jen se nevypisuje. */}
         <h2 className="text-2xl font-semibold">{activeTask.title}</h2>
-        <p className="mt-2 text-sm leading-6 text-mist">{activeTask.content}</p>
+        <p className="mt-2 whitespace-pre-line text-sm leading-6 text-mist">{activeTask.content}</p>
         {activeTask.illustrationImage ? (
           <figure className="mt-4 mx-auto w-full max-w-[280px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
             {isExternalImage(activeTask.illustrationImage) ? (

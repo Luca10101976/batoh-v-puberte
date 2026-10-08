@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element */
-import Link from "next/link";
 import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { loadMissionPreview } from "@/lib/mission-preview-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -108,12 +107,6 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
               {preview.isPublished ? "Publikováno" : "Koncept"} • {preview.episodes.length} zastavení • {taskCount} úkolů
             </p>
           </div>
-          <Link
-            href={`/mozek/missions/${preview.id}`}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-          >
-            Zpět na hru
-          </Link>
         </div>
         <p className="mt-4 rounded-2xl border border-sky/30 bg-sky/10 px-4 py-3 text-sm text-sky">
           Tohle je jen náhled pro tebe. Nezakládá výpravu, nepočítá body a hráči ho nevidí. Správné odpovědi a nápovědy

@@ -199,9 +199,6 @@ export default async function MissionDetailPage({
                 {mission.is_published ? "Vypnout publikaci" : "Publikovat hru"}
               </button>
             </form>
-            <Link href="/mozek" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-              Zpět
-            </Link>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { createMissionAction } from "@/app/admin/missions/actions";
 import { MissionForm } from "@/components/admin/mission-form";
 import { loadActiveCities } from "@/lib/cities-server";
@@ -19,13 +19,10 @@ export default async function NewMissionPage() {
       <section className="glass-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Mise</p>
+            <Breadcrumbs items={[{ label: "Hry", href: "/mozek" }, { label: "Nová hra" }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">Nová hra</h1>
             <p className="mt-2 text-sm text-mist">Nová hra vzniká jako koncept. Publikuje se až po kontrole.</p>
           </div>
-          <Link href="/mozek" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-            Zpět
-          </Link>
         </div>
       </section>
 

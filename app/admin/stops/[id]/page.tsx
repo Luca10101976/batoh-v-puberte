@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { createTaskAction, deleteTaskAction, moveTaskAction, updateStopAction, updateTaskAction } from "@/app/admin/stops/actions";
 import { describeUsage } from "@/lib/mission-usage";
 import { getMissionUsage } from "@/lib/mission-usage-server";
@@ -150,16 +151,15 @@ export default async function StopEditPage({
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Zastavení</p>
+            <Breadcrumbs
+              items={[
+                { label: "Hry", href: "/mozek" },
+                { label: mission?.title ?? "Hra", href: `/mozek/missions/${stop.mission_id}` },
+                { label: stop.title }
+              ]}
+            />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{stop.title}</h1>
-            {mission?.title ? <p className="mt-1 text-sm text-mist">Mise: {mission.title}</p> : null}
           </div>
-          <Link
-            href={`/mozek/missions/${stop.mission_id}`}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-          >
-            Zpět na misi
-          </Link>
         </div>
       </section>
 

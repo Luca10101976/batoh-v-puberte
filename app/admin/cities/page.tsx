@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { deleteCityAction, toggleCityActiveAction } from "@/app/admin/cities/actions";
 import { loadCities } from "@/lib/cities-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -44,7 +45,7 @@ export default async function AdminCitiesPage({
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek</p>
+            <Breadcrumbs items={[{ label: "Města" }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">Města</h1>
             <p className="mt-2 max-w-2xl text-sm text-mist">
               Města, ve kterých Traki nabízí hry. Vypnuté město se u nových her nenabízí, ale jeho publikované hry
@@ -52,9 +53,6 @@ export default async function AdminCitiesPage({
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/mozek" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
-              Hry
-            </Link>
             <Link href="/mozek/cities/new" className="rounded-2xl bg-lime px-4 py-3 text-sm font-semibold text-night">
               ➕ Nové město
             </Link>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { createStopAction } from "@/app/admin/stops/actions";
 import { StopNewForm } from "@/components/admin/stop-new-form";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -61,13 +61,11 @@ export default async function NewStopPage({
       <section className="glass-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Zastavení</p>
+            <Breadcrumbs
+              items={[{ label: "Hry", href: "/mozek" }, { label: mission.title, href: `/mozek/missions/${mission.id}` }, { label: "Přidat zastavení" }]}
+            />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">Přidat zastavení</h1>
-            <p className="mt-1 text-sm text-mist">Mise: {mission.title}</p>
           </div>
-          <Link href={`/mozek/missions/${mission.id}`} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-            Zpět na misi
-          </Link>
         </div>
       </section>
 

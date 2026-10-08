@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MozekHeader } from "@/components/admin/mozek-header";
 
 export const metadata: Metadata = {
   title: {
@@ -15,10 +16,16 @@ export const metadata: Metadata = {
   }
 };
 
+// R53: Mozek má stálou hlavičku (Hry / Města). Obsah stránek zůstává jak byl.
 export default function AdminLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return children;
+  return (
+    <>
+      <MozekHeader />
+      <div className="px-4 pt-5">{children}</div>
+    </>
+  );
 }

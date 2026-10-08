@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { loadMissionPreview } from "@/lib/mission-preview-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -101,7 +102,7 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Náhled</p>
+            <Breadcrumbs items={[{ label: "Hry", href: "/mozek" }, { label: preview.title, href: `/mozek/missions/${preview.id}` }, { label: "Náhled" }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{preview.title}</h1>
             <p className="mt-2 text-sm text-mist">
               {preview.isPublished ? "Publikováno" : "Koncept"} • {preview.episodes.length} zastavení • {taskCount} úkolů

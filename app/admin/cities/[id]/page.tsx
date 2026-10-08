@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import { updateCityAction } from "@/app/admin/cities/actions";
 import { CityForm } from "@/components/admin/city-form";
 import { loadCities } from "@/lib/cities-server";
@@ -26,12 +26,9 @@ export default async function CityDetailPage({ params }: { params: Promise<{ id:
       <section className="glass-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Města</p>
+            <Breadcrumbs items={[{ label: "Města", href: "/mozek/cities" }, { label: city.name }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{city.name}</h1>
           </div>
-          <Link href="/mozek/cities" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-            Zpět
-          </Link>
         </div>
       </section>
 

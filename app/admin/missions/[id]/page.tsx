@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 import {
   checkMissionAction,
   deleteMissionAction,
@@ -160,7 +161,7 @@ export default async function MissionDetailPage({
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek • Hra</p>
+            <Breadcrumbs items={[{ label: "Hry", href: "/mozek" }, { label: mission.title }]} />
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{mission.title}</h1>
             <p className="mt-2 text-sm text-mist">
               {mission.is_published ? "Publikováno pro hráče" : "Koncept – hráči ji nevidí"}

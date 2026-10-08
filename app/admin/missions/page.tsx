@@ -93,16 +93,12 @@ export default async function AdminMissionsPage({
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky">Mozek</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">Obsah webu</h1>
             <p className="mt-2 max-w-2xl text-sm text-mist">
               Přehled toho, co se opravdu zobrazuje ve hře. Tady můžete přidávat, ubírat a upravovat mise i jejich zastavení.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/mozek/cities" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold">
-              Města
-            </Link>
             <Link href="/mozek/missions/new" className="rounded-2xl bg-lime px-4 py-3 text-sm font-semibold text-night">
               ➕ Nová hra
             </Link>

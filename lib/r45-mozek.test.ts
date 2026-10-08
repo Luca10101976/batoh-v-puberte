@@ -76,7 +76,9 @@ test("B1 – Smazat úkol nejdřív otevře potvrzení", () => {
 
 test("B2 – potvrzení říká, který úkol se maže, a teprve pak maže", () => {
   const src = ZASTAVKA();
-  const blok = src.slice(src.indexOf("confirmingTaskId === task.id"), src.indexOf("<TaskForm stopId={stop.id} missionId={stop.mission_id} task={task}"));
+  // R56: potvrzení je pod sbalenou kartou úkolu, před koncem článku.
+  const zacatek = src.indexOf("{confirmingTaskId === task.id ? (");
+  const blok = src.slice(zacatek, src.indexOf("</article>", zacatek));
   assert.match(blok, /Smazat úkol \{index \+ 1\}\?/);
   assert.match(blok, /task\.question/, "ukazuje zadání úkolu");
   assert.match(blok, /Ano, smazat úkol \{index \+ 1\}/);

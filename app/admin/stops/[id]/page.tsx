@@ -7,7 +7,18 @@ import { deleteBubbleAction, moveBubbleAction, saveBubbleAction } from "@/app/ad
 import type { MissionBubbleRow, MissionCharacterRow, MissionStopRow, MissionTaskRow } from "@/app/admin/types";
 import { BubbleEditor } from "@/components/admin/bubble-editor";
 import { StopForm } from "@/components/admin/stop-form";
+import { TaskAnswerHelp } from "@/components/admin/task-answer-help";
 import { TaskForm } from "@/components/admin/task-form";
+
+// R56: typ úkolu lidsky – „Seřaď“ se dřív hlásil jako „Otevřená odpověď“.
+const TYP_UKOLU: Record<string, string> = { otevrena: "Otevřená odpověď", vyber: "Výběr", "ano-ne": "Ano / ne", serad: "Seřaď" };
+function nazevUkolu(question: string) {
+  return (question ?? "").split(/\n\s*\n/)[0]?.trim() || "(bez názvu)";
+}
+function zkratka(text: string, max = 40) {
+  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -217,17 +228,51 @@ export default async function StopEditPage({
           </div>
         ) : null}
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-3">
+          <TaskAnswerHelp />
+          {/* R56: úkol je sbalená karta – v hlavičce vidíš, co v něm je, a rozbalíš
+              jen ten, který upravuješ. Šipky a mazání zůstávají venku. */}
           {tasks.map((task, index) => (
-            <article key={task.id} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-sky">Úkol {index + 1}</p>
-                  <h3 className="mt-1 text-lg font-semibold">
-                    {task.type === "vyber" ? "Výběr" : task.type === "ano-ne" ? "Ano / ne" : "Otevřená odpověď"}
-                  </h3>
-                </div>
-                <div className="flex flex-wrap gap-2">
+            <article key={task.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-start gap-2">
+                <details className="group min-w-0 flex-1" open={confirmingTaskId === task.id || undefined}>
+                  <summary className="flex cursor-pointer list-none items-start gap-3 rounded-xl px-1 py-1">
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky/15 text-xs font-bold text-sky">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-white">{nazevUkolu(task.question)}</span>
+                      <span className="mt-1 flex flex-wrap gap-1.5 text-xs text-mist">
+                        <span className="rounded-md bg-white/10 px-1.5 py-0.5">{TYP_UKOLU[task.type] ?? task.type}</span>
+                        <span className="rounded-md bg-white/10 px-1.5 py-0.5">→ {zkratka(task.correct_answer.split("\n").join(" / "))}</span>
+                        {(task.hint_text ?? "").trim() ? <span className="rounded-md bg-lime/15 px-1.5 py-0.5 text-lime">nápověda</span> : null}
+                        {taskBubbles(task.id).length ? (
+                          <span className="rounded-md bg-white/10 px-1.5 py-0.5">bubliny: {taskBubbles(task.id).length}</span>
+                        ) : null}
+                      </span>
+                    </span>
+                    <span className="mt-1 shrink-0 text-xs font-semibold text-lime group-open:hidden">Upravit</span>
+                    <span className="mt-1 hidden shrink-0 text-xs text-mist group-open:inline">Zavřít</span>
+                  </summary>
+                  <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+                    <TaskForm stopId={stop.id} missionId={stop.mission_id} task={task} action={updateTaskAction} />
+
+                    {/* R52: bubliny nad zadáním tohoto úkolu. */}
+                    <BubbleEditor
+                      missionId={stop.mission_id}
+                      target={{ type: "task", taskId: task.id }}
+                      bubbles={taskBubbles(task.id)}
+                      characters={characters}
+                      returnTo={`/mozek/stops/${stop.id}`}
+                      title="Bubliny u tohoto úkolu"
+                      hint="Zobrazí se nad zadáním pokaždé, když hráč úkol otevře. Nepovinné."
+                      saveAction={saveBubbleAction}
+                      deleteAction={deleteBubbleAction}
+                      moveAction={moveBubbleAction}
+                    />
+                  </div>
+                </details>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                   {/* R37: pořadí úkolů se mění šipkami a přečísluje se samo. */}
                   <form action={moveTaskAction}>
                     <input type="hidden" name="task_id" value={task.id} />
@@ -260,16 +305,17 @@ export default async function StopEditPage({
                   {isUsed ? null : (
                     <Link
                       href={`/mozek/stops/${stop.id}?confirmTask=${task.id}`}
+                      aria-label={`Smazat úkol ${index + 1}`}
                       className="rounded-xl border border-coral/30 bg-coral/10 px-3 py-2 text-center text-sm font-semibold text-coral"
                     >
-                      Smazat úkol
+                      ✕
                     </Link>
                   )}
                 </div>
               </div>
 
               {confirmingTaskId === task.id ? (
-                <div className="rounded-2xl border border-coral/30 bg-coral/10 p-4">
+                <div className="mt-3 rounded-2xl border border-coral/30 bg-coral/10 p-4">
                   <p className="text-sm font-semibold text-coral">Smazat úkol {index + 1}?</p>
                   <p className="mt-1 text-sm text-mist">
                     {task.question?.trim() ? `„${task.question.trim()}“ ` : ""}Tohle nejde vrátit.
@@ -296,36 +342,15 @@ export default async function StopEditPage({
                   </div>
                 </div>
               ) : null}
-
-              <TaskForm stopId={stop.id} missionId={stop.mission_id} task={task} action={updateTaskAction} />
-
-              {/* R52: bubliny nad zadáním tohoto úkolu. */}
-              <BubbleEditor
-                missionId={stop.mission_id}
-                target={{ type: "task", taskId: task.id }}
-                bubbles={taskBubbles(task.id)}
-                characters={characters}
-                returnTo={`/mozek/stops/${stop.id}`}
-                title="Bubliny u tohoto úkolu"
-                hint="Zobrazí se nad zadáním pokaždé, když hráč úkol otevře. Nepovinné."
-                saveAction={saveBubbleAction}
-                deleteAction={deleteBubbleAction}
-                moveAction={moveBubbleAction}
-              />
             </article>
           ))}
 
-          <section className="rounded-2xl border border-dashed border-white/10 bg-night/20 p-4">
-            <h3 className="text-lg font-semibold">Přidat nový úkol</h3>
-            <p className="mt-1 text-sm text-mist">Tady můžete doplnit další zadání pro tohle zastavení.</p>
+          <details className="rounded-2xl border border-dashed border-lime/30 bg-lime/5 p-4" open={tasks.length === 0 || undefined}>
+            <summary className="cursor-pointer list-none text-sm font-semibold text-lime">➕ Přidat nový úkol</summary>
             <div className="mt-4">
-              <TaskForm
-                stopId={stop.id}
-                missionId={stop.mission_id}
-                action={createTaskAction}
-              />
+              <TaskForm stopId={stop.id} missionId={stop.mission_id} action={createTaskAction} />
             </div>
-          </section>
+          </details>
         </div>
       </section>
     </main>

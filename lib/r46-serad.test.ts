@@ -152,8 +152,11 @@ test("12 – hráč řadí šipkami, ne psaním", () => {
 test("13 – Mozek nabízí typ a vysvětluje ho; náhled ukazuje správné pořadí", () => {
   const form = bezKomentaru(read("components/admin/task-form.tsx"));
   assert.match(form, /\{ value: "serad", label: "Seřaď podle pořadí" \}/);
-  assert.match(form, /Seřaď podle pořadí<\/p>/);
-  assert.match(form, /Hráč položky posouvá šipkami/);
+  // R56: vysvětlení typů je jednou nahoře u úkolů, ne v každém formuláři.
+  const napoveda = bezKomentaru(read("components/admin/task-answer-help.tsx"));
+  assert.match(napoveda, /Seřaď podle pořadí<\/p>/);
+  assert.match(napoveda, /Hráč položky posouvá šipkami/);
+  assert.match(read("app/admin/stops/[id]/page.tsx"), /<TaskAnswerHelp \/>/);
   const nahled = bezKomentaru(read("app/admin/missions/\[id\]/preview/page.tsx"));
   assert.match(nahled, /Správné pořadí:/);
   assert.match(nahled, /join\(" → "\)/);

@@ -7,8 +7,10 @@ import {
   toggleMissionPublishAction,
   updateMissionAction
 } from "@/app/admin/missions/actions";
+import { deleteBubbleAction, moveBubbleAction, saveBubbleAction } from "@/app/admin/missions/bubble-actions";
 import { deleteCharacterAction, saveCharacterAction } from "@/app/admin/missions/character-actions";
-import type { MissionCharacterRow, MissionRow, MissionStopRow } from "@/app/admin/types";
+import { BubbleEditor } from "@/components/admin/bubble-editor";
+import type { MissionBubbleRow, MissionCharacterRow, MissionRow, MissionStopRow } from "@/app/admin/types";
 import { CharacterManager } from "@/components/admin/character-manager";
 import { MissionForm } from "@/components/admin/mission-form";
 import { loadActiveCities, loadCities } from "@/lib/cities-server";
@@ -37,6 +39,8 @@ function statusText(status?: string) {
       return { text: "🗑️ Zastavení bylo smazané.", tone: "ok" as const };
     case "character_deleted":
       return { text: "🗑️ Postava byla smazaná.", tone: "ok" as const };
+    case "bubble_deleted":
+      return { text: "🗑️ Bublina byla smazaná.", tone: "ok" as const };
     case "reordered":
       return { text: "✅ Pořadí zastavení bylo změněné.", tone: "ok" as const };
     case "reorder_edge":
@@ -132,6 +136,15 @@ export default async function MissionDetailPage({
     .eq("mission_id", mission.id)
     .order("created_at", { ascending: true });
   const characters = ((characterRows as MissionCharacterRow[] | null) ?? []);
+
+  // R52: závěr hry jako sled bublin.
+  const { data: endingBubbleRows } = await supabase
+    .from("mission_bubbles")
+    .select("id, mission_id, target_type, stop_id, task_id, character_id, text, order")
+    .eq("mission_id", mission.id)
+    .eq("target_type", "ending")
+    .order("order", { ascending: true });
+  const endingBubbles = (endingBubbleRows as MissionBubbleRow[] | null) ?? [];
   const status = statusText(resolvedSearchParams?.status);
   const issues = (resolvedSearchParams?.issues ?? "")
     .split(" | ")
@@ -240,6 +253,28 @@ export default async function MissionDetailPage({
         saveAction={saveCharacterAction}
         deleteAction={deleteCharacterAction}
       />
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Závěr v bublinách</h2>
+        <p className="mt-2 text-sm leading-6 text-mist">
+          Dialog na konci hry – postavy mluví po sobě v tomhle pořadí. Zobrazí se pod titulkem závěru, před
+          závěrečným textem. Nepovinné; bez bublin zůstane jen text.
+        </p>
+        <div className="mt-4">
+          <BubbleEditor
+            missionId={mission.id}
+            target={{ type: "ending" }}
+            bubbles={endingBubbles}
+            characters={characters}
+            returnTo={`/mozek/missions/${mission.id}`}
+            title="Kdo mluví na konci"
+            hint="Traki je k dispozici vždy, ostatní postavy přidáš v sekci Postavy."
+            saveAction={saveBubbleAction}
+            deleteAction={deleteBubbleAction}
+            moveAction={moveBubbleAction}
+          />
+        </div>
+      </section>
 
       <section className="glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

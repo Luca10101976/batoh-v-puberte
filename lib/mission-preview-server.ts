@@ -10,8 +10,8 @@
  * ani neodemyká hry – v tomhle souboru není jediný zápis do databáze.
  */
 
-import { getGameplayEpisodes } from "./gameplay-server.ts";
-import type { GameplayEpisode } from "./gameplay-types.ts";
+import { getGameplayEpisodes, getMissionEndingBubbles } from "./gameplay-server.ts";
+import type { GameplayBubble, GameplayEpisode } from "./gameplay-types.ts";
 import { legacyLocationIdForMission } from "./legacy-location-ids.ts";
 
 export type MissionPreview = {
@@ -29,6 +29,8 @@ export type MissionPreview = {
   endingTitle: string;
   endingText: string;
   endingPlayerMessage: string;
+  /** R52: závěr jako sled bublin. */
+  endingBubbles: GameplayBubble[];
   episodes: GameplayEpisode[];
 };
 
@@ -69,6 +71,7 @@ export async function loadMissionPreview(admin: any, missionId: string): Promise
 
   const locationId = legacyLocationIdForMission(mission.id) ?? mission.id;
   const episodes = (await getGameplayEpisodes(locationId, { includeUnpublished: true })) ?? [];
+  const endingBubbles = await getMissionEndingBubbles(mission.id);
 
   let cityLocative = mission.city;
   if (mission.city_id) {
@@ -95,6 +98,7 @@ export async function loadMissionPreview(admin: any, missionId: string): Promise
     endingTitle: (mission.ending_title ?? "").trim(),
     endingText: (mission.ending_text ?? "").trim(),
     endingPlayerMessage: (mission.ending_player_message ?? "").trim(),
+    endingBubbles,
     episodes
   };
 }

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
-import type { FormState, MissionCharacterRow, MissionStopRow } from "@/app/admin/types";
+import type { FormState, MissionStopRow } from "@/app/admin/types";
 import { UnsavedChangesBadge, useUnsavedChanges } from "@/components/admin/unsaved-changes";
 import { EMPTY_FORM_STATE } from "@/app/admin/types";
 import { AdminImageField } from "@/components/admin/image-field";
@@ -11,8 +11,6 @@ import { AdminImageField } from "@/components/admin/image-field";
 type StopFormProps = {
   stop: MissionStopRow;
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
-  /** R51: postavy hry pro bublinu při příchodu. */
-  characters?: MissionCharacterRow[];
 };
 
 function SubmitButton() {
@@ -28,7 +26,7 @@ function SubmitButton() {
   );
 }
 
-export function StopForm({ stop, action, characters = [] }: StopFormProps) {
+export function StopForm({ stop, action }: StopFormProps) {
   const [state, formAction] = useFormState(action, EMPTY_FORM_STATE);
   const { dirty, formProps } = useUnsavedChanges(state.success, state.error);
   const router = useRouter();
@@ -96,54 +94,6 @@ export function StopForm({ stop, action, characters = [] }: StopFormProps) {
             </span>
           </label>
 
-        </div>
-      </section>
-
-      {/* R51: bublina při příchodu na zastavení – kdo mluví a co říká. */}
-      <section className="glass-card p-5">
-        <h2 className="section-title">Bublina při příchodu</h2>
-        <p className="mt-2 text-sm leading-6 text-mist">
-          Hráč ji uvidí, když na zastavení dorazí – nad úkoly, s obrázkem postavy. Nepovinné.
-        </p>
-        {characters.length === 0 ? (
-          <p className="mt-4 rounded-2xl bg-white/5 px-4 py-3 text-sm text-mist">
-            Hra zatím nemá žádnou postavu. Přidej ji na stránce hry v sekci{" "}
-            <a href={`/mozek/missions/${stop.mission_id}`} className="font-semibold text-lime underline">
-              Postavy
-            </a>
-            .
-          </p>
-        ) : null}
-        <div className="mt-4 space-y-4">
-          <label className="block space-y-2">
-            <span className="text-sm text-mist">Kdo mluví</span>
-            <select
-              name="bubble_character_id"
-              defaultValue={stop.bubble_character_id ?? ""}
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
-            >
-              <option value="">— bez bubliny —</option>
-              {characters.map((postava) => (
-                <option key={postava.id} value={postava.id}>
-                  {postava.name}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.bubble_character_id ? (
-              <p className="text-xs text-coral">{state.fieldErrors.bubble_character_id}</p>
-            ) : null}
-          </label>
-          <label className="block space-y-2">
-            <span className="text-sm text-mist">Text bubliny</span>
-            <textarea
-              name="bubble_text"
-              defaultValue={stop.bubble_text ?? ""}
-              rows={3}
-              placeholder="Co postava hráči řekne, když dorazí na místo."
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-            />
-            {state.fieldErrors?.bubble_text ? <p className="text-xs text-coral">{state.fieldErrors.bubble_text}</p> : null}
-          </label>
         </div>
       </section>
 

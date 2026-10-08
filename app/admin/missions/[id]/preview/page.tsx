@@ -9,6 +9,24 @@ export const dynamic = "force-dynamic";
 // nikam se nedá poslat a nic nezapisuje: nezakládá výpravu, neukládá postup,
 // nepřidává body ani neodemyká hry. Obsah čte stejnou cestou jako hráčská hra.
 
+/* eslint-disable @next/next/no-img-element */
+function NahledBublin({ bubliny }: { bubliny?: { name: string; image?: string; text: string }[] }) {
+  if (!bubliny?.length) return null;
+  return (
+    <div className="mt-3 space-y-2">
+      {bubliny.map((b, i) => (
+        <div key={`${b.name}-${i}`} className="flex items-end gap-3">
+          {b.image ? <img src={b.image} alt={b.name} className="h-14 w-14 shrink-0 object-contain" /> : null}
+          <div className="min-w-0 flex-1 rounded-2xl bg-white px-3 py-2 text-night">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{b.name}</p>
+            <p className="mt-1 whitespace-pre-line text-sm leading-6">{b.text}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TaskCard({
   index,
   task
@@ -22,6 +40,7 @@ function TaskCard({
     correctAnswers: string[];
     minCorrectMatches?: number;
     hintText?: string;
+    bubbles?: { name: string; image?: string; text: string }[];
   };
 }) {
   return (
@@ -30,7 +49,9 @@ function TaskCard({
         Úkol {index + 1} • {task.typeLabel}
       </p>
       <h4 className="mt-1 text-lg font-semibold">{task.title}</h4>
-      <p className="mt-2 text-sm leading-6 text-white/90">{task.content}</p>
+      {/* R52: bubliny nad zadáním úkolu. */}
+      <NahledBublin bubliny={task.bubbles} />
+      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-white/90">{task.content}</p>
 
       {task.options && task.options.length > 0 ? (
         <ul className="mt-3 space-y-1 text-sm text-mist">
@@ -141,19 +162,8 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
 
           <p className="mt-3 text-sm font-semibold text-white/90">{episode.intro}</p>
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-mist">{episode.background}</p>
-          {/* R51: bublina při příchodu na zastavení. */}
-          {episode.bubble ? (
-            <div className="mt-3 flex items-end gap-3">
-              {episode.bubble.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={episode.bubble.image} alt={episode.bubble.name} className="h-14 w-14 shrink-0 object-contain" />
-              ) : null}
-              <div className="min-w-0 flex-1 rounded-2xl bg-white px-3 py-2 text-night">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{episode.bubble.name}</p>
-                <p className="mt-1 whitespace-pre-line text-sm leading-6">{episode.bubble.text}</p>
-              </div>
-            </div>
-          ) : null}
+          {/* R51/R52: bubliny při příchodu na zastavení. */}
+          <NahledBublin bubliny={episode.bubbles} />
 
           <div className="mt-4 space-y-3">
             {episode.tasks.length === 0 ? (
@@ -176,6 +186,8 @@ export default async function MissionPreviewPage({ params }: { params: Promise<{
         {preview.endingTitle || preview.endingText ? (
           <div className="mt-3 space-y-2">
             <p className="text-xl font-semibold">{preview.endingTitle || "(bez titulku)"}</p>
+            {/* R52: závěr jako sled bublin. */}
+            <NahledBublin bubliny={preview.endingBubbles} />
             <p className="whitespace-pre-line text-sm leading-6 text-white/90">{preview.endingText}</p>
             {preview.endingPlayerMessage ? (
               <p className="whitespace-pre-line text-sm leading-6 text-mist">{preview.endingPlayerMessage}</p>

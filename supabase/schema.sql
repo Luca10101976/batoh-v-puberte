@@ -309,6 +309,19 @@ create table public.cities (
 );
 comment on table public.cities is $txt$R37: města spravovaná v Mozku. Zdroj pravdy pro nabídku měst, jejich pořadí, skloňování a souřadnice.$txt$;
 
+create table public.mission_bubbles (
+  id uuid not null default gen_random_uuid(),
+  mission_id uuid not null,
+  target_type text not null,
+  stop_id uuid,
+  task_id uuid,
+  character_id uuid,
+  text text not null,
+  order integer not null default 1,
+  created_at timestamp with time zone not null default now()
+);
+comment on table public.mission_bubbles is $txt$Bubliny postav: u zastavení (při příchodu), u úkolu (nad zadáním) a v závěru hry (sled). character_id NULL = mluví Traki.$txt$;
+
 create table public.mission_characters (
   id uuid not null default gen_random_uuid(),
   mission_id uuid not null,
@@ -325,13 +338,9 @@ create table public.mission_stops (
   description text,
   image_url text,
   order integer not null default 1,
-  transition_text text not null default ''::text,
-  bubble_character_id uuid,
-  bubble_text text
+  transition_text text not null default ''::text
 );
 comment on column public.mission_stops.transition_text is $txt$R26: autorský text, který hráč uvidí po dokončení TÉTO zastávky, než vyrazí na další. Prázdný = obecný text.$txt$;
-comment on column public.mission_stops.bubble_character_id is $txt$Kdo mluví v bublině při příchodu na zastavení. Prázdné = bez bubliny.$txt$;
-comment on column public.mission_stops.bubble_text is $txt$Text bubliny při příchodu na zastavení.$txt$;
 
 create table public.mission_tasks (
   id uuid not null default gen_random_uuid(),
@@ -430,6 +439,10 @@ alter table public.child_task_progress add constraint child_task_progress_pkey P
 alter table public.child_task_progress add constraint child_task_progress_status_check CHECK ((status = ANY (ARRAY['correct'::text, 'wrong'::text, 'unknown'::text])));
 alter table public.cities add constraint cities_name_length CHECK (((char_length(btrim(name)) >= 2) AND (char_length(btrim(name)) <= 60)));
 alter table public.cities add constraint cities_pkey PRIMARY KEY (id);
+alter table public.mission_bubbles add constraint mission_bubbles_pkey PRIMARY KEY (id);
+alter table public.mission_bubbles add constraint mission_bubbles_target_check CHECK ((((target_type = 'stop'::text) AND (stop_id IS NOT NULL) AND (task_id IS NULL)) OR ((target_type = 'task'::text) AND (task_id IS NOT NULL) AND (stop_id IS NULL)) OR ((target_type = 'ending'::text) AND (stop_id IS NULL) AND (task_id IS NULL))));
+alter table public.mission_bubbles add constraint mission_bubbles_target_type_check CHECK ((target_type = ANY (ARRAY['stop'::text, 'task'::text, 'ending'::text])));
+alter table public.mission_bubbles add constraint mission_bubbles_text_length CHECK (((char_length(btrim(text)) >= 1) AND (char_length(btrim(text)) <= 1000)));
 alter table public.mission_characters add constraint mission_characters_id_mission_key UNIQUE (id, mission_id);
 alter table public.mission_characters add constraint mission_characters_name_length CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 60)));
 alter table public.mission_characters add constraint mission_characters_pkey PRIMARY KEY (id);
@@ -457,8 +470,11 @@ alter table public.child_location_progress add constraint child_location_progres
 alter table public.child_profiles add constraint child_profiles_parent_user_id_fkey FOREIGN KEY (parent_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.child_task_progress add constraint child_task_progress_child_profile_id_fkey FOREIGN KEY (child_profile_id) REFERENCES child_profiles(id) ON DELETE CASCADE;
 alter table public.child_task_progress add constraint child_task_progress_session_id_fkey FOREIGN KEY (session_id) REFERENCES child_game_sessions(id) ON DELETE SET NULL;
+alter table public.mission_bubbles add constraint mission_bubbles_character_fk FOREIGN KEY (character_id, mission_id) REFERENCES mission_characters(id, mission_id);
+alter table public.mission_bubbles add constraint mission_bubbles_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE;
+alter table public.mission_bubbles add constraint mission_bubbles_stop_id_fkey FOREIGN KEY (stop_id) REFERENCES mission_stops(id) ON DELETE CASCADE;
+alter table public.mission_bubbles add constraint mission_bubbles_task_id_fkey FOREIGN KEY (task_id) REFERENCES mission_tasks(id) ON DELETE CASCADE;
 alter table public.mission_characters add constraint mission_characters_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE;
-alter table public.mission_stops add constraint mission_stops_bubble_character_fk FOREIGN KEY (bubble_character_id, mission_id) REFERENCES mission_characters(id, mission_id) ON DELETE SET NULL (bubble_character_id);
 alter table public.mission_stops add constraint mission_stops_mission_id_fkey FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE;
 alter table public.mission_tasks add constraint mission_tasks_stop_id_fkey FOREIGN KEY (stop_id) REFERENCES mission_stops(id) ON DELETE CASCADE;
 alter table public.missions add constraint missions_city_id_fkey FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL;
@@ -492,6 +508,9 @@ CREATE INDEX child_task_progress_session_idx ON public.child_task_progress USING
 CREATE UNIQUE INDEX cities_name_key ON public.cities USING btree (lower(btrim(name)));
 CREATE INDEX cities_order_idx ON public.cities USING btree (display_order, name);
 CREATE UNIQUE INDEX cities_slug_key ON public.cities USING btree (lower(btrim(slug)));
+CREATE INDEX mission_bubbles_mission_idx ON public.mission_bubbles USING btree (mission_id);
+CREATE INDEX mission_bubbles_stop_idx ON public.mission_bubbles USING btree (stop_id);
+CREATE INDEX mission_bubbles_task_idx ON public.mission_bubbles USING btree (task_id);
 CREATE INDEX mission_characters_mission_idx ON public.mission_characters USING btree (mission_id);
 CREATE INDEX idx_mission_stops_mission_id_order ON public.mission_stops USING btree (mission_id, "order");
 CREATE UNIQUE INDEX mission_stops_mission_order_key ON public.mission_stops USING btree (mission_id, "order");
@@ -525,6 +544,7 @@ alter table public.child_location_progress enable row level security;
 alter table public.child_profiles enable row level security;
 alter table public.child_task_progress enable row level security;
 alter table public.cities enable row level security;
+alter table public.mission_bubbles enable row level security;
 alter table public.mission_characters enable row level security;
 alter table public.mission_stops enable row level security;
 alter table public.mission_tasks enable row level security;

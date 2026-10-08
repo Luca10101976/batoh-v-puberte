@@ -40,9 +40,18 @@ export type MissionStopRow = {
   order: number;
   /** R26: autorský text po dokončení téhle zastávky. R44: prázdný = hráč uvidí jen název dalšího místa. */
   transition_text?: string | null;
-  /** R51: bublina při příchodu na zastavení – kdo mluví a co říká. */
-  bubble_character_id?: string | null;
-  bubble_text?: string | null;
+};
+
+/** R52: bublina u zastavení, úkolu nebo v závěru. character_id null = Traki. */
+export type MissionBubbleRow = {
+  id: string;
+  mission_id: string;
+  target_type: "stop" | "task" | "ending";
+  stop_id: string | null;
+  task_id: string | null;
+  character_id: string | null;
+  text: string;
+  order: number;
 };
 
 /** R51: postava konkrétní hry. Mluví v bublinách při příchodu na zastavení. */

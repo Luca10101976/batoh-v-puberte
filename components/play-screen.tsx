@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppState } from "@/components/app-state-provider";
-import type { MapLocation } from "@/lib/gameplay-types";
+import type { MapLocation, GameplayBubble } from "@/lib/gameplay-types";
 import { parseRequestedPlayStep, resolveResumeTarget } from "@/lib/play-resume";
 import {
   flattenTasks,
@@ -37,6 +37,39 @@ function isExternalImage(src: string) {
 
 function isManualTask(task: PublicGameplayTask) {
   return task.type === "photo";
+}
+
+/**
+ * R51/R52: komiksové bubliny postav. Mluvčí s obrázkem má ocásek k figurce;
+ * bez obrázku se ukáže jen jméno. Prázdný seznam nevykreslí nic.
+ */
+function Bubliny({ bubliny }: { bubliny?: GameplayBubble[] }) {
+  if (!bubliny || bubliny.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {bubliny.map((bublina, index) => (
+        <section key={`${bublina.name}-${index}`} aria-label={`${bublina.name} říká`} className="flex items-end gap-3 px-1">
+          {bublina.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={bublina.image}
+              alt={bublina.name}
+              className="h-20 w-20 shrink-0 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
+            />
+          ) : null}
+          <div className="relative mb-4 min-w-0 flex-1 rounded-[22px] bg-white px-4 py-3 text-night shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
+            {bublina.image ? (
+              <span aria-hidden="true" className="absolute -left-1.5 bottom-5 h-4 w-4 rotate-45 rounded-[3px] bg-white" />
+            ) : null}
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{bublina.name}</p>
+            <p className="mt-1 whitespace-pre-line text-[15px] leading-6">{bublina.text}</p>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 export function PlayScreen({ location }: { location: PlayLocation }) {
@@ -912,6 +945,8 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
             {endingView.justFinished ? "Závěrečné odhalení" : "Hru už máš dohranou"}
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{endingView.ending?.endingTitle ?? location.name}</h1>
+          {/* R52: závěr jako sled bublin – dialog postav před závěrečným textem. */}
+          <Bubliny bubliny={endingView.ending?.bubbles} />
           {/* R50: texty z Mozku zachovávají odřádkování – dialog a odstavce se nesmí slít do jednoho bloku. */}
           {endingView.ending?.endingStory ? (
             <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mist">{endingView.ending.endingStory}</p>
@@ -1095,26 +1130,12 @@ export function PlayScreen({ location }: { location: PlayLocation }) {
         ) : null}
       </section>
 
-      {/* R51: bublina postavy při příchodu na zastavení, nad úkoly. Jako u úvodu
-          zastávky se ukáže jen u prvního úkolu místa – hráč ji už četl. */}
-      {isFirstTaskOfEpisode && activeEpisode.bubble ? (
-        <section aria-label={`${activeEpisode.bubble.name} říká`} className="flex items-end gap-3 px-1">
-          {activeEpisode.bubble.image ? (
-            <img
-              src={activeEpisode.bubble.image}
-              alt={activeEpisode.bubble.name}
-              className="h-20 w-20 shrink-0 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:h-24 sm:w-24"
-            />
-          ) : null}
-          <div className="relative mb-4 min-w-0 flex-1 rounded-[22px] bg-white px-4 py-3 text-night shadow-[0_14px_40px_rgba(0,0,0,0.25)]">
-            {activeEpisode.bubble.image ? (
-              <span aria-hidden="true" className="absolute -left-1.5 bottom-5 h-4 w-4 rotate-45 rounded-[3px] bg-white" />
-            ) : null}
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-night/55">{activeEpisode.bubble.name}</p>
-            <p className="mt-1 whitespace-pre-line text-[15px] leading-6">{activeEpisode.bubble.text}</p>
-          </div>
-        </section>
-      ) : null}
+      {/* R51/R52: bubliny při příchodu na zastavení, nad úkoly. Jako úvod zastávky
+          se ukážou jen u prvního úkolu místa – hráč je už četl. */}
+      {isFirstTaskOfEpisode ? <Bubliny bubliny={activeEpisode.bubbles} /> : null}
+
+      {/* R52: bubliny k úkolu – při každém zobrazení úkolu, těsně nad zadáním. */}
+      <Bubliny bubliny={activeTask.bubbles} />
 
       <section className="glass-card p-5">
         {/* R44: štítek typu úkolu („Výběr“, „Otázka“) hráči nic neříká. Typ zůstává

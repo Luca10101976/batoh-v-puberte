@@ -2,7 +2,9 @@ import Link from "next/link";
 import { createTaskAction, deleteTaskAction, moveTaskAction, updateStopAction, updateTaskAction } from "@/app/admin/stops/actions";
 import { describeUsage } from "@/lib/mission-usage";
 import { getMissionUsage } from "@/lib/mission-usage-server";
-import type { MissionCharacterRow, MissionStopRow, MissionTaskRow } from "@/app/admin/types";
+import { deleteBubbleAction, moveBubbleAction, saveBubbleAction } from "@/app/admin/missions/bubble-actions";
+import type { MissionBubbleRow, MissionCharacterRow, MissionStopRow, MissionTaskRow } from "@/app/admin/types";
+import { BubbleEditor } from "@/components/admin/bubble-editor";
 import { StopForm } from "@/components/admin/stop-form";
 import { TaskForm } from "@/components/admin/task-form";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -21,6 +23,8 @@ function statusText(status?: string) {
       return { text: "✅ Úkol byl uložený.", tone: "ok" as const };
     case "task_deleted":
       return { text: "🗑️ Úkol byl smazaný.", tone: "ok" as const };
+    case "bubble_deleted":
+      return { text: "🗑️ Bublina byla smazaná.", tone: "ok" as const };
     // R45: tyhle stavy server posílal, ale obrazovka je zahazovala – zablokované
     // smazání i změna pořadí vypadaly jako tiché přenačtení stránky.
     case "reordered":
@@ -58,12 +62,8 @@ export default async function StopEditPage({
     }>;
 
   let { data: stop, error: stopError } = await stopQuery(
-    "id, mission_id, title, description, image_url, order, transition_text, bubble_character_id, bubble_text"
+    "id, mission_id, title, description, image_url, order, transition_text"
   );
-  // R51: prostředí bez migrace R51 bublinu nemá – formulář pak funguje jako dřív.
-  if (stopError && /bubble_/i.test(stopError.message ?? "")) {
-    ({ data: stop, error: stopError } = await stopQuery("id, mission_id, title, description, image_url, order, transition_text"));
-  }
   if (stopError?.message?.toLowerCase().includes("transition_text")) {
     ({ data: stop, error: stopError } = await stopQuery("id, mission_id, title, description, image_url, order"));
   }
@@ -77,6 +77,17 @@ export default async function StopEditPage({
       </main>
     );
   }
+
+  // R52: bubliny tohoto zastavení a jeho úkolů (prostředí bez migrace = žádné).
+  const { data: bubbleRows } = await supabase
+    .from("mission_bubbles")
+    .select("id, mission_id, target_type, stop_id, task_id, character_id, text, order")
+    .eq("mission_id", stop.mission_id)
+    .or(`stop_id.eq.${id},task_id.not.is.null`)
+    .order("order", { ascending: true });
+  const bubbles = (bubbleRows as MissionBubbleRow[] | null) ?? [];
+  const stopBubbles = bubbles.filter((b) => b.target_type === "stop" && b.stop_id === id);
+  const taskBubbles = (taskId: string) => bubbles.filter((b) => b.target_type === "task" && b.task_id === taskId);
 
   // R51: postavy této hry pro výběr „kdo mluví v bublině".
   const { data: characterRows } = await supabase
@@ -175,7 +186,28 @@ export default async function StopEditPage({
         </section>
       ) : null}
 
-      <StopForm stop={stop} action={updateStopAction} characters={characters} />
+      <StopForm stop={stop} action={updateStopAction} />
+
+      <section className="glass-card p-5">
+        <h2 className="section-title">Bubliny při příchodu</h2>
+        <p className="mt-2 text-sm leading-6 text-mist">
+          Hráč je uvidí, když na zastavení dorazí – nad prvním úkolem, s obrázkem postavy. Nepovinné.
+        </p>
+        <div className="mt-4">
+          <BubbleEditor
+            missionId={stop.mission_id}
+            target={{ type: "stop", stopId: stop.id }}
+            bubbles={stopBubbles}
+            characters={characters}
+            returnTo={`/mozek/stops/${stop.id}`}
+            title="Kdo tu hráče přivítá"
+            hint="Víc bublin se zobrazí pod sebou v tomhle pořadí."
+            saveAction={saveBubbleAction}
+            deleteAction={deleteBubbleAction}
+            moveAction={moveBubbleAction}
+          />
+        </div>
+      </section>
 
       <section className="glass-card p-5">
         <h2 className="section-title">Úkoly</h2>
@@ -266,6 +298,20 @@ export default async function StopEditPage({
               ) : null}
 
               <TaskForm stopId={stop.id} missionId={stop.mission_id} task={task} action={updateTaskAction} />
+
+              {/* R52: bubliny nad zadáním tohoto úkolu. */}
+              <BubbleEditor
+                missionId={stop.mission_id}
+                target={{ type: "task", taskId: task.id }}
+                bubbles={taskBubbles(task.id)}
+                characters={characters}
+                returnTo={`/mozek/stops/${stop.id}`}
+                title="Bubliny u tohoto úkolu"
+                hint="Zobrazí se nad zadáním pokaždé, když hráč úkol otevře. Nepovinné."
+                saveAction={saveBubbleAction}
+                deleteAction={deleteBubbleAction}
+                moveAction={moveBubbleAction}
+              />
             </article>
           ))}
 

@@ -1,6 +1,8 @@
 export type GameplayTaskType = "question" | "photo" | "choice" | "order";
 
 export type GameplayTask = {
+  /** R52: bubliny nad zadáním úkolu, v pořadí. Nejsou spoiler. */
+  bubbles?: GameplayBubble[];
   id: string;
   type: GameplayTaskType;
   typeLabel: string;
@@ -20,7 +22,7 @@ export type GameplayTask = {
   legacyTaskId?: string;
 };
 
-/** R51: replika postavy v bublině. */
+/** R51/R52: replika v bublině – postava hry, nebo Traki (name "Traki"). */
 export type GameplayBubble = {
   name: string;
   image?: string;
@@ -34,8 +36,8 @@ export type GameplayEpisode = {
   background: string;
   /** R26: autorský text po dokončení téhle zastávky. Prázdný = obecný text. Není spoiler. */
   transitionText?: string;
-  /** R51: bublina při příchodu na zastavení – postava hry a její replika. */
-  bubble?: GameplayBubble;
+  /** R51/R52: bubliny při příchodu na zastavení, v pořadí. */
+  bubbles?: GameplayBubble[];
   illustrationImage?: string;
   illustrationImageAlt?: string;
   tasks: GameplayTask[];
@@ -52,6 +54,8 @@ export type GameplayEnding = {
   endingTitle: string;
   endingStory: string;
   playerMessage: string;
+  /** R52: závěr jako sled bublin. Spoiler – vydává se až po dokončení. */
+  bubbles?: GameplayBubble[];
 };
 
 /**

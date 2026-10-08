@@ -1,6 +1,6 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getCanonicalCorrectAnswer } from "@/lib/mission-task-normalization";
-import type { GameplayEnding, GameplayEpisode, GameplayTask, PublicGameplayTask } from "@/lib/gameplay-types";
+import type { GameplayEnding, GameplayEpisode, GameplayTask, PublicGameplayTask, GameplayBubble } from "@/lib/gameplay-types";
 import { toPublicTask as stripServerOnlyTaskFields } from "@/lib/gameplay-public";
 import { buildCatalog, firstSentence, resolveCatalogEntryForLocation, type CatalogEntry, type CatalogMissionRow } from "@/lib/catalog";
 import { legacyLocationIdForMission, legacyMissionIdForLocation } from "@/lib/legacy-location-ids";
@@ -15,11 +15,23 @@ type MissionStopDbRow = {
   image_url: string | null;
   order: number;
   transition_text?: string | null;
-  bubble_character_id?: string | null;
-  bubble_text?: string | null;
 };
 
 type MissionCharacterDbRow = { id: string; name: string; image_url: string | null };
+
+/** R52: bublina z tabulky mission_bubbles. character_id NULL = Traki. */
+type MissionBubbleDbRow = {
+  id: string;
+  target_type: "stop" | "task" | "ending";
+  stop_id: string | null;
+  task_id: string | null;
+  character_id: string | null;
+  text: string;
+  order: number;
+};
+
+/** R52: Traki mluví v bublinách bez zakládání postavy. */
+const TRAKI_SPEAKER = { name: "Traki", image: "/icons/traki-transparent.png" } as const;
 
 type MissionTaskDbRow = {
   id: string;
@@ -364,7 +376,7 @@ function getCanonicalMission(locationId: string) {
   return missionId ? { missionId } : null;
 }
 
-function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): GameplayTask {
+function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow, bubbles: GameplayBubble[] = []): GameplayTask {
   const questionParts = splitQuestion(task.question);
   const correctnessRule = parseTaskCorrectnessRule(task.correct_answer, task.min_correct_matches);
   const correctAnswers = correctnessRule.correctAnswers;
@@ -400,16 +412,20 @@ function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): Gamepl
     correctAnswers: finalCorrectAnswers,
     minCorrectMatches: correctnessRule.minCorrectMatches,
     hasHint: Boolean((task.hint_text ?? "").trim()),
-    hintText: (task.hint_text ?? "").trim() || undefined
+    hintText: (task.hint_text ?? "").trim() || undefined,
+    bubbles: bubbles.length > 0 ? bubbles : undefined
   };
 }
 
 function buildEpisodesFromDb(
   stops: MissionStopDbRow[],
   tasks: MissionTaskDbRow[],
+  bubbles: MissionBubbleDbRow[] = [],
   characters: MissionCharacterDbRow[] = []
 ): GameplayEpisode[] {
   const charactersById = new Map(characters.map((character) => [character.id, character]));
+  const bubblesFor = (type: "stop" | "task", id: string) =>
+    buildBubbles(bubbles.filter((b) => b.target_type === type && (type === "stop" ? b.stop_id : b.task_id) === id), charactersById);
   const tasksByStopId = new Map<string, MissionTaskDbRow[]>();
   tasks.forEach((task) => {
     const current = tasksByStopId.get(task.stop_id) ?? [];
@@ -427,23 +443,54 @@ function buildEpisodesFromDb(
       background: backgroundParts.join("\n\n"),
       illustrationImage: stop.image_url || undefined,
       transitionText: (stop.transition_text ?? "").trim() || undefined,
-      bubble: buildBubble(stop, charactersById),
+      bubbles: bubblesFor("stop", stop.id),
       clue: [],
       tasks: (tasksByStopId.get(stop.id) ?? [])
         .sort((a, b) => a.order - b.order)
-        .map((task) => buildTaskFromDb(stop, task))
+        .map((task) => buildTaskFromDb(stop, task, bubblesFor("task", task.id)))
     };
   });
 }
 
-/** R51: bublina se ukáže jen s postavou i textem – polovičatá se raději neukáže vůbec. */
-function buildBubble(stop: MissionStopDbRow, charactersById: Map<string, MissionCharacterDbRow>) {
-  const text = (stop.bubble_text ?? "").trim();
-  const character = stop.bubble_character_id ? charactersById.get(stop.bubble_character_id) : undefined;
-  if (!text || !character) {
-    return undefined;
+/**
+ * R52: bubliny v pořadí. Bublina postavy, která už neexistuje, se neukáže –
+ * raději nic než replika beze jména. NULL mluvčí = Traki.
+ */
+function buildBubbles(rows: MissionBubbleDbRow[], charactersById: Map<string, MissionCharacterDbRow>): GameplayBubble[] {
+  const vysledek: GameplayBubble[] = [];
+  for (const row of [...rows].sort((a, b) => a.order - b.order)) {
+    const text = (row.text ?? "").trim();
+    if (!text) continue;
+    if (!row.character_id) {
+      vysledek.push({ ...TRAKI_SPEAKER, text });
+      continue;
+    }
+    const character = charactersById.get(row.character_id);
+    if (!character) continue;
+    const image = (character.image_url ?? "").trim();
+    vysledek.push(image ? { name: character.name, image, text } : { name: character.name, text });
   }
-  return { name: character.name, image: (character.image_url ?? "").trim() || undefined, text };
+  return vysledek;
+}
+
+/** R52: načte bubliny a postavy hry. Prostředí bez migrace R52 = žádné bubliny. */
+async function loadMissionBubbles(supabase: ReturnType<typeof getSupabaseServerClient>, missionId: string) {
+  const { data: bubbleRows, error } = await supabase
+    .from("mission_bubbles")
+    .select("id, target_type, stop_id, task_id, character_id, text, order")
+    .eq("mission_id", missionId);
+  if (error || !bubbleRows?.length) {
+    return { bubbles: [] as MissionBubbleDbRow[], charactersById: new Map<string, MissionCharacterDbRow>() };
+  }
+  const bubbles = bubbleRows as MissionBubbleDbRow[];
+  const needsCharacters = bubbles.some((b) => b.character_id);
+  const { data: characterRows } = needsCharacters
+    ? await supabase.from("mission_characters").select("id, name, image_url").eq("mission_id", missionId)
+    : { data: [] as MissionCharacterDbRow[] };
+  return {
+    bubbles,
+    charactersById: new Map(((characterRows as MissionCharacterDbRow[] | null) ?? []).map((c) => [c.id, c]))
+  };
 }
 
 export async function getGameplayEpisodes(
@@ -477,14 +524,8 @@ export async function getGameplayEpisodes(
     }>;
 
   let { data: stopsData, error: stopsError } = await stopQuery(
-    "id, mission_id, title, description, image_url, order, transition_text, bubble_character_id, bubble_text"
+    "id, mission_id, title, description, image_url, order, transition_text"
   );
-  // R51: prostředí bez migrace R51 bubliny nemá – hra jede dál bez nich.
-  if (stopsError && /bubble_/i.test(stopsError.message ?? "")) {
-    ({ data: stopsData, error: stopsError } = await stopQuery(
-      "id, mission_id, title, description, image_url, order, transition_text"
-    ));
-  }
   if (stopsError?.message?.toLowerCase().includes("transition_text")) {
     ({ data: stopsData, error: stopsError } = await stopQuery(
       "id, mission_id, title, description, image_url, order"
@@ -515,16 +556,14 @@ export async function getGameplayEpisodes(
 
   const normalizedTasks = (tasksData ?? []).map((task) => ({ ...task }));
 
-  // R51: postavy hry pro bubliny. Chybějící tabulka (bez migrace) = žádné bubliny.
-  const usesBubbles = (stopsData ?? []).some((stop) => stop.bubble_character_id);
-  const { data: charactersData } = usesBubbles
-    ? await supabase.from("mission_characters").select("id, name, image_url").eq("mission_id", mission.id)
-    : { data: [] as MissionCharacterDbRow[] };
+  // R52: bubliny zastavení a úkolů (závěrové se vydávají zvlášť až po dokončení).
+  const { bubbles, charactersById } = await loadMissionBubbles(supabase, mission.id);
 
   return buildEpisodesFromDb(
     (stopsData as MissionStopDbRow[]) ?? [],
     normalizedTasks,
-    (charactersData as MissionCharacterDbRow[] | null) ?? []
+    bubbles.filter((b) => b.target_type !== "ending"),
+    [...charactersById.values()]
   );
 }
 
@@ -698,11 +737,33 @@ export async function getGameplayEnding(locationId: string): Promise<GameplayEnd
   if (!location) {
     return null;
   }
+  // R52: závěr jako sled bublin. Čte se až tady – do prohlížeče jde jen s celým závěrem.
+  let endingBubbles: GameplayBubble[] = [];
+  try {
+    const supabase = getSupabaseServerClient();
+    const missionId = getCanonicalMission(locationId)?.missionId ?? locationId;
+    const { bubbles, charactersById } = await loadMissionBubbles(supabase, missionId);
+    endingBubbles = buildBubbles(bubbles.filter((b) => b.target_type === "ending"), charactersById);
+  } catch {
+    endingBubbles = [];
+  }
   return {
     endingTitle: location.endingTitle,
     endingStory: location.endingStory,
-    playerMessage: location.playerMessage
+    playerMessage: location.playerMessage,
+    bubbles: endingBubbles.length > 0 ? endingBubbles : undefined
   };
+}
+
+/** R52: závěrové bubliny i pro nepublikovanou hru – jen pro náhled v Mozku. */
+export async function getMissionEndingBubbles(missionId: string): Promise<GameplayBubble[]> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { bubbles, charactersById } = await loadMissionBubbles(supabase, missionId);
+    return buildBubbles(bubbles.filter((b) => b.target_type === "ending"), charactersById);
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -155,6 +155,32 @@ export function getCanonicalCorrectAnswer(row: MissionTaskAnswerRow): string | n
     return null;
   }
 
+  // R49: u výběru smí být správných možností víc, každá na samostatném řádku.
+  // Čárka dál nedělí – bývá uvnitř textu možnosti (R45). Každý řádek musí být
+  // přesně jedna z možností nebo její pořadí; žádné „obsahuje" ani odhady.
+  // Jeden řádek se chová přesně jako dosud.
+  if (row.type === "vyber") {
+    const radky = current.split(/\r?\n/).map((radek) => radek.trim()).filter(Boolean);
+    if (radky.length > 1) {
+      const vybrane: string[] = [];
+      for (const radek of radky) {
+        const klic = normalizeForCompare(radek);
+        let moznost = options.find((option) => normalizeForCompare(option) === klic);
+        if (!moznost && /^\d+$/.test(klic)) {
+          const index = Number.parseInt(klic, 10);
+          moznost = index >= 1 && index <= options.length ? options[index - 1] : undefined;
+        }
+        if (!moznost) {
+          return null;
+        }
+        if (!vybrane.includes(moznost)) {
+          vybrane.push(moznost);
+        }
+      }
+      return vybrane.join("\n");
+    }
+  }
+
   const exactMatch = options.find((option) => normalizeForCompare(option) === normalizedCurrent);
   if (exactMatch) {
     return exactMatch;
@@ -195,7 +221,10 @@ export function validateAndCanonicalizeCorrectAnswer(row: MissionTaskAnswerRow):
       return { error: "Pro typ Ano / ne zadej odpověď Ano nebo Ne." } as const;
     }
 
-    return { error: "Správná odpověď musí být číslo možnosti nebo přesný text jedné z možností." } as const;
+    return {
+      error:
+        "Správná odpověď musí být číslo možnosti nebo přesný text jedné z možností. Víc správných možností napište každou na samostatný řádek."
+    } as const;
   }
 
   const minimumMatchCount = extractMinimumMatchCount(row.question);

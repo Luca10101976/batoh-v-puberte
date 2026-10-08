@@ -192,7 +192,7 @@ export function findPublishBlockers(stops: PublishStopInput[]): PublishIssue[] {
           if (!canonical) {
             issues.push({
               code: "choice_answer_not_in_options",
-              message: `${where}: správná odpověď není mezi nabízenými možnostmi.`,
+              message: `${where}: správná odpověď není mezi nabízenými možnostmi. Víc správných možností patří každá na samostatný řádek.`,
               stopTitle: stop.title,
               taskOrder: task.taskOrder
             });

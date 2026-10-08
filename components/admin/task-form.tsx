@@ -97,8 +97,8 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
           required
         />
         <p className="text-xs text-mist">
-          Povinné pole. U typu „Výběr z možností“ můžete zadat text možnosti nebo její pořadí `1 / 2 / 3`. U typu
-          „Výběr z možností“ ukládejte vždy jen jednu správnou možnost, ne více odpovědí najednou. U typu
+          Povinné pole. U typu „Výběr z možností“ můžete zadat text možnosti nebo její pořadí `1 / 2 / 3`. Když je
+          správných možností víc, napište každou na samostatný řádek – čárka možnosti nedělí. U typu
           „Ano / ne“ zadejte přesně `Ano` nebo `Ne`. U otevřených whitelist úkolů typu „napiš aspoň 3...“ zapište
           povolené odpovědi po řádcích, čárkou nebo středníkem. Nepište whitelist jako jednu větu se samými mezerami.
           U číselné odpovědi se slovní varianty můžou zapsat i jako `4 ctyri čtyři`.
@@ -188,6 +188,12 @@ export function TaskForm({ stopId, missionId, task, action }: TaskFormProps) {
               správné možnosti, nebo její pořadí <span className="font-mono text-white">1 / 2 / 3</span>.
               Nepřidávejte před ni <span className="font-mono text-white">Ano</span> ani{" "}
               <span className="font-mono text-white">Ne</span>; server uloží jen čistou vybranou možnost.
+            </p>
+            <p className="mt-2 text-mist">
+              Může být správně víc možností – každou napište na samostatný řádek. Hráč vybírá jednu a body dostane za
+              kteroukoli správnou. Příklad: možnosti{" "}
+              <span className="font-mono text-white">Ano / Ne / Možná v jiném vesmíru</span>, správná odpověď všechny
+              tři, každá na svém řádku.
             </p>
           </div>
 

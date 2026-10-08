@@ -375,12 +375,16 @@ function buildTaskFromDb(stop: MissionStopDbRow, task: MissionTaskDbRow): Gamepl
           correct_answer: task.correct_answer,
           options: task.options
         });
+  // R49: výběr může mít víc správných možností (kanonicky jedna na řádek).
+  // U seřazení je řádkování naopak pořadí jedné odpovědi, takže se nedělí.
   const finalCorrectAnswers =
     task.type === "otevrena"
       ? correctAnswers
-      : canonicalDbAnswer
-        ? [canonicalDbAnswer]
-        : [];
+      : !canonicalDbAnswer
+        ? []
+        : task.type === "vyber"
+          ? canonicalDbAnswer.split("\n").filter(Boolean)
+          : [canonicalDbAnswer];
 
   return {
     id: task.id,

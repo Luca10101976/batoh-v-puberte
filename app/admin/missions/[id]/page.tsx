@@ -14,6 +14,8 @@ import { BubbleEditor } from "@/components/admin/bubble-editor";
 import type { MissionBubbleRow, MissionCharacterRow, MissionRow, MissionStopRow } from "@/app/admin/types";
 import { CharacterManager } from "@/components/admin/character-manager";
 import { MissionForm } from "@/components/admin/mission-form";
+import { MissionWarnings } from "@/components/admin/mission-warnings";
+import { findMissionWarnings } from "@/lib/mission-warnings";
 import { loadActiveCities, loadCities } from "@/lib/cities-server";
 import { describeUsage } from "@/lib/mission-usage";
 import { getMissionUsage } from "@/lib/mission-usage-server";
@@ -146,6 +148,39 @@ export default async function MissionDetailPage({
     .eq("target_type", "ending")
     .order("order", { ascending: true });
   const endingBubbles = (endingBubbleRows as MissionBubbleRow[] | null) ?? [];
+
+  // R55: co ve hře chybí (nebrání publikaci).
+  const stopIds = orderedStops.map((stop) => stop.id);
+  const [{ data: taskRows }, { data: stopBubbleRows }] = await Promise.all([
+    stopIds.length
+      ? supabase.from("mission_tasks").select("stop_id, hint_text").in("stop_id", stopIds)
+      : Promise.resolve({ data: [] as Array<{ stop_id: string; hint_text: string | null }> }),
+    supabase.from("mission_bubbles").select("stop_id").eq("mission_id", mission.id).eq("target_type", "stop")
+  ]);
+  const tasksForWarnings = (taskRows as Array<{ stop_id: string; hint_text: string | null }> | null) ?? [];
+  const stopBubbles = (stopBubbleRows as Array<{ stop_id: string }> | null) ?? [];
+  const warnings = findMissionWarnings(
+    {
+      mission: {
+        heroImageUrl: mission.hero_image_url,
+        shortDescription: mission.short_description,
+        startPlaceName: mission.start_place_name,
+        endingTitle: mission.ending_title,
+        endingText: mission.ending_text,
+        endingBubbleCount: endingBubbles.length
+      },
+      stops: orderedStops.map((stop) => ({
+        id: stop.id,
+        title: stop.title,
+        description: stop.description,
+        imageUrl: stop.image_url,
+        transitionText: stop.transition_text,
+        bubbleCount: stopBubbles.filter((b) => b.stop_id === stop.id).length,
+        tasks: tasksForWarnings.filter((t) => t.stop_id === stop.id).map((t) => ({ hasHint: Boolean((t.hint_text ?? "").trim()) }))
+      }))
+    },
+    mission.id
+  );
   const status = statusText(resolvedSearchParams?.status);
   const issues = (resolvedSearchParams?.issues ?? "")
     .split(" | ")
@@ -243,6 +278,8 @@ export default async function MissionDetailPage({
           ) : null}
         </section>
       ) : null}
+
+      <MissionWarnings warnings={warnings} />
 
       <MissionForm
         action={updateMissionAction}
